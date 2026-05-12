@@ -1,6 +1,6 @@
 {
   "name": "yodaman",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Web GUI for Context Expert (ctx)",
   "bin": {
     "yodaman": "bin/yodaman.js"
