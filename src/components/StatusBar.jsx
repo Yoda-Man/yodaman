@@ -1,0 +1,65 @@
+import { useEffect, useState } from 'react'
+import { Cpu, Wifi, Clock, Zap, Shield } from 'lucide-react'
+
+export default function StatusBar() {
+    const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString())
+    const [systemInfo, setSystemInfo] = useState({ version: '...', model: '...' })
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date().toLocaleTimeString()), 1000)
+        fetchSystemInfo()
+        return () => clearInterval(timer)
+    }, [])
+
+    const fetchSystemInfo = async () => {
+        try {
+            const res = await fetch('/api/status')
+            const data = await res.json()
+            setSystemInfo(data)
+        } catch (err) {
+            console.error('Failed to fetch system info:', err)
+        }
+    }
+
+    return (
+        <div className="w-full bg-slate-950/80 backdrop-blur-md border-b border-white/5 text-[10px] flex items-center px-6 py-2 gap-6 select-none z-50">
+            <div className="flex items-center gap-3 group">
+                <div className="relative flex items-center gap-2">
+                    <img src="/logo.png" className="h-5 w-5 rounded-md shadow-[0_0_10px_rgba(99,102,241,0.5)]" alt="YodaMan" />
+                    <div className="absolute -top-1 -right-1 h-2 w-2 bg-indigo-500 rounded-full shadow-[0_0_12px_rgba(99,102,241,0.8)] animate-pulse"></div>
+                </div>
+                <span className="font-outfit font-black text-slate-400 uppercase tracking-[0.3em] group-hover:text-indigo-400 transition-colors">YodaMan Core</span>
+            </div>
+            
+            <div className="h-4 w-[1px] bg-white/5 mx-2"></div>
+            
+            <div className="flex items-center gap-2 text-slate-500 hover:text-emerald-400 transition-colors cursor-default">
+                <Wifi size={12} className="text-emerald-500/80" />
+                <span className="uppercase tracking-[0.15em] font-bold">Node: <span className="text-slate-200">Active</span></span>
+            </div>
+
+            <div className="flex items-center gap-2 text-slate-500 hover:text-indigo-400 transition-colors cursor-default">
+                <Cpu size={12} className="text-indigo-400/80" />
+                <span className="uppercase tracking-[0.15em] font-bold">Engine: <span className="text-slate-200">{systemInfo?.version || '...'}</span></span>
+            </div>
+
+            <div className="flex items-center gap-2 text-slate-500 hover:text-amber-400 transition-colors cursor-default">
+                <Shield size={12} className="text-amber-400/80" />
+                <span className="uppercase tracking-[0.15em] font-bold">Model: <span className="text-slate-200">{systemInfo?.llm?.model || '...'}</span></span>
+            </div>
+            
+            <div className="flex-1"></div>
+            
+            <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2 text-slate-500 bg-white/5 px-3 py-1 rounded-full border border-white/5">
+                    <Clock size={12} className="text-slate-400" />
+                    <span className="font-mono text-[11px] text-slate-300 font-medium tracking-tight">{currentTime}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-slate-600 font-bold uppercase tracking-[0.2em]">Build</span>
+                    <span className="text-indigo-400/80 font-black px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20">v0.1.0</span>
+                </div>
+            </div>
+        </div>
+    )
+}

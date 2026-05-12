@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YodaMan User Manual</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #020617; color: #cbd5e1; }
+        h1, h2, h3 { font-family: 'Outfit', sans-serif; color: #f8fafc; }
+        .glass { background: rgba(30, 41, 59, 0.4); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background: rgba(255, 255, 255, 0.05); padding: 0.2rem 0.4rem; rounded: 4px; color: #818cf8; }
+        pre { background: #0f172a; padding: 1.5rem; border-radius: 1rem; border: 1px solid rgba(255, 255, 255, 0.05); overflow-x: auto; margin: 1.5rem 0; }
+        pre code { background: none; padding: 0; color: #e2e8f0; }
+    </style>
+</head>
+<body class="selection:bg-indigo-500/30">
+    <div class="max-w-4xl mx-auto py-20 px-6">
+        <header class="mb-16 text-center">
+            <img src="/logo.png" class="h-20 w-20 mx-auto mb-6 rounded-3xl shadow-2xl shadow-indigo-500/20" alt="YodaMan Logo">
+            <h1 class="text-5xl font-black tracking-tight mb-4">YodaMan <span class="text-indigo-500">Manual</span></h1>
+            <p class="text-slate-500 font-medium text-lg uppercase tracking-widest">v0.1.0 Documentation</p>
+        </header>
+
+        <div class="space-y-12">
+            <section class="glass p-10 rounded-[40px]">
+                <h2 class="text-3xl font-black mb-6">1. Introduction</h2>
+                <p class="text-lg leading-relaxed text-slate-400">
+                    YodaMan is a professional, full-stack web interface for the <code>context-expert</code> (ctx) CLI. It allows you to easily index your codebases and interact with them using a modern, responsive chat interface with a premium UI.
+                </p>
+            </section>
+
+            <section class="p-4 space-y-6">
+                <h2 class="text-3xl font-black">2. Quick Setup</h2>
+                <p>The fastest way to get started is using the <strong>One-Command Setup</strong> script:</p>
+                <pre><code>sh setup.sh</code></pre>
+                <p class="text-slate-500 text-sm italic">This script will audit your system, install missing dependencies via Homebrew, and launch the GUI automatically.</p>
+            </section>
+
+            <section class="glass p-10 rounded-[40px] space-y-6">
+                <h2 class="text-3xl font-black">3. Core Concepts</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="space-y-2">
+                        <h3 class="text-xl font-bold text-indigo-400">📂 Workspaces</h3>
+                        <p class="text-sm leading-relaxed">A Workspace is a directory indexed by YodaMan. Once indexed, the AI remembers its structure and logic permanently.</p>
+                    </div>
+                    <div class="space-y-2">
+                        <h3 class="text-xl font-bold text-emerald-400">🔍 Semantic Search</h3>
+                        <p class="text-sm leading-relaxed">Understands the meaning of your code. Finds logic patterns instead of just exact text matches.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="p-4 space-y-8">
+                <h2 class="text-3xl font-black">4. Using the Interface</h2>
+                <div class="space-y-6">
+                    <div class="flex gap-6">
+                        <div class="h-8 w-8 bg-indigo-500 text-white rounded-full flex items-center justify-center font-bold shrink-0">1</div>
+                        <div>
+                            <h4 class="font-bold text-slate-100 text-lg">Sidebar (Workspace Manager)</h4>
+                            <p class="text-slate-400 mt-1">Register new repositories, sync changes, and run health checks on your indexed folders.</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-6">
+                        <div class="h-8 w-8 bg-indigo-500 text-white rounded-full flex items-center justify-center font-bold shrink-0">2</div>
+                        <div>
+                            <h4 class="font-bold text-slate-100 text-lg">Search Tab</h4>
+                            <p class="text-slate-400 mt-1">Enter any query to see matching code blocks across all your projects with relevance scores.</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-6">
+                        <div class="h-8 w-8 bg-indigo-500 text-white rounded-full flex items-center justify-center font-bold shrink-0">3</div>
+                        <div>
+                            <h4 class="font-bold text-slate-100 text-lg">System Dashboard</h4>
+                            <p class="text-slate-400 mt-1">Monitor vector storage metrics, active AI models, and real-time indexing telemetry.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="bg-indigo-600/10 border border-indigo-500/20 p-10 rounded-[40px]">
+                <h2 class="text-3xl font-black mb-6 text-indigo-400">5. Pro Tips 💡</h2>
+                <ul class="list-disc list-inside space-y-4 text-slate-300">
+                    <li>Keep <strong>Ollama</strong> running in the background.</li>
+                    <li>Use <strong>Natural Language</strong> questions for better chat results.</li>
+                    <li>Run <strong>Validate</strong> regularly to ensure index integrity.</li>
+                    <li>Ignore <code>node_modules</code> and <code>dist</code> for faster indexing.</li>
+                </ul>
+            </section>
+            <section class="glass p-10 rounded-[40px] space-y-8">
+                <h2 class="text-3xl font-black">6. Developer API Reference</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b border-white/10">
+                                <th class="pb-4 font-bold text-indigo-400 uppercase tracking-widest text-[10px]">Endpoint</th>
+                                <th class="pb-4 font-bold text-indigo-400 uppercase tracking-widest text-[10px]">Method</th>
+                                <th class="pb-4 font-bold text-indigo-400 uppercase tracking-widest text-[10px]">Purpose</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-slate-400">
+                            <tr class="border-b border-white/5">
+                                <td class="py-4 font-mono text-indigo-300">/api/projects</td>
+                                <td class="py-4">GET</td>
+                                <td class="py-4">List all indexed workspaces</td>
+                            </tr>
+                            <tr class="border-b border-white/5">
+                                <td class="py-4 font-mono text-indigo-300">/api/ask</td>
+                                <td class="py-4">POST</td>
+                                <td class="py-4">Query the AI engine (RAG)</td>
+                            </tr>
+                            <tr class="border-b border-white/5">
+                                <td class="py-4 font-mono text-indigo-300">/api/search</td>
+                                <td class="py-4">GET</td>
+                                <td class="py-4">Semantic pattern discovery</td>
+                            </tr>
+                            <tr class="border-b border-white/5">
+                                <td class="py-4 font-mono text-indigo-300">/api/status</td>
+                                <td class="py-4">GET</td>
+                                <td class="py-4">System & Model telemetry</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <footer class="mt-32 pt-8 border-t border-white/5 text-center">
+            <p class="text-slate-600 text-sm font-medium uppercase tracking-[0.3em]">YodaMan Code Intelligence &copy; 2026</p>
+        </footer>
+    </div>
+</body>
+</html>
