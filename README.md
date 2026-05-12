@@ -15,7 +15,7 @@
 -   **Professional UI**: Premium design featuring glassmorphism, modern typography (Inter/Outfit), and sleek animations.
 -   **Real-time Status**: Monitor CLI versions and active AI models directly from the high-tech status bar.
 -   **Queue Management**: Smart indexing queue to prevent resource overload.
--   **Jedi Mastery**: Premium Star Wars inspired theme.
+-   **Socratic Insight**: A UI that helps you realize that while you wrote the code, you're still searching for its deeper meaning.
 
 ## 🚀 One-Command Setup (Recommended)
 

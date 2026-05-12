@@ -3,8 +3,17 @@
   "version": "0.1.0",
   "description": "Web GUI for Context Expert (ctx)",
   "bin": {
-    "yodaman": "./bin/yodaman.js"
+    "yodaman": "bin/yodaman.js"
   },
+  "files": [
+    "bin",
+    "dist",
+    "server.js",
+    "start.js",
+    "public",
+    "README.md",
+    "config.json"
+  ],
   "main": "server.js",
   "scripts": {
     "start": "node start.js",
