@@ -23,8 +23,16 @@ class CliService {
     async runJson(args = []) {
         const { output } = await this.run(null, [...args, '--json']);
         try {
-            // Find the actual JSON block in the output
-            const jsonMatch = output.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+            // Find the start of the actual JSON (first '{' or '[' that isn't part of a banner)
+            // We look for a { or [ that is followed by characters typical of JSON keys or values
+            const jsonStart = output.search(/[\{\[]\s*["\d]/);
+            if (jsonStart !== -1) {
+                const jsonStr = output.substring(jsonStart);
+                return JSON.parse(jsonStr);
+            }
+            
+            // Fallback to simpler match if specific pattern fails
+            const jsonMatch = output.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
             if (jsonMatch) {
                 return JSON.parse(jsonMatch[0]);
             }
