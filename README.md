@@ -3,7 +3,7 @@
 **YodaMan** is a professional, full-stack intelligence platform designed for developers who demand total privacy and deep semantic understanding across their entire ecosystem. While rival tools often lose context in large repositories or limit you to a single project at a time, YodaMan provides a **local-first, high-performance engine** that unifies all your projects, documentation, and codebases into a single, coherent knowledge base. Interact with your entire digital workspace using a modern, responsive chat interface built for privacy-conscious engineers who value low-latency precision.
 
 ![YodaMan UI](https://img.shields.io/badge/UI-Premium-indigo)
-![Version](https://img.shields.io/badge/Version-0.1.2-gold)
+![Version](https://img.shields.io/badge/Version-0.1.3-gold)
 ![Backend](https://img.shields.io/badge/Backend-Node.js-green)
 ![Frontend](https://img.shields.io/badge/Frontend-React-cyan)
 

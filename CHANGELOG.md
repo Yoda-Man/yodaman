@@ -2,6 +2,11 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.1.3] - 2026-05-13
+
+### Fixed
+- **Robust CLI Parsing**: Improved JSON extraction logic to reliably filter out `dotenvx` banners and other CLI-injected strings during project synchronization.
+
 ## [0.1.2] - 2026-05-13
 
 ### Added
