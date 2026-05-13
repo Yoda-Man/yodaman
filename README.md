@@ -1,17 +1,17 @@
 # YodaMan 🚀
 
-**YodaMan** is a professional, full-stack web interface for the `context-expert` (ctx) CLI. It allows you to easily index your codebases and interact with them using a modern, responsive chat interface with a premium UI.
+**YodaMan** is a professional, full-stack intelligence platform designed for developers who demand total privacy and deep semantic understanding across their entire ecosystem. While rival tools often lose context in large repositories or limit you to a single project at a time, YodaMan provides a **local-first, high-performance engine** that unifies all your projects, documentation, and codebases into a single, coherent knowledge base. Interact with your entire digital workspace using a modern, responsive chat interface built for privacy-conscious engineers who value low-latency precision.
 
 ![YodaMan UI](https://img.shields.io/badge/UI-Premium-indigo)
-![Version](https://img.shields.io/badge/Version-0.1.0-gold)
+![Version](https://img.shields.io/badge/Version-0.1.2-gold)
 ![Backend](https://img.shields.io/badge/Backend-Node.js-green)
 ![Frontend](https://img.shields.io/badge/Frontend-React-cyan)
 
 ## 🌟 Features
 
--   **Intelligent Indexing**: Automatically watches project directories and triggers re-indexing via `ctx` on file changes.
+-   **Intelligent Indexing**: Automatically watches project directories and triggers re-indexing on file changes.
 -   **AI Chat Interface**: Ask complex questions about your codebase with a refined, AI-focused message UI.
--   **Auto-Sync**: Automatically discovers and lists projects already indexed by the `ctx` CLI.
+-   **Auto-Sync**: Automatically discovers and lists projects already indexed in your environment.
 -   **Professional UI**: Premium design featuring glassmorphism, modern typography (Inter/Outfit), and sleek animations.
 -   **Real-time Status**: Monitor CLI versions and active AI models directly from the high-tech status bar.
 -   **Queue Management**: Smart indexing queue to prevent resource overload.
@@ -19,7 +19,7 @@
 
 ## 🚀 One-Command Setup (Recommended)
 
-If you are on a Mac, you can set up everything (Node, Python, Ollama, ctx) with a single command from inside the `yodaman` folder:
+If you are on a Mac, you can set up the entire ecosystem (Node, Python, Ollama, Engine) with a single command:
 
 ```bash
 sh setup.sh
@@ -34,7 +34,7 @@ If you want to contribute or run in development mode:
 ### Prerequisites
 
 -   **Node.js** (v18+)
--   **Context Expert (ctx)** CLI installed globally:
+-   **Context Expert (ctx)**: The underlying intelligence engine. Install via:
     ```bash
     npm install -g @contextexpert/cli
     ```
@@ -57,7 +57,7 @@ Start both the backend and frontend with HMR:
 ```bash
 npm start
 ```
-Dev UI available at [http://localhost:5173](http://localhost:5173).
+Dev UI available at [http://localhost:5190](http://localhost:5190).
 
 ## 🛠️ Technical Specifications
 
@@ -65,8 +65,8 @@ YodaMan is built with a modern, high-performance stack designed for low-latency 
 
 ### Architecture
 -   **Frontend**: React 18 + Vite + Tailwind CSS (Glassmorphic Design System).
--   **Backend**: Node.js + Express (Acting as a stateful proxy for the `ctx` CLI).
--   **AI Engine**: Integrates with `ctx` CLI which utilizes local Ollama models and Vector databases.
+-   **Backend**: Node.js + Express (Acting as a stateful proxy for the Intelligence Engine).
+-   **AI Engine**: Utilizes local Ollama models and high-performance vector databases for ecosystem-wide context.
 
 ### API Reference
 
@@ -83,27 +83,29 @@ YodaMan is built with a modern, high-performance stack designed for low-latency 
 
 ```text
 yodaman/
-├── bin/              # CLI executable wrapper
-├── public/           # Static assets (Logo, Manual)
+├── backend/          # Modular Backend (Clean Architecture)
+│   ├── services/     # CLI, Queue, and Watcher services
+│   └── routes/       # API endpoint definitions
 ├── src/              # React frontend source
+│   ├── api/          # Centralized API client
 │   ├── components/   # Premium UI components
 │   └── App.jsx       # Main application logic
-├── server.js         # Express backend & CLI Proxy
+├── server.js         # Entry point (Bootstrap & Sync)
 ├── setup.sh          # One-Command System Doctor
 └── manual.html       # Visual User Manual
 ```
 
 ## 🛠️ Configuration
 
--   **Ports**: Backend runs on `3001`, Frontend on `5173`.
+-   **Ports**: Backend runs on `3090`, Frontend on `5190`.
 -   **Storage**: Project settings are stored in `config.json`.
 -   **Watchers**: YodaMan ignores `node_modules`, `.git`, and `dist` by default.
 
 ## 🧪 Troubleshooting
 
--   **ctx not found**: Ensure `ctx` is in your PATH. Run `ctx --version` to verify.
+-   **Engine not found**: Ensure the Intelligence Engine is in your PATH.
 -   **Styling Issues**: If the UI looks unstyled, ensure `tailwind.config.cjs` and `postcss.config.cjs` are present.
--   **Port Conflict**: Update ports in `server.js` or `vite.config.js` if 3001 or 5173 are taken.
+-   **Port Conflict**: Update ports in `server.js` or `vite.config.js` if 3090 or 5190 are taken.
 
 ## 📜 License
 

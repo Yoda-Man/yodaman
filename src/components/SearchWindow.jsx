@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Search, FileCode, Hash, ExternalLink, Filter, Loader2, Sparkles } from 'lucide-react'
+import { api } from '../api/api'
 
 export default function SearchWindow({ selectedProject }) {
     const [query, setQuery] = useState('')
@@ -13,15 +14,9 @@ export default function SearchWindow({ selectedProject }) {
 
         setIsSearching(true)
         try {
-            const url = new URL('/api/search', window.location.origin)
-            url.searchParams.append('query', query)
-            if (selectedProject) url.searchParams.append('project', selectedProject.name)
-            
-            const res = await fetch(url)
-            const data = await res.json()
+            const data = await api.search(query, selectedProject?.name)
             
             if (data.isText) {
-                // Handle text fallback if needed, but we prefer JSON
                 setResults([])
             } else {
                 setResults(Array.isArray(data) ? data : (data.results || []))

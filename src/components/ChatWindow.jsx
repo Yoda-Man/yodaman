@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Terminal, Bot, User, AlertCircle, Sparkles, Command } from 'lucide-react'
+import { api } from '../api/api'
 
 export default function ChatWindow({ selectedProject }) {
     const [messages, setMessages] = useState([])
@@ -17,16 +18,7 @@ export default function ChatWindow({ selectedProject }) {
         setIsGenerating(true)
 
         try {
-            const response = await fetch('/api/ask', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    question: inputText, 
-                    projects: [selectedProject.path] 
-                }),
-            })
-
-            const data = await response.json()
+            const data = await api.ask(inputText)
             const aiMsg = { 
                 role: 'ai', 
                 content: data.answer || 'I couldn\'t find a specific answer in the indexed files.', 

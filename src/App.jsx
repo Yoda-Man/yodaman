@@ -8,7 +8,7 @@ import SettingsModal from './components/SettingsModal'
 import WelcomeModal from './components/WelcomeModal'
 import { MessageSquare, Search, LayoutDashboard } from 'lucide-react'
 
-const API_URL = '/api'
+import { api } from './api/api'
 
 export default function App() {
   const [projects, setProjects] = useState([])
@@ -22,12 +22,11 @@ export default function App() {
 
   const fetchProjects = async () => {
     try {
-      const res = await fetch(`${API_URL}/projects`)
-      const data = await res.json()
+      const data = await api.getProjects()
       setProjects(data.map(p => ({
-        id: p,
-        name: p.split('/').pop() || p,
-        path: p,
+        id: p.id,
+        name: p.name,
+        path: p.path,
         included: true,
         files: []
       })))
@@ -45,11 +44,7 @@ export default function App() {
   const handleReindex = async () => {
     if (!selectedProject) return
     try {
-      await fetch(`${API_URL}/reindex`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: selectedProject.path })
-      })
+      await api.reindex(selectedProject.path)
     } catch (err) {
       console.error('Reindex failed:', err)
     }

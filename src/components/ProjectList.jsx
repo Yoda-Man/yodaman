@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Settings, RefreshCw, CheckCircle, Circle, Folder, Plus, CheckCircle2, AlertCircle } from 'lucide-react'
+import { api } from '../api/api'
 
 export default function ProjectList({ 
     projects, 
@@ -16,8 +17,7 @@ export default function ProjectList({
         e.stopPropagation()
         setChecking(path)
         try {
-            const res = await fetch(`/api/check?path=${encodeURIComponent(path)}`)
-            const data = await res.json()
+            const data = await api.checkHealth(path)
             setHealth(prev => ({ ...prev, [path]: data.status || 'healthy' }))
         } catch (err) {
             setHealth(prev => ({ ...prev, [path]: 'error' }))
