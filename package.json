@@ -8,6 +8,7 @@
   "files": [
     "bin",
     "dist",
+    "backend",
     "server.js",
     "start.js",
     "public",
