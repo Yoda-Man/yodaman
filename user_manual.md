@@ -58,4 +58,4 @@ The Chat window allows you to ask complex questions across your entire ecosystem
 -   **Re-indexing**: If results seem outdated, click the "Sync Repository" button to refresh the index.
 
 ---
-*YodaMan v0.1.3 - Total Privacy. Ecosystem Intelligence.*
+*YodaMan v0.1.5 - Total Privacy. Ecosystem Intelligence.*

@@ -2,7 +2,7 @@
 
 **YodaMan** is a premium, full-stack intelligence platform designed for developers who demand total privacy and deep semantic understanding across their entire ecosystem.
 
-![Version](https://img.shields.io/badge/Version-0.1.4-gold)
+![Version](https://img.shields.io/badge/Version-0.1.5-gold)
 ![Architecture](https://img.shields.io/badge/Architecture-Clean-indigo)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -33,7 +33,7 @@ npm start
 ```
 Visit `http://localhost:5190` to start exploring.
 
-## 🚀 Features (v0.1.4)
+## 🚀 Features (v0.1.5)
 
 - **Ecosystem-Wide Search**: Unified semantic search across all your indexed repositories.
 - **Autonomous Agent (Yoda-Agent)**: A multi-step reasoning engine that can perform coding tasks.
@@ -41,6 +41,7 @@ Visit `http://localhost:5190` to start exploring.
 - **High-Fidelity Persistence (NEW)**: Full chat history and reasoning step preservation across restarts.
 - **Trust & Safety (NEW)**: Human-in-the-loop Diff Approval for all agent-initiated file modifications.
 - **Professional GUI**: Modern, glassmorphic interface with real-time feedback and detailed logging.
+- **Stress-Free Startup (NEW)**: Automatic port conflict resolution and robust CLI output parsing.
 - **Context Expert (ctx) Integration**: Deep integration with the Context Expert CLI for semantic mapping.
 
 ## 📚 Documentation

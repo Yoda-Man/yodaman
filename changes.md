@@ -2,11 +2,11 @@
 
 All notable changes to the YodaMan project are documented here.
 
-## [1.0.0] - 2026-05-12
+## [0.1.5] - 2026-05-14
 
-### 💎 Professional UI Overhaul
--   **Brand New Identity**: Renamed project from "Context Expert GUI" to **YodaMan**.
--   **Modern Design System**: Shifted to a sleek **Slate/Indigo** palette with heavy **glassmorphism** effects.
+### 💎 Professional UI & Stability Overhaul
+-   **Stress-Free Engine**: Integrated automatic port conflict detection and robust CLI output parsing.
+-   **Brand Identity**: Finalized **YodaMan** branding with high-fidelity glassmorphic design.
 -   **Typography**: Implemented professional fonts: **Inter** (Body), **Outfit** (Headings), and **JetBrains Mono** (Technical data).
 -   **High-Tech StatusBar**: Added real-time tracking for `ctx` CLI version and active AI models.
 -   **Premium Chat Interface**: Completely redesigned AI chat bubbles with "analyzing" animations and a glow-focused input field.
@@ -24,4 +24,4 @@ All notable changes to the YodaMan project are documented here.
 -   **Vite Configuration**: Fixed missing Tailwind and PostCSS configurations to ensure consistent styling across all browsers.
 
 ---
-*YodaMan v1.0.0 - May the Code be with you.*
+*YodaMan v0.1.5 - May the Code be with you.*

@@ -44,24 +44,26 @@ class ContextEngine {
     async executeJson(args = []) {
         const { output } = await this.execute([...args, '--json']);
         try {
-            // Find the first occurrence of { or [ and the last occurrence of } or ]
-            const firstBrace = output.indexOf('{');
-            const firstBracket = output.indexOf('[');
-            const start = (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) ? firstBrace : firstBracket;
+            // Find the actual JSON block by looking for the first { or [ that starts a line
+            // or is the start of the output, avoiding "tip" messages in the middle of lines.
+            const jsonMatch = output.match(/^[\s]*[\{\[]/m);
+            if (!jsonMatch) {
+                throw new Error('No valid JSON block found in CLI output');
+            }
 
+            const start = jsonMatch.index;
             const lastBrace = output.lastIndexOf('}');
             const lastBracket = output.lastIndexOf(']');
-            const end = (lastBrace !== -1 && (lastBracket === -1 || lastBrace > lastBracket)) ? lastBrace : lastBracket;
+            const end = Math.max(lastBrace, lastBracket);
 
             if (start !== -1 && end !== -1 && end > start) {
                 const jsonStr = output.substring(start, end + 1);
                 return JSON.parse(jsonStr);
             }
             
-            throw new Error('No valid JSON block found in CLI output');
+            throw new Error('Could not identify valid JSON boundaries');
         } catch (e) {
             console.error(`[ContextEngine] JSON Parse Error: ${e.message}`);
-            // Fallback for debugging: log the full output if JSON parse fails
             throw new Error(`Failed to parse CLI JSON: ${e.message}`);
         }
     }

@@ -2,6 +2,12 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.1.5] - 2026-05-14
+
+### Added
+- **Stress-Free Initialization**: Automated detection and notification for port conflicts to prevent "EADDRINUSE" crashes.
+- **Robust CLI Sync**: Enhanced JSON extraction logic to handle decorative CLI banners and "dotenvx" noise, ensuring seamless project synchronization.
+
 ## [0.1.4] - 2026-05-14
 
 ### Added
