@@ -3,12 +3,13 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-// Initialize Services
+// Initialize Infrastructure & Services
 process.env.DOTENVX_QUIET = 'true';
-const watcherService = require('./backend/services/watcher.service');
-const queueService = require('./backend/services/queue.service');
-const cliService = require('./backend/services/cli.service');
-const apiRoutes = require('./backend/routes/api');
+const watcherService = require('./backend/infrastructure/FileSystemWatcher');
+const queueService = require('./backend/core/QueueService');
+const contextEngine = require('./backend/infrastructure/ContextEngine');
+const apiRoutes = require('./backend/interfaces/RestController');
+
 
 const app = express();
 const PORT = 3090;
@@ -41,7 +42,8 @@ app.get('*', (req, res) => {
 async function initialize() {
     console.log('🔍 Syncing with YodaMan Engine...');
     try {
-        const cliData = await cliService.runJson(['list']);
+        const cliData = await contextEngine.executeJson(['list']);
+
         const cliPaths = cliData.projects.map(p => p.path);
         
         let config = { watchedDirectories: [] };

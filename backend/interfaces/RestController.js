@@ -1,30 +1,42 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const cliService = require('../services/cli.service');
-const queueService = require('../services/queue.service');
-const watcherService = require('../services/watcher.service');
+
+// Infrastructure Layer
+const contextEngine = require('../infrastructure/ContextEngine');
+const watcherService = require('../infrastructure/FileSystemWatcher');
+const toolBox = require('../infrastructure/ToolBox');
+
+// Core Layer
+const queueService = require('../core/QueueService');
+const agentEngine = require('../core/AgentReasoningEngine');
 
 const router = express.Router();
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
 
+/**
+ * RestController (Interface Layer)
+ * 
+ * Maps HTTP endpoints to business logic and infrastructure actions.
+ */
+
 let config = { watchedDirectories: [] };
 
-// Helper to save config
-function saveConfig() {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-}
-
-// Load config helper
 function loadLocalConfig() {
     if (fs.existsSync(CONFIG_PATH)) {
         config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
     }
 }
 
+function saveConfig() {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+}
+
+// --- Project Management ---
+
 router.get('/projects', async (req, res) => {
     try {
-        const cliData = await cliService.runJson(['list']);
+        const cliData = await contextEngine.executeJson(['list']);
         const cliProjects = cliData.projects.map(p => ({
             name: p.name,
             path: p.path,
@@ -48,11 +60,7 @@ router.get('/projects', async (req, res) => {
         const result = [...cliProjects];
         config.watchedDirectories.forEach(dir => {
             if (!cliPaths.includes(dir)) {
-                result.push({
-                    name: path.basename(dir),
-                    path: dir,
-                    id: dir
-                });
+                result.push({ name: path.basename(dir), path: dir, id: dir });
             }
         });
 
@@ -91,22 +99,41 @@ router.delete('/projects', (req, res) => {
     res.json({ message: 'Project removed' });
 });
 
-router.post('/reindex', (req, res) => {
-    const { path: dirPath } = req.body;
-    if (!dirPath) return res.status(400).send('Path is required');
-    queueService.addToQueue(path.resolve(dirPath));
-    res.json({ message: 'Indexing queued' });
-});
+// --- AI & Intelligence ---
 
 router.post('/ask', async (req, res) => {
     const { question } = req.body;
     if (!question) return res.status(400).send('Question is required');
     
     try {
-        const { output } = await cliService.run(null, ['ask', '--', question]);
+        const { output } = await contextEngine.execute(['ask', '--', question]);
         res.json({ answer: output.trim() });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/agent/task', async (req, res) => {
+    const { task } = req.body;
+    if (!task) return res.status(400).send('Task is required');
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendEvent = (data) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+        const finalAnswer = await agentEngine.executeTask(task, (step) => {
+            sendEvent(step);
+        });
+        sendEvent({ type: 'final_answer', answer: finalAnswer });
+        res.end();
+    } catch (err) {
+        sendEvent({ type: 'error', message: err.message });
+        res.end();
     }
 });
 
@@ -115,20 +142,18 @@ router.get('/search', async (req, res) => {
     if (!query) return res.status(400).send('Query is required');
 
     try {
-        const args = ['search', query, '-k', top];
-        if (project) args.push('-p', project);
-        const data = await cliService.runJson(args);
-        res.json(data);
+        const results = await toolBox.searchCode({ query, project, top });
+        res.json(results);
     } catch (err) {
-        // Text fallback handled by CLI service's run if runJson fails, 
-        // but here we just return error or fallback
         res.status(500).json({ error: err.message });
     }
 });
 
+// --- System Status ---
+
 router.get('/status', async (req, res) => {
     try {
-        const data = await cliService.runJson(['status']);
+        const data = await contextEngine.executeJson(['status']);
         res.json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -138,11 +163,18 @@ router.get('/status', async (req, res) => {
 router.get('/check', async (req, res) => {
     const { path: dirPath } = req.query;
     try {
-        const data = await cliService.runJson(['check', dirPath]);
+        const data = await contextEngine.executeJson(['check', dirPath]);
         res.json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+router.post('/reindex', (req, res) => {
+    const { path: dirPath } = req.body;
+    if (!dirPath) return res.status(400).send('Path is required');
+    queueService.addToQueue(path.resolve(dirPath));
+    res.json({ message: 'Indexing queued' });
 });
 
 module.exports = router;

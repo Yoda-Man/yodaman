@@ -6,7 +6,10 @@ export default function ChatWindow({ selectedProject }) {
     const [messages, setMessages] = useState([])
     const [inputText, setInputText] = useState('')
     const [isGenerating, setIsGenerating] = useState(false)
+    const [isAgentMode, setIsAgentMode] = useState(false)
+    const [agentSteps, setAgentSteps] = useState([])
     const messagesEndRef = useRef(null)
+
 
     const sendMessage = async (e) => {
         e.preventDefault()
@@ -16,15 +19,37 @@ export default function ChatWindow({ selectedProject }) {
         setMessages(prev => [...prev, userMsg])
         setInputText('')
         setIsGenerating(true)
+        setAgentSteps([])
 
         try {
-            const data = await api.ask(inputText)
-            const aiMsg = { 
-                role: 'ai', 
-                content: data.answer || 'I couldn\'t find a specific answer in the indexed files.', 
-                timestamp: new Date() 
+            if (isAgentMode) {
+                let currentAiMsg = { role: 'ai', content: '', timestamp: new Date(), isAgent: true }
+                setMessages(prev => [...prev, currentAiMsg])
+
+                await api.agentTask(inputText, (step) => {
+                    if (step.type === 'tool_start') {
+                        setAgentSteps(prev => [...prev, { type: 'start', tool: step.tool, params: step.params }])
+                    } else if (step.type === 'tool_end') {
+                        setAgentSteps(prev => [...prev, { type: 'end', tool: step.tool, result: step.result }])
+                    } else if (step.type === 'final_answer') {
+                        setMessages(prev => {
+                            const newMessages = [...prev]
+                            newMessages[newMessages.length - 1].content = step.answer
+                            return newMessages
+                        })
+                    } else if (step.type === 'error') {
+                        setMessages(prev => [...prev, { role: 'error', content: step.message, timestamp: new Date() }])
+                    }
+                })
+            } else {
+                const data = await api.ask(inputText)
+                const aiMsg = { 
+                    role: 'ai', 
+                    content: data.answer || 'I couldn\'t find a specific answer in the indexed files.', 
+                    timestamp: new Date() 
+                }
+                setMessages(prev => [...prev, aiMsg])
             }
-            setMessages(prev => [...prev, aiMsg])
         } catch (err) {
             console.error(err)
             setMessages(prev => [...prev, { 
@@ -39,7 +64,7 @@ export default function ChatWindow({ selectedProject }) {
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [messages])
+    }, [messages, agentSteps])
 
     if (!selectedProject) {
         return (
@@ -74,9 +99,20 @@ export default function ChatWindow({ selectedProject }) {
                         <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Active Context</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                    <div className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Synced</span>
+                
+                <div className="flex items-center gap-4">
+                    <button 
+                        onClick={() => setIsAgentMode(!isAgentMode)}
+                        className={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition-all text-[10px] font-black uppercase tracking-widest ${isAgentMode ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-slate-800/50 border-white/5 text-slate-500'}`}
+                    >
+                        <Bot size={14} className={isAgentMode ? 'animate-pulse' : ''} />
+                        Agent Mode {isAgentMode ? 'ON' : 'OFF'}
+                    </button>
+                    
+                    <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                        <div className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Synced</span>
+                    </div>
                 </div>
             </div>
 
@@ -108,6 +144,24 @@ export default function ChatWindow({ selectedProject }) {
                                             : 'bg-slate-900 border border-white/5 backdrop-blur-md rounded-tl-none text-slate-200'
                                 }`}>
                                     <div className="whitespace-pre-wrap font-inter">{msg.content}</div>
+                                    
+                                    {msg.isAgent && idx === messages.length - 1 && agentSteps.length > 0 && (
+                                        <div className="mt-4 space-y-2 border-t border-white/10 pt-4">
+                                            {agentSteps.map((step, sIdx) => (
+                                                <div key={sIdx} className="flex flex-col gap-1">
+                                                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-400/70">
+                                                        <Terminal size={10} />
+                                                        {step.type === 'start' ? `Executing ${step.tool}...` : `${step.tool} complete`}
+                                                    </div>
+                                                    {step.type === 'start' && (
+                                                        <div className="bg-black/20 rounded p-2 text-[10px] font-mono text-slate-500 truncate">
+                                                            {JSON.stringify(step.params)}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-1">
                                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -128,7 +182,7 @@ export default function ChatWindow({ selectedProject }) {
                                     <div className="h-1.5 w-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                                     <div className="h-1.5 w-1.5 bg-indigo-500 rounded-full animate-bounce"></div>
                                 </div>
-                                <span>Analyzing repository...</span>
+                                <span>{isAgentMode ? 'Agent is thinking...' : 'Analyzing repository...'}</span>
                             </div>
                          </div>
                     </div>
@@ -144,7 +198,7 @@ export default function ChatWindow({ selectedProject }) {
                             type="text"
                             value={inputText}
                             onChange={e => setInputText(e.target.value)}
-                            placeholder="Ask YodaMan anything about your code..."
+                            placeholder={isAgentMode ? "Give Yoda-Agent a coding task..." : "Ask YodaMan anything about your code..."}
                             className="flex-1 input-field pr-16 py-4 bg-slate-900 border-white/5 focus:border-indigo-500/50 text-base shadow-2xl"
                             disabled={isGenerating}
                         />
@@ -160,7 +214,7 @@ export default function ChatWindow({ selectedProject }) {
                 <div className="mt-4 flex justify-center gap-4 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
                     <span className="flex items-center gap-1.5"><Command size={10} /> + Enter to send</span>
                     <span className="opacity-20">|</span>
-                    <span className="flex items-center gap-1.5">Context: Full Project</span>
+                    <span className="flex items-center gap-1.5">Mode: {isAgentMode ? 'Autonomous Agent' : 'Standard Chat'}</span>
                 </div>
             </div>
         </div>

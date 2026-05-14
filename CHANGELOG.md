@@ -2,7 +2,20 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.1.4] - 2026-05-14
+
+### Added
+- **Autonomous Agent Mode**: Integrated a reasoning loop (ReAct) allowing the AI to use tools (read/write/shell).
+- **Real-time Monitoring**: Added SSE streaming for agent tasks with a live step monitor in the UI.
+- **Detailed Documentation**: Created a comprehensive `docs/` folder with architecture diagrams and API references.
+
+### Changed
+- **Major Architecture Refactor**: Transitioned to a formal **Clean Architecture** (Infrastructure, Core, Interface layers).
+- **Service Overhaul**: Refactored all backend services for better maintainability and logging.
+- **UI Refresh**: Updated the chat interface with Agent Mode controls and improved typography.
+
 ## [0.1.3] - 2026-05-13
+
 
 ### Fixed
 - **Robust CLI Parsing**: Improved JSON extraction logic to reliably filter out `dotenvx` banners and other CLI-injected strings during project synchronization.

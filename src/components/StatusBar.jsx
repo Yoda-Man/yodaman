@@ -57,7 +57,7 @@ export default function StatusBar() {
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-slate-600 font-bold uppercase tracking-[0.2em]">Build</span>
-                    <span className="text-indigo-400/80 font-black px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20">v0.1.0</span>
+                    <span className="text-indigo-400/80 font-black px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20">v0.1.4</span>
                 </div>
             </div>
         </div>

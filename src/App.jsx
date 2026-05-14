@@ -6,7 +6,8 @@ import Dashboard from './components/Dashboard'
 import StatusBar from './components/StatusBar'
 import SettingsModal from './components/SettingsModal'
 import WelcomeModal from './components/WelcomeModal'
-import { MessageSquare, Search, LayoutDashboard } from 'lucide-react'
+import ManualWindow from './components/ManualWindow'
+import { MessageSquare, Search, LayoutDashboard, Book } from 'lucide-react'
 
 import { api } from './api/api'
 
@@ -14,7 +15,7 @@ export default function App() {
   const [projects, setProjects] = useState([])
   const [selectedProject, setSelectedProject] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('chat') // 'chat', 'search', 'dashboard'
+  const [activeTab, setActiveTab] = useState('chat') // 'chat', 'search', 'dashboard', 'manual'
 
   useEffect(() => {
     fetchProjects()
@@ -92,15 +93,24 @@ export default function App() {
               <LayoutDashboard size={14} />
               Dashboard
             </button>
+            <button 
+              onClick={() => setActiveTab('manual')}
+              className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'manual' ? 'bg-white/[0.03] text-indigo-400 border-indigo-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
+            >
+              <Book size={14} />
+              Manual
+            </button>
           </div>
 
           <div className="flex-1 overflow-hidden bg-white/[0.01] border-t border-white/5">
             {activeTab === 'chat' && <ChatWindow selectedProject={selectedProject} />}
             {activeTab === 'search' && <SearchWindow selectedProject={selectedProject} />}
             {activeTab === 'dashboard' && <Dashboard />}
+            {activeTab === 'manual' && <ManualWindow />}
           </div>
         </div>
       </main>
+
 
       {isModalOpen && (
         <SettingsModal
