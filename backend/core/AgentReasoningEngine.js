@@ -10,19 +10,21 @@ const toolBox = require('../infrastructure/ToolBox');
  */
 class AgentReasoningEngine {
     constructor() {
+        /** @type {Map<string, Function>} Pending approval resolvers. */
+        this.pendingApprovals = new Map();
         /** @type {number} Maximum number of tool iterations to prevent infinite loops. */
         this.maxIterations = 10;
-        
-        /** @type {string} The core system prompt defining tools and expected behavior. */
-        this.systemPrompt = `
+    }
+
+    /**
+     * Dynamically builds the system prompt with current tools and plugins.
+     */
+    getSystemPrompt() {
+        return `
 You are Yoda-Agent, a powerful coding assistant integrated into the YodaMan platform.
 You have access to the following tools to help the user with their coding tasks:
 
-1. readFile(filePath): Returns the content of a file.
-2. writeFile(filePath, content): Writes content to a file.
-3. executeCommand(command, cwd): Runs a shell command and returns output.
-4. searchCode(query): Searches the codebase for relevant snippets.
-5. listFiles(directoryPath): Lists files in a directory.
+${toolBox.getToolDefinitions()}
 
 ### Process:
 - Use tools to gather information or make changes.
@@ -41,13 +43,18 @@ You have access to the following tools to help the user with their coding tasks:
     }
 
     /**
-     * Executes a complex coding task using a multi-step reasoning loop.
-     * @param {string} task - The user's request.
-     * @param {Function} onStep - Callback for real-time progress updates.
-     * @returns {Promise<string>} The final response from the agent.
+     * Signals that an action has been approved or rejected.
      */
-    async executeTask(task, onStep) {
-        let conversation = `${this.systemPrompt}\n\nUser Task: ${task}`;
+    signalApproval(taskId, approved) {
+        const resolver = this.pendingApprovals.get(taskId);
+        if (resolver) {
+            resolver(approved);
+            this.pendingApprovals.delete(taskId);
+        }
+    }
+
+    async executeTask(task, taskId, onStep) {
+        let conversation = `${this.getSystemPrompt()}\n\nUser Task: ${task}`;
         let iteration = 0;
         let finalAnswer = '';
 
@@ -57,42 +64,52 @@ You have access to the following tools to help the user with their coding tasks:
             iteration++;
             console.log(`[Agent] Iteration ${iteration}/${this.maxIterations}`);
             
-            // Call the ContextEngine (using 'ask' as the reasoning interface)
             const { output } = await contextEngine.execute(['ask', '--', conversation]);
             
             const response = output.trim();
             conversation += `\n\nAssistant: ${response}`;
 
-            // Parse for tool calls using XML-like tags
             const toolCallMatch = response.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
             
             if (toolCallMatch) {
                 try {
                     const toolCall = JSON.parse(toolCallMatch[1]);
-                    console.log(`[Agent] 🛠 Invoking tool: ${toolCall.name}`);
                     
+                    // --- DIFF APPROVAL (The "Trust Gap") ---
+                    if (toolCall.name === 'writeFile') {
+                        const oldContent = await toolBox.getFileContent(toolCall.parameters.filePath);
+                        const newContent = toolCall.parameters.content;
+
+                        if (onStep) onStep({ 
+                            type: 'awaiting_approval', 
+                            tool: 'writeFile', 
+                            taskId,
+                            params: {
+                                filePath: toolCall.parameters.filePath,
+                                oldContent,
+                                newContent
+                            }
+                        });
+
+                        // Wait for approval signal
+                        const approved = await new Promise((resolve) => {
+                            this.pendingApprovals.set(taskId, resolve);
+                        });
+
+                        if (!approved) {
+                            const result = { error: "User rejected this change." };
+                            conversation += `\n\nSystem (Tool Result): ${JSON.stringify(result)}`;
+                            if (onStep) onStep({ type: 'tool_end', tool: toolCall.name, result });
+                            continue; 
+                        }
+                    }
+                    // ---------------------------
+
+
                     if (onStep) onStep({ type: 'tool_start', tool: toolCall.name, params: toolCall.parameters });
 
-                    let result;
-                    switch (toolCall.name) {
-                        case 'readFile':
-                            result = await toolBox.readFile(toolCall.parameters);
-                            break;
-                        case 'writeFile':
-                            result = await toolBox.writeFile(toolCall.parameters);
-                            break;
-                        case 'executeCommand':
-                            result = await toolBox.executeCommand(toolCall.parameters);
-                            break;
-                        case 'searchCode':
-                            result = await toolBox.searchCode(toolCall.parameters);
-                            break;
-                        case 'listFiles':
-                            result = await toolBox.listFiles(toolCall.parameters);
-                            break;
-                        default:
-                            result = { error: `Unknown tool: ${toolCall.name}` };
-                    }
+                    // Use the unified toolBox.callTool which handles built-ins and plugins
+                    const result = await toolBox.callTool(toolCall.name, toolCall.parameters);
 
                     const resultStr = JSON.stringify(result, null, 2);
                     conversation += `\n\nSystem (Tool Result): ${resultStr}`;
@@ -104,12 +121,13 @@ You have access to the following tools to help the user with their coding tasks:
                     if (onStep) onStep({ type: 'error', message: err.message });
                 }
             } else {
-                // No more tool calls means the agent has reached a conclusion
                 console.log('[Agent] ✅ Task completed.');
                 finalAnswer = response;
                 break;
             }
         }
+
+
 
         if (iteration >= this.maxIterations) {
             finalAnswer = "I reached the maximum number of steps without finishing. Please try breaking the task into smaller parts.";

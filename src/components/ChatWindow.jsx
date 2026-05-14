@@ -11,6 +11,48 @@ export default function ChatWindow({ selectedProject }) {
     const messagesEndRef = useRef(null)
 
 
+    const [pendingApproval, setPendingApproval] = useState(null)
+
+    const handleApproval = async (approved) => {
+        if (!pendingApproval) return
+        try {
+            await api.approve(pendingApproval.taskId, approved)
+            setPendingApproval(null)
+            setAgentSteps(prev => [...prev, { 
+                type: 'approval_result', 
+                tool: 'writeFile', 
+                approved 
+            }])
+        } catch (err) {
+            console.error('Approval failed:', err)
+        }
+    }
+
+    useEffect(() => {
+        if (selectedProject) {
+            loadSession()
+        }
+    }, [selectedProject])
+
+    const loadSession = async () => {
+        try {
+            const history = await api.getSessions(selectedProject.id)
+            setMessages(history.map(m => ({ ...m, timestamp: new Date(m.timestamp) })))
+        } catch (err) {
+            console.error('Failed to load session:', err)
+        }
+    }
+
+    const clearSession = async () => {
+        if (!window.confirm('Are you sure you want to clear this conversation history?')) return
+        try {
+            await api.clearSessions(selectedProject.id)
+            setMessages([])
+        } catch (err) {
+            console.error('Failed to clear session:', err)
+        }
+    }
+
     const sendMessage = async (e) => {
         e.preventDefault()
         if (!inputText.trim() || !selectedProject) return
@@ -20,17 +62,21 @@ export default function ChatWindow({ selectedProject }) {
         setInputText('')
         setIsGenerating(true)
         setAgentSteps([])
+        setPendingApproval(null)
 
         try {
             if (isAgentMode) {
                 let currentAiMsg = { role: 'ai', content: '', timestamp: new Date(), isAgent: true }
                 setMessages(prev => [...prev, currentAiMsg])
 
-                await api.agentTask(inputText, (step) => {
+                await api.agentTask(inputText, selectedProject.id, (step) => {
                     if (step.type === 'tool_start') {
                         setAgentSteps(prev => [...prev, { type: 'start', tool: step.tool, params: step.params }])
                     } else if (step.type === 'tool_end') {
                         setAgentSteps(prev => [...prev, { type: 'end', tool: step.tool, result: step.result }])
+                    } else if (step.type === 'awaiting_approval') {
+                        setPendingApproval(step)
+                        setAgentSteps(prev => [...prev, { type: 'approval_needed', tool: step.tool, params: step.params }])
                     } else if (step.type === 'final_answer') {
                         setMessages(prev => {
                             const newMessages = [...prev]
@@ -42,7 +88,7 @@ export default function ChatWindow({ selectedProject }) {
                     }
                 })
             } else {
-                const data = await api.ask(inputText)
+                const data = await api.ask(inputText, selectedProject.id)
                 const aiMsg = { 
                     role: 'ai', 
                     content: data.answer || 'I couldn\'t find a specific answer in the indexed files.', 
@@ -64,7 +110,7 @@ export default function ChatWindow({ selectedProject }) {
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [messages, agentSteps])
+    }, [messages, agentSteps, pendingApproval])
 
     if (!selectedProject) {
         return (
@@ -101,6 +147,13 @@ export default function ChatWindow({ selectedProject }) {
                 </div>
                 
                 <div className="flex items-center gap-4">
+                    <button 
+                        onClick={clearSession}
+                        className="px-3 py-1.5 rounded-full border border-white/5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-rose-400 hover:border-rose-500/20 transition-all"
+                    >
+                        Clear Chat
+                    </button>
+
                     <button 
                         onClick={() => setIsAgentMode(!isAgentMode)}
                         className={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition-all text-[10px] font-black uppercase tracking-widest ${isAgentMode ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-slate-800/50 border-white/5 text-slate-500'}`}
@@ -145,15 +198,43 @@ export default function ChatWindow({ selectedProject }) {
                                 }`}>
                                     <div className="whitespace-pre-wrap font-inter">{msg.content}</div>
                                     
-                                    {msg.isAgent && idx === messages.length - 1 && agentSteps.length > 0 && (
-                                        <div className="mt-4 space-y-2 border-t border-white/10 pt-4">
-                                            {agentSteps.map((step, sIdx) => (
+                                    {msg.isAgent && (msg.steps || (idx === messages.length - 1 && agentSteps.length > 0)) && (
+                                        <div className="mt-4 space-y-4 border-t border-white/10 pt-4">
+                                            {(msg.steps || agentSteps).map((step, sIdx) => (
                                                 <div key={sIdx} className="flex flex-col gap-1">
                                                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-400/70">
                                                         <Terminal size={10} />
-                                                        {step.type === 'start' ? `Executing ${step.tool}...` : `${step.tool} complete`}
+                                                        {step.type === 'start' || step.type === 'tool_start' ? `Executing ${step.tool}...` : 
+                                                         step.type === 'approval_needed' || step.type === 'awaiting_approval' ? `Awaiting approval for ${step.tool}` :
+                                                         step.type === 'approval_result' ? `${step.tool} ${step.approved ? 'Approved' : 'Rejected'}` :
+                                                         `${step.tool} complete`}
                                                     </div>
-                                                    {step.type === 'start' && (
+                                                    {(step.type === 'approval_needed' || step.type === 'awaiting_approval') && (
+                                                        <div className="space-y-4 mt-2">
+                                                            <DiffViewer 
+                                                                filePath={step.params.filePath}
+                                                                oldContent={step.params.oldContent}
+                                                                newContent={step.params.newContent}
+                                                            />
+                                                            {idx === messages.length - 1 && !msg.content && (
+                                                                <div className="flex gap-2">
+                                                                    <button 
+                                                                        onClick={() => handleApproval(true)}
+                                                                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                                                                    >
+                                                                        Approve Change
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => handleApproval(false)}
+                                                                        className="flex-1 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                                                                    >
+                                                                        Reject
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {(step.type === 'start' || step.type === 'tool_start') && (
                                                         <div className="bg-black/20 rounded p-2 text-[10px] font-mono text-slate-500 truncate">
                                                             {JSON.stringify(step.params)}
                                                         </div>
@@ -162,6 +243,7 @@ export default function ChatWindow({ selectedProject }) {
                                             ))}
                                         </div>
                                     )}
+
                                 </div>
                                 <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-1">
                                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -170,6 +252,7 @@ export default function ChatWindow({ selectedProject }) {
                         </div>
                     </div>
                 ))}
+
                 {isGenerating && (
                     <div className="flex justify-start animate-in fade-in duration-300">
                          <div className="flex gap-4 max-w-[80%] items-start">
@@ -219,4 +302,35 @@ export default function ChatWindow({ selectedProject }) {
             </div>
         </div>
     )
+}
+
+function DiffViewer({ filePath, oldContent, newContent }) {
+    const oldLines = oldContent.split('\n');
+    const newLines = newContent.split('\n');
+    
+    return (
+        <div className="bg-black/40 rounded-xl border border-white/10 overflow-hidden text-[11px]">
+            <div className="bg-white/5 px-4 py-2 border-b border-white/5 flex items-center justify-between">
+                <span className="font-mono text-slate-400 truncate max-w-[70%]">{filePath}</span>
+                <span className="text-[9px] font-black uppercase tracking-tighter text-indigo-500 shrink-0">Proposed Changes</span>
+            </div>
+            <div className="p-4 font-mono max-h-60 overflow-y-auto custom-scrollbar leading-relaxed">
+                {oldLines.length > 0 && oldLines.map((line, i) => (
+                    line.trim() !== '' && !newLines.includes(line) && (
+                        <div key={`del-${i}`} className="text-rose-400 bg-rose-500/10 px-2 -mx-2">
+                            - {line}
+                        </div>
+                    )
+                ))}
+                {newLines.length > 0 && newLines.map((line, i) => (
+                    line.trim() !== '' && !oldLines.includes(line) && (
+                        <div key={`add-${i}`} className="text-emerald-400 bg-emerald-500/10 px-2 -mx-2">
+                            + {line}
+                        </div>
+                    )
+                ))}
+                {oldContent === '' && <div className="text-slate-500 italic">[New File]</div>}
+            </div>
+        </div>
+    );
 }

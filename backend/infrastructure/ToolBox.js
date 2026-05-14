@@ -7,13 +7,77 @@ const contextEngine = require('./ContextEngine');
  * ToolBox (Infrastructure Layer)
  * 
  * Provides concrete implementations of system tools like file I/O and command execution.
+ * Now supports dynamic plugins from the /plugins directory.
  */
 class ToolBox {
+    constructor() {
+        this.plugins = new Map();
+        this.loadPlugins();
+    }
+
     /**
-     * Reads a file from the disk.
-     * @param {Object} params - Tool parameters.
-     * @param {string} params.filePath - Path to the file.
+     * Dynamically loads custom tools from the plugins directory.
      */
+    loadPlugins() {
+        const pluginsDir = path.resolve(__dirname, '../../plugins');
+        if (!fs.existsSync(pluginsDir)) return;
+
+        const files = fs.readdirSync(pluginsDir);
+        files.forEach(file => {
+            if (file.endsWith('.js')) {
+                try {
+                    // Using delete require.cache to allow hot-reloading if we wanted, 
+                    // but for now simple require is fine.
+                    const pluginPath = path.join(pluginsDir, file);
+                    const plugin = require(pluginPath);
+                    if (plugin.name && typeof plugin.execute === 'function') {
+                        console.log(`[ToolBox] Loaded plugin: ${plugin.name}`);
+                        this.plugins.set(plugin.name, plugin);
+                    }
+                } catch (err) {
+                    console.error(`[ToolBox] Failed to load plugin ${file}:`, err.message);
+                }
+            }
+        });
+    }
+
+    /**
+     * Executes a tool, checking built-in tools first, then plugins.
+     */
+    async callTool(name, parameters) {
+        // Check if it's a plugin
+        if (this.plugins.has(name)) {
+            return await this.plugins.get(name).execute(parameters);
+        }
+
+        // Check built-in tools
+        if (typeof this[name] === 'function') {
+            return await this[name](parameters);
+        }
+
+        throw new Error(`Tool not found: ${name}`);
+    }
+
+    /**
+     * Returns a description of all available tools for the AI system prompt.
+     */
+    getToolDefinitions() {
+        const builtIn = [
+            "1. readFile(filePath): Returns the content of a file.",
+            "2. writeFile(filePath, content): Writes content to a file.",
+            "3. executeCommand(command, cwd): Runs a shell command and returns output.",
+            "4. searchCode(query): Searches the codebase for relevant snippets.",
+            "5. listFiles(directoryPath): Lists files in a directory."
+        ];
+
+        const pluginDocs = Array.from(this.plugins.values()).map((p, i) => {
+            const params = Object.keys(p.parameters || {}).join(', ');
+            return `${builtIn.length + i + 1}. ${p.name}(${params}): ${p.description || 'Custom plugin tool.'}`;
+        });
+
+        return [...builtIn, ...pluginDocs].join('\n');
+    }
+
     async readFile({ filePath }) {
         const fullPath = path.resolve(filePath);
         if (!fs.existsSync(fullPath)) {
@@ -23,12 +87,6 @@ class ToolBox {
         return { content };
     }
 
-    /**
-     * Writes or overwrites a file.
-     * @param {Object} params
-     * @param {string} params.filePath
-     * @param {string} params.content
-     */
     async writeFile({ filePath, content }) {
         const fullPath = path.resolve(filePath);
         const dir = path.dirname(fullPath);
@@ -39,12 +97,6 @@ class ToolBox {
         return { message: `Successfully wrote to ${filePath}` };
     }
 
-    /**
-     * Runs a shell command.
-     * @param {Object} params
-     * @param {string} params.command
-     * @param {string} [params.cwd]
-     */
     async executeCommand({ command, cwd }) {
         return new Promise((resolve) => {
             console.log(`[ToolBox] Running command: ${command} (cwd: ${cwd || 'default'})`);
@@ -58,23 +110,12 @@ class ToolBox {
         });
     }
 
-    /**
-     * Searches the codebase using the context engine.
-     * @param {Object} params
-     * @param {string} params.query
-     * @param {string} [params.project]
-     */
     async searchCode({ query, project }) {
         const args = ['search', query];
         if (project) args.push('-p', project);
         return await contextEngine.executeJson(args);
     }
 
-    /**
-     * Lists files in a directory.
-     * @param {Object} params
-     * @param {string} [params.directoryPath]
-     */
     async listFiles({ directoryPath }) {
         const fullPath = path.resolve(directoryPath || '.');
         const files = fs.readdirSync(fullPath, { withFileTypes: true });
@@ -82,6 +123,12 @@ class ToolBox {
             name: f.name,
             isDir: f.isDirectory()
         }));
+    }
+
+    async getFileContent(filePath) {
+        const fullPath = path.resolve(filePath);
+        if (!fs.existsSync(fullPath)) return '';
+        return fs.readFileSync(fullPath, 'utf8');
     }
 }
 

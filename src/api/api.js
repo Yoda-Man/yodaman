@@ -41,11 +41,23 @@ export const api = {
         return res.json();
     },
 
-    async ask(question) {
+    async getSessions(projectId) {
+        const res = await fetch(`${API_BASE}/sessions?projectId=${encodeURIComponent(projectId)}`);
+        return res.json();
+    },
+
+    async clearSessions(projectId) {
+        const res = await fetch(`${API_BASE}/sessions?projectId=${encodeURIComponent(projectId)}`, {
+            method: 'DELETE'
+        });
+        return res.json();
+    },
+
+    async ask(question, projectId) {
         const res = await fetch(`${API_BASE}/ask`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question })
+            body: JSON.stringify({ question, projectId })
         });
         return res.json();
     },
@@ -60,12 +72,13 @@ export const api = {
         return res.json();
     },
 
-    async agentTask(task, onStep) {
+    async agentTask(task, projectId, onStep) {
         const response = await fetch(`${API_BASE}/agent/task`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ task })
+            body: JSON.stringify({ task, projectId })
         });
+
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -84,6 +97,16 @@ export const api = {
                 }
             }
         }
+    },
+
+    async approve(taskId, approved) {
+        const res = await fetch(`${API_BASE}/agent/approve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskId, approved })
+        });
+        return res.json();
     }
 };
+
 

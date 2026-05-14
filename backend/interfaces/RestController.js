@@ -99,23 +99,56 @@ router.delete('/projects', (req, res) => {
     res.json({ message: 'Project removed' });
 });
 
+const sessionStore = require('../infrastructure/SessionStore');
+
 // --- AI & Intelligence ---
 
+router.get('/sessions', (req, res) => {
+    const { projectId } = req.query;
+    if (!projectId) return res.status(400).send('projectId is required');
+    res.json(sessionStore.getMessages(projectId));
+});
+
+router.delete('/sessions', (req, res) => {
+    const { projectId } = req.query;
+    if (!projectId) return res.status(400).send('projectId is required');
+    sessionStore.clearSession(projectId);
+    res.json({ message: 'Session cleared' });
+});
+
+
+
 router.post('/ask', async (req, res) => {
-    const { question } = req.body;
+    const { question, projectId } = req.body;
     if (!question) return res.status(400).send('Question is required');
     
+    if (projectId) {
+        sessionStore.saveMessage(projectId, { role: 'user', content: question, timestamp: new Date() });
+    }
+
     try {
         const { output } = await contextEngine.execute(['ask', '--', question]);
-        res.json({ answer: output.trim() });
+        const answer = output.trim();
+        
+        if (projectId) {
+            sessionStore.saveMessage(projectId, { role: 'ai', content: answer, timestamp: new Date() });
+        }
+        
+        res.json({ answer });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 router.post('/agent/task', async (req, res) => {
-    const { task } = req.body;
+    const { task, projectId } = req.body;
     if (!task) return res.status(400).send('Task is required');
+
+    if (projectId) {
+        sessionStore.saveMessage(projectId, { role: 'user', content: task, timestamp: new Date() });
+    }
+
+    const taskId = Math.random().toString(36).substring(7);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -126,9 +159,22 @@ router.post('/agent/task', async (req, res) => {
     };
 
     try {
-        const finalAnswer = await agentEngine.executeTask(task, (step) => {
+        const steps = [];
+        const finalAnswer = await agentEngine.executeTask(task, taskId, (step) => {
+            steps.push(step);
             sendEvent(step);
         });
+        
+        if (projectId) {
+            sessionStore.saveMessage(projectId, { 
+                role: 'ai', 
+                content: finalAnswer, 
+                timestamp: new Date(), 
+                isAgent: true,
+                steps: steps
+            });
+        }
+
         sendEvent({ type: 'final_answer', answer: finalAnswer });
         res.end();
     } catch (err) {
@@ -137,7 +183,18 @@ router.post('/agent/task', async (req, res) => {
     }
 });
 
+
+
+router.post('/agent/approve', (req, res) => {
+    const { taskId, approved } = req.body;
+    if (!taskId) return res.status(400).send('taskId is required');
+    
+    agentEngine.signalApproval(taskId, approved);
+    res.json({ message: 'Signal sent' });
+});
+
 router.get('/search', async (req, res) => {
+
     const { query, project, top = 10 } = req.query;
     if (!query) return res.status(400).send('Query is required');
 
