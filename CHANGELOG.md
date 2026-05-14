@@ -5,14 +5,16 @@ All notable changes to **YodaMan** will be documented in this file.
 ## [0.1.4] - 2026-05-14
 
 ### Added
-- **Autonomous Agent Mode**: Integrated a reasoning loop (ReAct) allowing the AI to use tools (read/write/shell).
-- **Real-time Monitoring**: Added SSE streaming for agent tasks with a live step monitor in the UI.
-- **Detailed Documentation**: Created a comprehensive `docs/` folder with architecture diagrams and API references.
+- **Plugin Marketplace**: Dynamic tool extensibility with a user-friendly upload/delete GUI.
+- **Session Persistence**: High-fidelity storage for chat history and agent reasoning steps.
+- **Diff Approval**: Human-in-the-loop safety mechanism for autonomous file modifications.
+- **Unit Tests**: Full test suite for Plugins and SessionStore infrastructure (15/15 passing).
+- **Hot-Reloading**: Real-time engine updates when plugins are added or removed.
 
 ### Changed
-- **Major Architecture Refactor**: Transitioned to a formal **Clean Architecture** (Infrastructure, Core, Interface layers).
-- **Service Overhaul**: Refactored all backend services for better maintainability and logging.
-- **UI Refresh**: Updated the chat interface with Agent Mode controls and improved typography.
+- **Unified API**: Transitioned to query-parameter based routing for absolute project paths.
+- **Manual v0.1.4**: Updated documentation to include Plugin and Safety guides.
+
 
 ## [0.1.3] - 2026-05-13
 

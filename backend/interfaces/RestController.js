@@ -7,12 +7,26 @@ const contextEngine = require('../infrastructure/ContextEngine');
 const watcherService = require('../infrastructure/FileSystemWatcher');
 const toolBox = require('../infrastructure/ToolBox');
 
+const multer = require('multer');
+
 // Core Layer
 const queueService = require('../core/QueueService');
 const agentEngine = require('../core/AgentReasoningEngine');
 
 const router = express.Router();
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
+const PLUGINS_DIR = path.resolve(__dirname, '../../plugins');
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, PLUGINS_DIR);
+    },
+    filename: (req, file, cb) => {
+        cb(null, file.originalname);
+    }
+});
+const upload = multer({ storage });
+
 
 /**
  * RestController (Interface Layer)
@@ -193,7 +207,44 @@ router.post('/agent/approve', (req, res) => {
     res.json({ message: 'Signal sent' });
 });
 
+// --- Plugin Management ---
+
+router.get('/plugins', (req, res) => {
+    const plugins = Array.from(toolBox.plugins.values()).map(p => ({
+        name: p.name,
+        description: p.description,
+        parameters: p.parameters
+    }));
+    res.json(plugins);
+});
+
+router.post('/plugins', upload.single('plugin'), (req, res) => {
+    if (!req.file) return res.status(400).send('No file uploaded');
+    
+    // Reload plugins in ToolBox
+    toolBox.loadPlugins();
+    res.json({ message: 'Plugin uploaded and loaded', name: req.file.originalname });
+});
+
+router.delete('/plugins/:name', (req, res) => {
+    const { name } = req.params;
+    const plugin = toolBox.plugins.get(name);
+    
+    if (plugin && plugin._filename) {
+        const pluginPath = path.join(PLUGINS_DIR, plugin._filename);
+        if (fs.existsSync(pluginPath)) {
+            fs.unlinkSync(pluginPath);
+        }
+        toolBox.plugins.delete(name);
+        res.json({ message: 'Plugin deleted' });
+    } else {
+        res.status(404).send('Plugin not found');
+    }
+});
+
+
 router.get('/search', async (req, res) => {
+
 
     const { query, project, top = 10 } = req.query;
     if (!query) return res.status(400).send('Query is required');

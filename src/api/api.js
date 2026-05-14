@@ -41,7 +41,30 @@ export const api = {
         return res.json();
     },
 
+    async getPlugins() {
+        const res = await fetch(`${API_BASE}/plugins`);
+        return res.json();
+    },
+
+    async uploadPlugin(file) {
+        const formData = new FormData();
+        formData.append('plugin', file);
+        const res = await fetch(`${API_BASE}/plugins`, {
+            method: 'POST',
+            body: formData
+        });
+        return res.json();
+    },
+
+    async deletePlugin(name) {
+        const res = await fetch(`${API_BASE}/plugins/${encodeURIComponent(name)}`, {
+            method: 'DELETE'
+        });
+        return res.json();
+    },
+
     async getSessions(projectId) {
+
         const res = await fetch(`${API_BASE}/sessions?projectId=${encodeURIComponent(projectId)}`);
         return res.json();
     },

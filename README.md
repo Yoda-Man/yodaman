@@ -33,6 +33,16 @@ npm start
 ```
 Visit `http://localhost:5190` to start exploring.
 
+## 🚀 Features (v0.1.4)
+
+- **Ecosystem-Wide Search**: Unified semantic search across all your indexed repositories.
+- **Autonomous Agent (Yoda-Agent)**: A multi-step reasoning engine that can perform coding tasks.
+- **Plugin Marketplace (NEW)**: Extend the agent with custom JavaScript skills via a user-friendly GUI.
+- **High-Fidelity Persistence (NEW)**: Full chat history and reasoning step preservation across restarts.
+- **Trust & Safety (NEW)**: Human-in-the-loop Diff Approval for all agent-initiated file modifications.
+- **Professional GUI**: Modern, glassmorphic interface with real-time feedback and detailed logging.
+- **Context Expert (ctx) Integration**: Deep integration with the Context Expert CLI for semantic mapping.
+
 ## 📚 Documentation
 
 Detailed documentation is available in the `docs/` folder:

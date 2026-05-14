@@ -14,7 +14,8 @@ export default function ManualWindow() {
                     </h1>
                     <div className="flex items-center justify-center gap-3">
                         <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.1.4</span>
-                        <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-400">Production Ready</span>
+
+                        <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-400">Stable Architecture</span>
                     </div>
                 </header>
 
@@ -44,55 +45,58 @@ export default function ManualWindow() {
                             <code>sh setup.sh</code>
                             <button className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white">Copy</button>
                         </div>
-                        <p className="text-sm italic text-slate-500 border-l-2 border-slate-800 pl-6">
-                            This script audits your system, installs missing dependencies (Node.js, Python, Ollama), and launches the GUI automatically.
-                        </p>
                     </section>
 
-                    {/* 3. Core Concepts */}
-                    <section className="p-10 rounded-[40px] bg-white/[0.02] border border-white/5 grid grid-cols-1 md:grid-cols-2 gap-12">
-                        <div className="space-y-4">
-                            <h3 className="text-xl font-bold text-indigo-400 flex items-center gap-3">
-                                <Zap size={20} />
-                                Ecosystem Intelligence
-                            </h3>
-                            <p className="text-sm leading-relaxed text-slate-500">
-                                YodaMan doesn't just look at one folder. It understands your entire digital workspace across disparate projects and documentation sets.
-                            </p>
-                        </div>
-                        <div className="space-y-4">
-                            <h3 className="text-xl font-bold text-emerald-400 flex items-center gap-3">
-                                <Shield size={20} />
-                                Semantic Search
-                            </h3>
-                            <p className="text-sm leading-relaxed text-slate-500">
-                                Understands the <em>meaning</em> of your code. Finds logic patterns and developer intent instead of just raw text matches.
-                            </p>
-                        </div>
-                    </section>
-
-                    {/* 4. Agent Mode (NEW) */}
+                    {/* 3. Agent Mode & Safety */}
                     <section className="p-10 rounded-[40px] bg-indigo-500/5 border border-indigo-500/10 relative overflow-hidden group">
                          <div className="absolute -bottom-10 -right-10 opacity-5 group-hover:opacity-10 transition-opacity">
                             <Bot size={200} className="text-indigo-400" />
                         </div>
                         <h2 className="text-3xl font-black text-white mb-6 flex items-center gap-4">
                             <span className="h-8 w-1 bg-indigo-500 rounded-full"></span>
-                            4. Autonomous Agent Mode
+                            3. Autonomous Agent & Safety
                         </h2>
-                        <p className="text-lg leading-relaxed text-slate-400 mb-8">
-                            Yoda-Agent transforms the platform from a passive search engine into an active coding partner.
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-                            <div className="p-6 rounded-3xl bg-slate-900/50 border border-white/5">
-                                <h4 className="font-bold text-indigo-400 mb-2">Activation</h4>
-                                <p className="text-xs text-slate-500">Toggle "Agent Mode" in any chat. The interface will switch to a multi-step reasoning view where you can monitor tool usage.</p>
-                            </div>
-                            <div className="p-6 rounded-3xl bg-slate-900/50 border border-white/5">
-                                <h4 className="font-bold text-emerald-400 mb-2">Capabilities</h4>
-                                <p className="text-xs text-slate-500">The agent can read/write files, execute shell commands, and search indices to solve complex, multi-file refactoring tasks.</p>
+                        <div className="space-y-8 relative z-10">
+                            <p className="text-lg leading-relaxed text-slate-400">
+                                Yoda-Agent transforms the platform from a passive search engine into an active coding partner.
+                            </p>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="p-6 rounded-3xl bg-slate-900/50 border border-white/5">
+                                    <h4 className="font-bold text-rose-400 mb-2 flex items-center gap-2">
+                                        <Shield size={16} /> Trust & Diff Approval
+                                    </h4>
+                                    <p className="text-xs text-slate-500">To protect your production code, YodaMan implements a <strong>Human-in-the-loop</strong> safety system. Before any file write, the agent pauses and presents a Diff View. You must manually Approve or Reject the change.</p>
+                                </div>
+                                <div className="p-6 rounded-3xl bg-slate-900/50 border border-white/5">
+                                    <h4 className="font-bold text-amber-400 mb-2 flex items-center gap-2">
+                                        <Command size={16} /> Persistent Logic
+                                    </h4>
+                                    <p className="text-xs text-slate-500">Every reasoning step, tool call, and decision is persisted locally. Refreshing your browser will <strong>not</strong> lose your complex agent tasks.</p>
+                                </div>
                             </div>
                         </div>
+                    </section>
+
+                    {/* 4. Plugin Architecture */}
+                    <section className="space-y-8 px-4">
+                        <h2 className="text-3xl font-black text-white flex items-center gap-4">
+                            <span className="h-8 w-1 bg-purple-500 rounded-full"></span>
+                            4. Plugin Architecture (Custom Skills)
+                        </h2>
+                        <p className="text-slate-400">Extend Yoda-Agent's intelligence by dropping JavaScript plugins into the <code>/plugins</code> directory.</p>
+                        <div className="bg-black/40 rounded-2xl p-6 border border-white/5 font-mono text-slate-400 text-xs leading-relaxed">
+<pre>{`module.exports = {
+  name: 'myCustomTool',
+  description: 'Explain what this tool does to the AI',
+  parameters: { param1: 'string' },
+  async execute(params) {
+    // Your logic here
+    return { result: "Success" };
+  }
+};`}</pre>
+                        </div>
+                        <p className="text-sm text-slate-500">YodaMan automatically discovers these scripts and teaches the AI how to use them instantly.</p>
                     </section>
 
                     {/* 5. Troubleshooting */}
@@ -111,18 +115,10 @@ export default function ManualWindow() {
                                     <p className="text-xs text-slate-500">Ensure @contextexpert/cli is installed globally and in your PATH.</p>
                                 </div>
                             </div>
-                            <div className="flex gap-4">
-                                <div className="h-6 w-6 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
-                                    <AlertTriangle size={12} className="text-rose-500" />
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-white text-sm mb-1">Slow Indexing</h4>
-                                    <p className="text-xs text-slate-500">Large repos take time. Monitor the "Queue" in the Dashboard to track progress.</p>
-                                </div>
-                            </div>
                         </div>
                     </section>
                 </div>
+
 
                 <footer className="mt-32 pt-12 border-t border-white/5 text-center">
                     <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-600">

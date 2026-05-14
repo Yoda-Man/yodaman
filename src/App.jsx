@@ -7,7 +7,8 @@ import StatusBar from './components/StatusBar'
 import SettingsModal from './components/SettingsModal'
 import WelcomeModal from './components/WelcomeModal'
 import ManualWindow from './components/ManualWindow'
-import { MessageSquare, Search, LayoutDashboard, Book } from 'lucide-react'
+import PluginsWindow from './components/PluginsWindow'
+import { MessageSquare, Search, LayoutDashboard, Book, Puzzle } from 'lucide-react'
 
 import { api } from './api/api'
 
@@ -15,11 +16,12 @@ export default function App() {
   const [projects, setProjects] = useState([])
   const [selectedProject, setSelectedProject] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('chat') // 'chat', 'search', 'dashboard', 'manual'
+  const [activeTab, setActiveTab] = useState('chat') // 'chat', 'search', 'dashboard', 'manual', 'plugins'
 
   useEffect(() => {
     fetchProjects()
   }, [])
+
 
   const fetchProjects = async () => {
     try {
@@ -100,6 +102,13 @@ export default function App() {
               <Book size={14} />
               Manual
             </button>
+            <button 
+              onClick={() => setActiveTab('plugins')}
+              className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'plugins' ? 'bg-white/[0.03] text-indigo-400 border-indigo-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
+            >
+              <Puzzle size={14} />
+              Plugins
+            </button>
           </div>
 
           <div className="flex-1 overflow-hidden bg-white/[0.01] border-t border-white/5">
@@ -107,7 +116,9 @@ export default function App() {
             {activeTab === 'search' && <SearchWindow selectedProject={selectedProject} />}
             {activeTab === 'dashboard' && <Dashboard />}
             {activeTab === 'manual' && <ManualWindow />}
+            {activeTab === 'plugins' && <PluginsWindow />}
           </div>
+
         </div>
       </main>
 

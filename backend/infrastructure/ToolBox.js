@@ -26,19 +26,25 @@ class ToolBox {
         files.forEach(file => {
             if (file.endsWith('.js')) {
                 try {
-                    // Using delete require.cache to allow hot-reloading if we wanted, 
-                    // but for now simple require is fine.
                     const pluginPath = path.join(pluginsDir, file);
+                    // Clear cache to allow reloading of updated plugins
+                    delete require.cache[require.resolve(pluginPath)];
+                    
                     const plugin = require(pluginPath);
                     if (plugin.name && typeof plugin.execute === 'function') {
                         console.log(`[ToolBox] Loaded plugin: ${plugin.name}`);
-                        this.plugins.set(plugin.name, plugin);
+                        this.plugins.set(plugin.name, {
+                            ...plugin,
+                            _filename: file // Store filename for deletion logic
+                        });
                     }
+
                 } catch (err) {
                     console.error(`[ToolBox] Failed to load plugin ${file}:`, err.message);
                 }
             }
         });
+
     }
 
     /**
