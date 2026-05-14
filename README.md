@@ -13,7 +13,7 @@
 -   **AI Chat Interface**: Ask complex questions about your codebase with a refined, AI-focused message UI.
 -   **Auto-Sync**: Automatically discovers and lists projects already indexed in your environment.
 -   **Professional UI**: Premium design featuring glassmorphism, modern typography (Inter/Outfit), and sleek animations.
--   **Real-time Status**: Monitor CLI versions and active AI models directly from the high-tech status bar.
+-   **Real-time Status**: Monitor Context Expert CLI versions and active AI models directly from the high-tech status bar.
 -   **Queue Management**: Smart indexing queue to prevent resource overload.
 -   **Socratic Insight**: A UI that helps you realize that while you wrote the code, you're still searching for its deeper meaning.
 
