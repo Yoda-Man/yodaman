@@ -172,7 +172,11 @@ export default function ChatWindow({ selectedProject }) {
             <div className="flex-1 overflow-y-auto px-8 py-8 space-y-8 custom-scrollbar z-0">
                 {messages.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-full opacity-20 select-none animate-in fade-in duration-1000">
-                        <Bot size={80} className="mb-6 text-indigo-400" />
+                        <img 
+                            src="/logo.png" 
+                            className="h-20 w-20 mb-8 rounded-[32px] shadow-[0_0_50px_rgba(79,70,229,0.3)] animate-pulse" 
+                            alt="YodaMan Logo" 
+                        />
                         <p className="text-lg font-outfit font-medium text-slate-300">How can I help you with <span className="text-indigo-400">{selectedProject.name}</span> today?</p>
                     </div>
                 )}
