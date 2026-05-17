@@ -2,6 +2,16 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.1.6] - 2026-05-17
+
+### Added
+- Expanded automated coverage for patch application, audit ordering, approval rejection, malformed tool calls, and max-iteration handling.
+- Release ignore rules for VS Code extension packages, mobile build output, and desktop client artifacts.
+
+### Changed
+- Bumped the core runtime, VS Code extension, and mobile app package versions to `0.1.6`.
+- Refreshed website and documentation copy around the multi-client release flow and npm publish checks.
+
 ## [0.1.5] - 2026-05-14
 
 ### Added

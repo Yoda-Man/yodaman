@@ -1,3 +1,42 @@
-node_modules
-dist
+# Dependencies
+node_modules/
+apps/*/node_modules/
+extensions/*/node_modules/
+
+# Web/runtime build output
+dist/
+release/
+coverage/
+audit-log.json
+
+# Desktop clients
+electron/dist/
+electron/out/
+electron/release/
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.rpm
+
+# VS Code plugins
+extensions/vscode-yodaman/*.vsix
+extensions/vscode-yodaman/.vscode-test/
+extensions/vscode-yodaman/out/
+extensions/vscode-yodaman/dist/
+
+# Mobile apps
+apps/mobile/.expo/
+apps/mobile/.expo-shared/
+apps/mobile/dist/
+apps/mobile/build/
+apps/mobile/android/
+apps/mobile/ios/
+apps/mobile/*.apk
+apps/mobile/*.aab
+apps/mobile/*.ipa
+apps/mobile/.eas/
+
+# OS/editor
 .DS_Store
+.vscode/

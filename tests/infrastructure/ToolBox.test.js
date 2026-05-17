@@ -35,4 +35,55 @@ describe('ToolBox', () => {
         const missingFile = path.join(tempDir, 'missing.txt');
         await expect(toolBox.readFile({ filePath: missingFile })).rejects.toThrow('File not found');
     });
+
+    test('applyPatch should replace one exact match', async () => {
+        const patchFile = path.join(tempDir, 'patch.txt');
+        fs.writeFileSync(patchFile, 'alpha\nbeta\ngamma\n', 'utf8');
+
+        const result = await toolBox.applyPatch({
+            filePath: patchFile,
+            oldText: 'beta',
+            newText: 'delta'
+        });
+
+        expect(result.message).toContain('Successfully patched');
+        expect(fs.readFileSync(patchFile, 'utf8')).toBe('alpha\ndelta\ngamma\n');
+    });
+
+    test('applyPatch should reject ambiguous matches', async () => {
+        const patchFile = path.join(tempDir, 'ambiguous.txt');
+        fs.writeFileSync(patchFile, 'same\nsame\n', 'utf8');
+
+        await expect(toolBox.applyPatch({
+            filePath: patchFile,
+            oldText: 'same',
+            newText: 'changed'
+        })).rejects.toThrow('matched more than once');
+    });
+
+    test('sanitizeParameters should redact patch payloads in audit metadata', () => {
+        expect(toolBox.sanitizeParameters({
+            filePath: 'example.js',
+            oldContent: 'old text',
+            newContent: 'new text here',
+            content: 'full file'
+        })).toEqual({
+            filePath: 'example.js',
+            oldContent: '[8 chars]',
+            newContent: '[13 chars]',
+            content: '[9 chars]'
+        });
+    });
+
+    test('resolveAllowedPath should reject paths outside allowed roots', () => {
+        const outsidePath = path.join('/private', 'var', 'not-yodaman-test.txt');
+        expect(() => toolBox.resolveAllowedPath(outsidePath)).toThrow('Path is outside allowed workspaces');
+    });
+
+    test('executeCommand should block dangerous command patterns', async () => {
+        await expect(toolBox.executeCommand({
+            command: 'sudo rm -rf /',
+            cwd: tempDir
+        })).rejects.toThrow('Command blocked by policy');
+    });
 });

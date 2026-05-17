@@ -6,6 +6,8 @@ const fs = require('fs');
 const contextEngine = require('../infrastructure/ContextEngine');
 const watcherService = require('../infrastructure/FileSystemWatcher');
 const toolBox = require('../infrastructure/ToolBox');
+const auditLog = require('../infrastructure/AuditLog');
+const pairingService = require('../infrastructure/PairingService');
 
 const multer = require('multer');
 
@@ -35,6 +37,24 @@ const upload = multer({ storage });
  */
 
 let config = { watchedDirectories: [] };
+
+function isLocalRequest(req) {
+    const ip = req.ip || req.socket?.remoteAddress || '';
+    return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
+router.use((req, res, next) => {
+    if (req.path.startsWith('/pairing')) return next();
+    if (process.env.YODAMAN_REQUIRE_PAIRING_TOKEN !== 'true') return next();
+    if (isLocalRequest(req)) return next();
+
+    const token = req.get('X-YodaMan-Token');
+    if (!pairingService.validate(token)) {
+        return res.status(401).json({ error: 'Valid YodaMan pairing token is required' });
+    }
+
+    return next();
+});
 
 function loadLocalConfig() {
     if (fs.existsSync(CONFIG_PATH)) {
@@ -169,15 +189,22 @@ router.post('/agent/task', async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
 
     const sendEvent = (data) => {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        res.write(`data: ${JSON.stringify({ taskId, ...data })}\n\n`);
     };
 
     try {
+        sendEvent({ type: 'task_started', projectId });
+
         const steps = [];
         const finalAnswer = await agentEngine.executeTask(task, taskId, (step) => {
             steps.push(step);
             sendEvent(step);
-        });
+        }, { projectId });
+
+        if (finalAnswer === null) {
+            res.end();
+            return;
+        }
         
         if (projectId) {
             sessionStore.saveMessage(projectId, { 
@@ -205,6 +232,26 @@ router.post('/agent/approve', (req, res) => {
     
     agentEngine.signalApproval(taskId, approved);
     res.json({ message: 'Signal sent' });
+});
+
+router.post('/agent/cancel', (req, res) => {
+    const { taskId } = req.body;
+    if (!taskId) return res.status(400).send('taskId is required');
+
+    agentEngine.cancelTask(taskId);
+    res.json({ message: 'Cancellation requested', taskId });
+});
+
+router.get('/agent/tasks', (req, res) => {
+    res.json(agentEngine.getTasks());
+});
+
+router.get('/agent/tasks/:taskId/events', (req, res) => {
+    res.json(agentEngine.getTaskEvents(req.params.taskId));
+});
+
+router.get('/agent/pending-approvals', (req, res) => {
+    res.json(agentEngine.getPendingApprovals());
 });
 
 // --- Plugin Management ---
@@ -266,6 +313,32 @@ router.get('/status', async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+router.get('/policy', (req, res) => {
+    res.json(toolBox.getPolicy());
+});
+
+router.get('/audit', (req, res) => {
+    const { limit = 100 } = req.query;
+    res.json(auditLog.list(limit));
+});
+
+router.post('/pairing', (req, res) => {
+    const host = req.get('host');
+    const protocol = req.protocol || 'http';
+    const baseUrl = req.body?.runtimeUrl || (host ? `${protocol}://${host}` : undefined);
+    res.status(201).json(pairingService.createPairing(baseUrl));
+});
+
+router.get('/pairing', (req, res) => {
+    res.json(pairingService.list());
+});
+
+router.post('/pairing/revoke', (req, res) => {
+    const { token } = req.body;
+    if (!token) return res.status(400).send('token is required');
+    res.json({ revoked: pairingService.revoke(token) });
 });
 
 router.get('/check', async (req, res) => {

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YodaMan Docs</title>
+    <link rel="icon" href="./assets/favicon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./index.html" aria-label="YodaMan home">
+        <img src="./assets/logo.png" alt="" />
+        <span>YodaMan</span>
+      </a>
+      <nav aria-label="Documentation">
+        <a href="./index.html">Website</a>
+        <a href="#ecosystem">Ecosystem</a>
+        <a href="#security">Security</a>
+        <a href="#publishing">Publishing</a>
+        <a href="./index.html#downloads">Downloads</a>
+      </nav>
+    </header>
+
+    <main class="docs-page">
+      <section class="section">
+        <p class="eyebrow">Project docs</p>
+        <h1>YodaMan Docs</h1>
+        <p class="hero-copy">Quick, browser-friendly summaries with links back to the source Markdown files in the repository.</p>
+      </section>
+
+      <section id="ecosystem" class="doc-section">
+        <h2>Ecosystem Architecture</h2>
+        <p>YodaMan is organized around one shared local runtime used by the web UI, desktop app, VS Code extension, mobile companion, and CLI.</p>
+        <ul>
+          <li>Runtime owns agent execution, tools, indexing, sessions, plugins, audit, and safety policy.</li>
+          <li>Clients own UX: editor actions, desktop control, mobile approvals, and notifications.</li>
+          <li>REST and SSE provide the current protocol; WebSocket subscriptions are a future upgrade.</li>
+        </ul>
+      </section>
+
+      <section id="security" class="doc-section">
+        <h2>Security And Audit</h2>
+        <p>The runtime includes baseline hardening for local agent tools.</p>
+        <ul>
+          <li>Workspace-scoped file and command paths.</li>
+          <li>Blocked high-risk shell command patterns.</li>
+          <li>Audit log entries for tool calls.</li>
+          <li>Optional pairing-token enforcement for non-local clients.</li>
+        </ul>
+      </section>
+
+      <section id="mobile-linking" class="doc-section">
+        <h2>Mobile Linking</h2>
+        <p>The phone must connect to the Mac's LAN address, not <code>127.0.0.1</code>.</p>
+        <pre><code>curl -X POST http://127.0.0.1:3090/api/pairing \
+  -H "Content-Type: application/json" \
+  -d '{"runtimeUrl":"http://YOUR-MAC-LAN-IP:3090"}'</code></pre>
+        <p>Paste the returned <code>yodaman://pair</code> deep link into the mobile app and tap Use Pairing Link.</p>
+      </section>
+
+      <section id="publishing" class="doc-section">
+        <h2>Publishing</h2>
+        <p>The VS Code extension packages with <code>vsce</code>. The mobile app uses Expo EAS for Google Play App Bundle builds and submission.</p>
+        <pre><code>cd extensions/vscode-yodaman
+npm run package
+
+cd apps/mobile
+npm run build:android</code></pre>
+        <p>Actual publishing requires Marketplace, Expo, and Google Play credentials.</p>
+      </section>
+
+      <section id="api" class="doc-section">
+        <h2>API Reference</h2>
+        <p>Important runtime endpoints include:</p>
+        <ul>
+          <li><code>POST /api/agent/task</code></li>
+          <li><code>GET /api/agent/tasks</code></li>
+          <li><code>GET /api/agent/tasks/:taskId/events</code></li>
+          <li><code>GET /api/agent/pending-approvals</code></li>
+          <li><code>GET /api/policy</code></li>
+          <li><code>GET /api/audit</code></li>
+          <li><code>POST /api/pairing</code></li>
+        </ul>
+      </section>
+
+      <section id="desktop" class="doc-section">
+        <h2>Desktop App</h2>
+        <p>The Electron app packages the existing React UI and starts the Node runtime as a managed sidecar when needed.</p>
+        <pre><code>npm run desktop
+npm run desktop:pack</code></pre>
+      </section>
+    </main>
+  </body>
+</html>

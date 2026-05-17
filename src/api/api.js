@@ -105,13 +105,15 @@ export const api = {
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        let buffer = '';
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
 
             for (const line of lines) {
                 if (line.startsWith('data: ')) {
@@ -119,6 +121,11 @@ export const api = {
                     onStep(data);
                 }
             }
+        }
+
+        if (buffer.startsWith('data: ')) {
+            const data = JSON.parse(buffer.slice(6));
+            onStep(data);
         }
     },
 
@@ -129,7 +136,15 @@ export const api = {
             body: JSON.stringify({ taskId, approved })
         });
         return res.json();
+    },
+
+    async cancelAgentTask(taskId) {
+        const res = await fetch(`${API_BASE}/agent/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskId })
+        });
+        return res.json();
     }
 };
-
 

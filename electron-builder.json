@@ -1,0 +1,42 @@
+{
+  "appId": "africa.criticalpath.yodaman",
+  "productName": "YodaMan",
+  "asar": false,
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "electron/**/*",
+    "backend/**/*",
+    "dist/**/*",
+    "plugins/**/*",
+    "public/**/*",
+    "server.js",
+    "config.json",
+    "package.json",
+    "node_modules/**/*"
+  ],
+  "extraMetadata": {
+    "main": "electron/main.js"
+  },
+  "mac": {
+    "icon": "electron/assets/yodaman.png",
+    "target": [
+      "dir"
+    ],
+    "category": "public.app-category.developer-tools"
+  },
+  "win": {
+    "icon": "electron/assets/yodaman.png",
+    "target": [
+      "dir"
+    ]
+  },
+  "linux": {
+    "icon": "electron/assets/yodaman.png",
+    "target": [
+      "dir"
+    ],
+    "category": "Development"
+  }
+}

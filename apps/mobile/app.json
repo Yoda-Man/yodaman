@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "YodaMan",
+    "slug": "yodaman-mobile",
+    "version": "0.1.6",
+    "orientation": "portrait",
+    "scheme": "yodaman",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.yodaman.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#101828"
+      }
+    }
+  }
+}

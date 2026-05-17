@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YodaMan | Local-first agent ecosystem for developers</title>
+    <meta
+      name="description"
+      content="YodaMan is a local-first developer agent ecosystem with a desktop app, VS Code extension, mobile approval companion, semantic code search, and auditable tool execution."
+    />
+    <link rel="icon" href="./assets/favicon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="YodaMan home">
+        <img src="./assets/logo.png" alt="" />
+        <span>YodaMan</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="#ecosystem">Ecosystem</a>
+        <a href="#security">Security</a>
+        <a href="#install">Install</a>
+        <a href="#downloads">Downloads</a>
+        <a href="#docs">Docs</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-media" aria-hidden="true">
+          <div class="terminal-window">
+            <div class="window-bar">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <pre><code>$ yodaman
+Core running at localhost:3090
+Indexing 14 workspaces...
+Agent task started: refactor auth flow
+tool:start searchCode
+tool:start applyPatch
+awaiting approval: auth/session.js
+audit: write request captured</code></pre>
+          </div>
+        </div>
+        <div class="hero-content">
+          <img class="hero-logo" src="./assets/logo.png" alt="YodaMan logo" />
+          <p class="eyebrow">Local-first developer intelligence</p>
+          <h1 id="hero-title">YodaMan</h1>
+          <p class="hero-copy">
+            A private agent ecosystem for understanding, searching, changing, and reviewing your code across desktop, VS Code, and mobile.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#install">Get started</a>
+            <a class="button secondary" href="#ecosystem">Explore clients</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="proof-strip" aria-label="Core capabilities">
+        <div>
+          <strong>Version 0.1.6</strong>
+          <span>Aligned runtime, VS Code extension, mobile app, docs, and publishing checks</span>
+        </div>
+        <div>
+          <strong>Automated guardrails</strong>
+          <span>Tests cover patching, audit logs, approvals, malformed tools, and loop limits</span>
+        </div>
+        <div>
+          <strong>Release hygiene</strong>
+          <span>Desktop, mobile, and VS Code generated artifacts stay out of source control</span>
+        </div>
+      </section>
+
+      <section id="ecosystem" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">One runtime, many surfaces</p>
+          <h2>Built around a shared agent core</h2>
+        </div>
+        <div class="ecosystem-grid">
+          <article>
+            <div class="icon">⌘</div>
+            <h3>VS Code extension</h3>
+            <p>Run agent tasks, search the workspace, review write proposals in native diffs, and stream tool events inside the editor.</p>
+          </article>
+          <article>
+            <div class="icon">▣</div>
+            <h3>Desktop control center</h3>
+            <p>Manage projects, plugins, sessions, indexing, model settings, approvals, and runtime health from a packaged desktop app.</p>
+          </article>
+          <article>
+            <div class="icon">▤</div>
+            <h3>Mobile companion</h3>
+            <p>Pair with the machine running YodaMan, check status, search code, ask questions, and approve pending file changes.</p>
+          </article>
+          <article>
+            <div class="icon">◇</div>
+            <h3>Runtime API</h3>
+            <p>REST and SSE endpoints expose task events, pending approvals, policy, audit logs, semantic search, and plugin tools.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="split-section">
+        <div>
+          <p class="eyebrow">Agent workflows</p>
+          <h2>Give the agent useful power, then keep the keys in your hand</h2>
+          <p>
+            YodaMan can search, read, patch, write, list files, and execute commands inside allowed workspaces. Risky actions are visible through streamed events, approval prompts, and an audit log.
+          </p>
+        </div>
+        <div class="workflow">
+          <div><span>1</span> Ask about a workspace or assign a coding task</div>
+          <div><span>2</span> Agent searches context and calls approved tools</div>
+          <div><span>3</span> Proposed file changes wait for human review</div>
+          <div><span>4</span> Desktop, VS Code, or mobile can approve/reject</div>
+        </div>
+      </section>
+
+      <section id="security" class="section security-section">
+        <div class="section-heading">
+          <p class="eyebrow">Local-first safety</p>
+          <h2>Designed for private codebases</h2>
+        </div>
+        <div class="security-list">
+          <div>
+            <h3>Workspace boundaries</h3>
+            <p>File and command tools resolve paths against configured roots before they run.</p>
+          </div>
+          <div>
+            <h3>Command policy</h3>
+            <p>High-risk shell patterns are blocked by policy, with structured approval work planned next.</p>
+          </div>
+          <div>
+            <h3>Pairing tokens</h3>
+            <p>Mobile clients can pair through a temporary token and deep link to the machine running YodaMan.</p>
+          </div>
+          <div>
+            <h3>Audit logs</h3>
+            <p>Tool calls are recorded with status, duration, sanitized parameters, and result summaries.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" class="install-section">
+        <div>
+          <p class="eyebrow">Install</p>
+          <h2>Run it locally</h2>
+        </div>
+        <div class="install-panels">
+          <article>
+            <h3>Core runtime</h3>
+            <pre><code>npm install
+npm start</code></pre>
+          </article>
+          <article>
+            <h3>Desktop app</h3>
+            <pre><code>npm run desktop
+npm run desktop:pack</code></pre>
+          </article>
+          <article>
+            <h3>VS Code extension</h3>
+            <pre><code>cd extensions/vscode-yodaman
+npm run package</code></pre>
+          </article>
+          <article>
+            <h3>Mobile app</h3>
+            <pre><code>cd apps/mobile
+npm run start</code></pre>
+          </article>
+        </div>
+      </section>
+
+      <section id="downloads" class="downloads-section">
+        <div class="section-heading">
+          <p class="eyebrow">Downloads</p>
+          <h2>Install YodaMan clients</h2>
+          <p>Release-store links will go live after signing, notarization, and store review. Local build artifacts are available for testing today.</p>
+        </div>
+        <div class="download-grid">
+          <article>
+            <h3>macOS Desktop</h3>
+            <p>Unpacked local app build for Apple Silicon Macs.</p>
+            <a class="button primary" href="../release/mac-arm64/YodaMan.app">Open local app</a>
+            <span>Store release pending Apple signing and notarization.</span>
+          </article>
+          <article>
+            <h3>Windows Desktop</h3>
+            <p>Windows installer target is planned through Electron Builder.</p>
+            <a class="button secondary" href="../docs/publishing-todo.md">View checklist</a>
+            <span>Requires Windows signing certificate and CI build.</span>
+          </article>
+          <article>
+            <h3>Linux Desktop</h3>
+            <p>Linux AppImage, deb, rpm, Snap, and Flatpak targets are planned.</p>
+            <a class="button secondary" href="../docs/publishing-todo.md">View checklist</a>
+            <span>Requires Linux packaging pass.</span>
+          </article>
+          <article>
+            <h3>VS Code Extension</h3>
+            <p>Install the packaged VSIX locally while Marketplace publishing is pending.</p>
+            <a class="button primary" href="../extensions/vscode-yodaman/vscode-yodaman-0.1.6.vsix">Download VSIX</a>
+            <span>Marketplace release pending publisher token.</span>
+          </article>
+          <article>
+            <h3>Android Mobile</h3>
+            <p>Expo/EAS App Bundle workflow is configured for Google Play.</p>
+            <a class="button secondary" href="../apps/mobile/PLAY_STORE.md">Google Play steps</a>
+            <span>Play Store release pending EAS and Google credentials.</span>
+          </article>
+          <article>
+            <h3>iOS Mobile</h3>
+            <p>iOS App Store release is planned through EAS Build and Submit.</p>
+            <a class="button secondary" href="../docs/publishing-todo.md">App Store steps</a>
+            <span>Requires Apple Developer account setup.</span>
+          </article>
+        </div>
+      </section>
+
+      <section id="docs" class="docs-section">
+        <div class="section-heading">
+          <p class="eyebrow">Project docs</p>
+          <h2>Everything behind the ecosystem</h2>
+        </div>
+        <div class="doc-links">
+          <a href="./docs.html#ecosystem">Ecosystem architecture</a>
+          <a href="./docs.html#security">Security and audit</a>
+          <a href="./docs.html#mobile-linking">Mobile linking</a>
+          <a href="./docs.html#publishing">Publishing</a>
+          <a href="./docs.html#api">API reference</a>
+          <a href="./docs.html#desktop">Desktop app</a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>YodaMan</span>
+      <span>Local-first agent ecosystem for serious codebases.</span>
+    </footer>
+  </body>
+</html>

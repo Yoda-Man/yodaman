@@ -1,0 +1,143 @@
+{
+  "name": "vscode-yodaman",
+  "displayName": "YodaMan",
+  "description": "Editor-native access to the YodaMan local agent runtime.",
+  "version": "0.1.6",
+  "publisher": "yodaman",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Yoda-Man/yodaman.git",
+    "directory": "extensions/vscode-yodaman"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:yodaman.checkStatus",
+    "onCommand:yodaman.startRuntime",
+    "onCommand:yodaman.askWorkspace",
+    "onCommand:yodaman.runAgentTask",
+    "onCommand:yodaman.cancelAgentTask",
+    "onCommand:yodaman.searchWorkspace",
+    "onCommand:yodaman.reindexWorkspace",
+    "onView:yodaman.sidebar"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "YodaMan",
+      "properties": {
+        "yodaman.runtimeUrl": {
+          "type": "string",
+          "default": "http://localhost:3090",
+          "description": "Base URL for the local YodaMan runtime."
+        },
+        "yodaman.runtimeCommand": {
+          "type": "string",
+          "default": "yodaman",
+          "description": "Shell command used by the extension to start the local YodaMan runtime."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "yodaman.checkStatus",
+        "title": "YodaMan: Check Runtime Status"
+      },
+      {
+        "command": "yodaman.startRuntime",
+        "title": "YodaMan: Start Local Runtime"
+      },
+      {
+        "command": "yodaman.askWorkspace",
+        "title": "YodaMan: Ask About Workspace"
+      },
+      {
+        "command": "yodaman.runAgentTask",
+        "title": "YodaMan: Run Agent Task"
+      },
+      {
+        "command": "yodaman.cancelAgentTask",
+        "title": "YodaMan: Cancel Active Agent Task"
+      },
+      {
+        "command": "yodaman.searchWorkspace",
+        "title": "YodaMan: Search Workspace"
+      },
+      {
+        "command": "yodaman.reindexWorkspace",
+        "title": "YodaMan: Reindex Workspace"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "yodaman",
+          "title": "YodaMan",
+          "icon": "media/yodaman.svg"
+        }
+      ]
+    },
+    "views": {
+      "yodaman": [
+        {
+          "id": "yodaman.sidebar",
+          "name": "Agent"
+        }
+      ]
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "yodaman.checkStatus"
+        },
+        {
+          "command": "yodaman.startRuntime"
+        },
+        {
+          "command": "yodaman.askWorkspace"
+        },
+        {
+          "command": "yodaman.runAgentTask"
+        },
+        {
+          "command": "yodaman.cancelAgentTask"
+        },
+        {
+          "command": "yodaman.searchWorkspace"
+        },
+        {
+          "command": "yodaman.reindexWorkspace"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "yodaman.checkStatus",
+          "when": "view == yodaman.sidebar",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "yodaman.checkStatus",
+          "when": "view == yodaman.sidebar && viewItem == yodamanAction",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "lint": "node --check src/extension.js",
+    "vscode:prepublish": "npm run lint",
+    "package": "vsce package --no-dependencies",
+    "publish": "vsce publish --no-dependencies"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.9.1"
+  }
+}
