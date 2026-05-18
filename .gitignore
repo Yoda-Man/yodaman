@@ -40,3 +40,6 @@ apps/mobile/.eas/
 # OS/editor
 .DS_Store
 .vscode/
+
+# Website
+website/

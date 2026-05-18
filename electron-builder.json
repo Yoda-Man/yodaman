@@ -20,8 +20,10 @@
     "main": "electron/main.js"
   },
   "mac": {
-    "icon": "electron/assets/yodaman.png",
+    "icon": "electron/assets/yodaman.icns",
     "target": [
+      "dmg",
+      "zip",
       "dir"
     ],
     "category": "public.app-category.developer-tools"
@@ -29,12 +31,17 @@
   "win": {
     "icon": "electron/assets/yodaman.png",
     "target": [
+      "nsis",
+      "zip",
       "dir"
     ]
   },
   "linux": {
     "icon": "electron/assets/yodaman.png",
     "target": [
+      "AppImage",
+      "deb",
+      "zip",
       "dir"
     ],
     "category": "Development"
