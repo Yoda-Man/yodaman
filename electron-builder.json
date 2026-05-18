@@ -38,9 +38,9 @@
   },
   "linux": {
     "icon": "electron/assets/yodaman.png",
+    "maintainer": "YodaMan <trustaldo@gmail.com>",
     "target": [
       "AppImage",
-      "deb",
       "zip",
       "dir"
     ],

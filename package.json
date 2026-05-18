@@ -26,7 +26,7 @@
     "desktop": "npm run build && electron electron/main.js",
     "desktop:pack": "npm run build && electron-builder --config electron-builder.json --dir",
     "desktop:dist": "npm run build && electron-builder --config electron-builder.json && npm run website:downloads",
-    "desktop:dist:all": "npm run build && electron-builder --config electron-builder.json --mac --win --linux && npm run website:downloads",
+    "desktop:dist:all": "npm run build && electron-builder --config electron-builder.json --mac --arm64 && electron-builder --config electron-builder.json --win --linux --x64 && npm run website:downloads",
     "website:downloads": "node scripts/sync-website-downloads.js",
     "preview": "vite preview",
     "test": "jest"
