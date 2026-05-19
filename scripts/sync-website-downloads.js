@@ -5,25 +5,26 @@ const rootDir = path.resolve(__dirname, '..');
 const downloadsDir = path.join(rootDir, 'website', 'downloads');
 
 const artifacts = [
-    'YodaMan-0.1.7-arm64.dmg',
-    'YodaMan-0.1.7-arm64-mac.zip',
-    'YodaMan Setup 0.1.7.exe',
-    'YodaMan-0.1.7-win.zip',
-    'YodaMan-0.1.7.AppImage',
-    'yodaman-0.1.7.zip'
+    { name: 'YodaMan-0.1.7-arm64.dmg', dir: 'release' },
+    { name: 'YodaMan-0.1.7-arm64-mac.zip', dir: 'release' },
+    { name: 'YodaMan Setup 0.1.7.exe', dir: 'release' },
+    { name: 'YodaMan-0.1.7-win.zip', dir: 'release' },
+    { name: 'YodaMan-0.1.7.AppImage', dir: 'release' },
+    { name: 'yodaman-0.1.7.zip', dir: 'release' },
+    { name: 'vscode-yodaman-0.1.7.vsix', dir: path.join('extensions', 'vscode-yodaman') }
 ];
 
 fs.mkdirSync(downloadsDir, { recursive: true });
 
 for (const existing of fs.readdirSync(downloadsDir)) {
-    if (/^(YodaMan|yodaman).*0\.1\.7/.test(existing)) {
+    if (/^(YodaMan|yodaman|vscode-yodaman).*0\.1\.7/.test(existing)) {
         fs.rmSync(path.join(downloadsDir, existing), { force: true });
     }
 }
 
 for (const artifact of artifacts) {
-    const source = path.join(rootDir, 'release', artifact);
-    const destination = path.join(downloadsDir, artifact);
+    const source = path.join(rootDir, artifact.dir, artifact.name);
+    const destination = path.join(downloadsDir, artifact.name);
 
     if (!fs.existsSync(source)) {
         throw new Error(`Missing release artifact: ${source}`);
@@ -31,5 +32,5 @@ for (const artifact of artifacts) {
 
     fs.copyFileSync(source, destination);
     const sizeMb = (fs.statSync(destination).size / 1024 / 1024).toFixed(1);
-    console.log(`Copied ${artifact} to website/downloads (${sizeMb} MB)`);
+    console.log(`Copied ${artifact.name} to website/downloads (${sizeMb} MB)`);
 }
