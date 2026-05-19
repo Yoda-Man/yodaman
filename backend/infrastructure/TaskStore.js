@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { db, useSqlite } = require('./Database');
 
 const TASK_HISTORY_FILE = path.join(__dirname, '../../task-history.json');
 const TASK_HISTORY_JSONL_FILE = path.join(__dirname, '../../task-history.jsonl');
@@ -13,6 +14,34 @@ class TaskStore {
     }
 
     load() {
+        if (useSqlite && db) {
+            try {
+                const stmt = db.prepare('SELECT * FROM tasks');
+                const rows = stmt.all();
+                this.tasks = new Map();
+                for (const row of rows) {
+                    const task = {
+                        taskId: row.taskId,
+                        task: row.task,
+                        projectId: row.projectId,
+                        status: row.status,
+                        createdAt: row.createdAt,
+                        updatedAt: row.updatedAt,
+                        pendingApproval: row.pendingApproval ? JSON.parse(row.pendingApproval) : null,
+                        finalAnswer: row.finalAnswer,
+                        error: row.error,
+                        events: row.events ? JSON.parse(row.events) : []
+                    };
+                    this.tasks.set(row.taskId, this.trimTask(task));
+                }
+                this.prune();
+                return;
+            } catch (err) {
+                console.error('[TaskStore] Failed to load history from SQLite:', err.message);
+                this.tasks = new Map();
+            }
+        }
+
         if (fs.existsSync(TASK_HISTORY_JSONL_FILE)) {
             try {
                 const tasks = fs.readFileSync(TASK_HISTORY_JSONL_FILE, 'utf8')
@@ -49,6 +78,35 @@ class TaskStore {
         fs.appendFileSync(TASK_HISTORY_JSONL_FILE, `${JSON.stringify(task)}\n`);
     }
 
+    saveTask(task) {
+        if (useSqlite && db) {
+            try {
+                const stmt = db.prepare(`
+                    INSERT OR REPLACE INTO tasks (
+                        taskId, task, projectId, status, createdAt, updatedAt, pendingApproval, finalAnswer, error, events
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `);
+                stmt.run(
+                    task.taskId,
+                    task.task || null,
+                    task.projectId || null,
+                    task.status || null,
+                    task.createdAt || null,
+                    task.updatedAt || null,
+                    task.pendingApproval ? JSON.stringify(task.pendingApproval) : null,
+                    task.finalAnswer || null,
+                    task.error || null,
+                    task.events ? JSON.stringify(task.events) : null
+                );
+                return;
+            } catch (err) {
+                console.error('[TaskStore] SQLite save failed:', err.message);
+            }
+        }
+        this.append(task);
+        this.save();
+    }
+
     list() {
         return Array.from(this.tasks.values()).sort((a, b) => {
             const left = a.updatedAt || a.createdAt || '';
@@ -72,15 +130,22 @@ class TaskStore {
 
         this.tasks.set(taskId, task);
         this.prune();
-        this.append(task);
-        this.save();
+        this.saveTask(task);
         return task;
     }
 
     clear() {
         this.tasks.clear();
-        fs.writeFileSync(TASK_HISTORY_JSONL_FILE, '');
-        this.save();
+        if (useSqlite && db) {
+            try {
+                db.exec('DELETE FROM tasks');
+            } catch (err) {
+                console.error('[TaskStore] Failed to clear SQLite tasks:', err.message);
+            }
+        } else {
+            fs.writeFileSync(TASK_HISTORY_JSONL_FILE, '');
+            this.save();
+        }
     }
 
     prune() {

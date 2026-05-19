@@ -270,6 +270,32 @@ function refreshSidebar() {
     }
 }
 
+async function viewTaskDetails(task) {
+    if (!task) return;
+    output.show(true);
+    output.appendLine(`\n=== Task Details: ${task.taskId} ===`);
+    output.appendLine(`Task Prompt: ${task.task || 'N/A'}`);
+    output.appendLine(`Status: ${task.status}`);
+    if (task.createdAt) output.appendLine(`Created At: ${task.createdAt}`);
+    if (task.updatedAt) output.appendLine(`Updated At: ${task.updatedAt}`);
+    if (task.finalAnswer) output.appendLine(`Final Answer: ${task.finalAnswer}`);
+    if (task.error) output.appendLine(`Error: ${task.error}`);
+
+    try {
+        const events = await getClient().taskEvents(task.taskId);
+        if (events && events.length > 0) {
+            output.appendLine('\nTask Events:');
+            events.forEach((ev) => {
+                const ts = ev.timestamp ? `[${ev.timestamp}] ` : '';
+                output.appendLine(`  ${ts}${ev.type}: ${ev.message || ev.tool || ''}`);
+            });
+        }
+    } catch (err) {
+        output.appendLine(`\nFailed to fetch events: ${err.message}`);
+    }
+    output.appendLine('====================================');
+}
+
 class YodaManSidebarProvider {
     constructor() {
         this._onDidChangeTreeData = new vscode.EventEmitter();
@@ -284,55 +310,108 @@ class YodaManSidebarProvider {
         return item;
     }
 
-    getChildren(item) {
-        if (item) return [];
-
-        const workspace = getWorkspaceProjectId();
-        const items = [
-            new SidebarItem(
-                runtimeAvailable ? 'Runtime online' : 'Runtime offline',
-                runtimeAvailable ? 'Connected' : getRuntimeUrl(),
-                runtimeAvailable ? 'check' : 'warning',
-                'yodamanStatus'
-            ),
-            new SidebarItem(
-                workspace ? 'Workspace' : 'No workspace',
-                workspace || 'Open a folder to use project actions',
-                'root-folder',
-                'yodamanInfo'
-            ),
-            new SidebarItem(
-                activeTaskId ? 'Active task' : 'No active task',
-                activeTaskId || 'Idle',
-                activeTaskId ? 'sync~spin' : 'circle-outline',
-                'yodamanInfo'
-            )
-        ];
-
-        items.push(
-            SidebarItem.action('Ask Workspace', 'comment-discussion', 'yodaman.askWorkspace'),
-            SidebarItem.action('Run Agent Task', 'sparkle', 'yodaman.runAgentTask'),
-            SidebarItem.action('Search Workspace', 'search', 'yodaman.searchWorkspace'),
-            SidebarItem.action('Reindex Workspace', 'refresh', 'yodaman.reindexWorkspace'),
-            SidebarItem.action('Start Runtime', 'terminal', 'yodaman.startRuntime'),
-            SidebarItem.action('Cancel Active Task', 'circle-slash', 'yodaman.cancelAgentTask')
-        );
-
-        if (lastStatus) {
-            items.push(new SidebarItem('Status payload available', 'See YodaMan output for details', 'info', 'yodamanInfo'));
+    async getChildren(item) {
+        if (!item) {
+            return [
+                new SidebarItem('Status & Info', '', 'info', 'category', vscode.TreeItemCollapsibleState.Expanded, 'status'),
+                new SidebarItem('Actions', '', 'tools', 'category', vscode.TreeItemCollapsibleState.Expanded, 'actions'),
+                new SidebarItem('Recent Tasks', '', 'history', 'category', vscode.TreeItemCollapsibleState.Expanded, 'tasks')
+            ];
         }
 
-        return items;
+        if (item.category === 'status') {
+            const workspace = getWorkspaceProjectId();
+            const items = [
+                new SidebarItem(
+                    runtimeAvailable ? 'Runtime online' : 'Runtime offline',
+                    runtimeAvailable ? 'Connected' : getRuntimeUrl(),
+                    runtimeAvailable ? 'check' : 'warning',
+                    'yodamanStatus'
+                ),
+                new SidebarItem(
+                    workspace ? 'Workspace' : 'No workspace',
+                    workspace || 'Open a folder to use project actions',
+                    'root-folder',
+                    'yodamanInfo'
+                ),
+                new SidebarItem(
+                    activeTaskId ? 'Active task' : 'No active task',
+                    activeTaskId || 'Idle',
+                    activeTaskId ? 'sync~spin' : 'circle-outline',
+                    'yodamanInfo'
+                )
+            ];
+            if (lastStatus) {
+                items.push(new SidebarItem('Status payload available', 'See YodaMan output for details', 'info', 'yodamanInfo'));
+            }
+            return items;
+        }
+
+        if (item.category === 'actions') {
+            return [
+                SidebarItem.action('Ask Workspace', 'comment-discussion', 'yodaman.askWorkspace'),
+                SidebarItem.action('Run Agent Task', 'sparkle', 'yodaman.runAgentTask'),
+                SidebarItem.action('Search Workspace', 'search', 'yodaman.searchWorkspace'),
+                SidebarItem.action('Reindex Workspace', 'refresh', 'yodaman.reindexWorkspace'),
+                SidebarItem.action('Start Runtime', 'terminal', 'yodaman.startRuntime'),
+                SidebarItem.action('Cancel Active Task', 'circle-slash', 'yodaman.cancelAgentTask')
+            ];
+        }
+
+        if (item.category === 'tasks') {
+            if (!runtimeAvailable) {
+                return [new SidebarItem('Runtime offline', 'Cannot fetch task history', 'warning', 'yodamanInfo')];
+            }
+            try {
+                const tasksList = await getClient().tasks();
+                if (!tasksList || tasksList.length === 0) {
+                    return [new SidebarItem('No recent tasks', 'No history found', 'circle-outline', 'yodamanInfo')];
+                }
+                return tasksList.slice(0, 5).map((t) => {
+                    const statusIconMap = {
+                        'running': 'sync~spin',
+                        'cancelling': 'sync~spin',
+                        'cancelled': 'circle-slash',
+                        'completed': 'check',
+                        'error': 'error',
+                        'rejected': 'error',
+                        'awaiting_approval': 'question'
+                    };
+                    const icon = statusIconMap[t.status] || 'circle-outline';
+                    const trimmedText = t.task ? (t.task.length > 30 ? t.task.slice(0, 27) + '...' : t.task) : t.taskId;
+                    
+                    const taskItem = new SidebarItem(
+                        trimmedText,
+                        `[${t.status}]`,
+                        icon,
+                        'yodamanTaskItem'
+                    );
+                    taskItem.command = {
+                        command: 'yodaman.viewTaskDetails',
+                        title: 'View Task Details',
+                        arguments: [t]
+                    };
+                    return taskItem;
+                });
+            } catch (err) {
+                return [new SidebarItem('Error loading tasks', err.message, 'error', 'yodamanInfo')];
+            }
+        }
+
+        return [];
     }
 }
 
 class SidebarItem extends vscode.TreeItem {
-    constructor(label, description, icon, contextValue) {
-        super(label, vscode.TreeItemCollapsibleState.None);
+    constructor(label, description, icon, contextValue, collapsibleState = vscode.TreeItemCollapsibleState.None, category = null) {
+        super(label, collapsibleState);
         this.description = description;
         this.tooltip = description;
-        this.iconPath = new vscode.ThemeIcon(icon);
+        if (icon) {
+            this.iconPath = new vscode.ThemeIcon(icon);
+        }
         this.contextValue = contextValue;
+        this.category = category;
     }
 
     static action(label, icon, command) {
@@ -363,7 +442,8 @@ function activate(context) {
         vscode.commands.registerCommand('yodaman.runAgentTask', runAgentTask),
         vscode.commands.registerCommand('yodaman.cancelAgentTask', cancelAgentTask),
         vscode.commands.registerCommand('yodaman.searchWorkspace', searchWorkspace),
-        vscode.commands.registerCommand('yodaman.reindexWorkspace', reindexWorkspace)
+        vscode.commands.registerCommand('yodaman.reindexWorkspace', reindexWorkspace),
+        vscode.commands.registerCommand('yodaman.viewTaskDetails', viewTaskDetails)
     );
 
     contextStorageUri.value = context.globalStorageUri;

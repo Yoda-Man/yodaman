@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { db, useSqlite } = require('./Database');
 
 const AUDIT_FILE = path.join(__dirname, '../../audit-log.json');
 const AUDIT_JSONL_FILE = path.join(__dirname, '../../audit-log.jsonl');
@@ -12,6 +13,18 @@ class AuditLog {
     }
 
     load() {
+        if (useSqlite && db) {
+            try {
+                const stmt = db.prepare('SELECT * FROM audit_logs ORDER BY timestamp ASC');
+                const rows = stmt.all();
+                this.entries = rows.map((row) => JSON.parse(row.entry));
+                return;
+            } catch (err) {
+                console.error('[AuditLog] Failed to load audit log from SQLite:', err.message);
+                this.entries = [];
+            }
+        }
+
         if (fs.existsSync(AUDIT_JSONL_FILE)) {
             try {
                 this.entries = fs.readFileSync(AUDIT_JSONL_FILE, 'utf8')
@@ -55,6 +68,17 @@ class AuditLog {
         if (this.entries.length > MAX_ENTRIES) {
             this.entries = this.entries.slice(-MAX_ENTRIES);
         }
+
+        if (useSqlite && db) {
+            try {
+                const stmt = db.prepare('INSERT INTO audit_logs (id, timestamp, entry) VALUES (?, ?, ?)');
+                stmt.run(item.id, item.timestamp, JSON.stringify(item));
+                return item;
+            } catch (err) {
+                console.error('[AuditLog] SQLite record failed:', err.message);
+            }
+        }
+
         this.append(item);
         this.save();
         return item;
@@ -66,8 +90,16 @@ class AuditLog {
 
     clear() {
         this.entries = [];
-        fs.writeFileSync(AUDIT_JSONL_FILE, '');
-        this.save();
+        if (useSqlite && db) {
+            try {
+                db.exec('DELETE FROM audit_logs');
+            } catch (err) {
+                console.error('[AuditLog] Failed to clear SQLite audit logs:', err.message);
+            }
+        } else {
+            fs.writeFileSync(AUDIT_JSONL_FILE, '');
+            this.save();
+        }
     }
 }
 

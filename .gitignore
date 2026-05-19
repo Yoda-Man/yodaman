@@ -52,3 +52,10 @@ website/
 # Roadmaps/docs
 docs/ecosystem-roadmap.md
 
+# Database files
+yodaman.db
+yodaman.db-journal
+yodaman.db-wal
+yodaman.db-shm
+
+
