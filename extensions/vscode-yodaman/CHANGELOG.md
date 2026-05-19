@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7
+
+- Add TreeView-based sidebar hierarchy (Status & Info, Actions, Recent Tasks).
+- Add task detail inspection view (view task details command).
+- Add support for clearing task history and clearing audit logs directly from sidebar commands.
+
 ## 0.1.6
 
 - Align extension package version with the YodaMan `0.1.6` ecosystem release.

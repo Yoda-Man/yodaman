@@ -264,6 +264,42 @@ async function cancelAgentTask() {
     }
 }
 
+async function clearTasks() {
+    try {
+        const choice = await vscode.window.showWarningMessage(
+            'Are you sure you want to clear the entire task history?',
+            { modal: true },
+            'Clear'
+        );
+        if (choice !== 'Clear') return;
+
+        await getClient().clearTasks();
+        output.appendLine('[clear] Task history cleared');
+        vscode.window.showInformationMessage('YodaMan task history cleared.');
+        refreshSidebar();
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to clear task history: ${error.message}`);
+    }
+}
+
+async function clearAudit() {
+    try {
+        const choice = await vscode.window.showWarningMessage(
+            'Are you sure you want to clear all system audit logs?',
+            { modal: true },
+            'Clear'
+        );
+        if (choice !== 'Clear') return;
+
+        await getClient().clearAudit();
+        output.appendLine('[clear] Audit logs cleared');
+        vscode.window.showInformationMessage('YodaMan audit logs cleared.');
+        refreshSidebar();
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to clear audit logs: ${error.message}`);
+    }
+}
+
 function refreshSidebar() {
     if (sidebarProvider) {
         sidebarProvider.refresh();
@@ -354,7 +390,9 @@ class YodaManSidebarProvider {
                 SidebarItem.action('Search Workspace', 'search', 'yodaman.searchWorkspace'),
                 SidebarItem.action('Reindex Workspace', 'refresh', 'yodaman.reindexWorkspace'),
                 SidebarItem.action('Start Runtime', 'terminal', 'yodaman.startRuntime'),
-                SidebarItem.action('Cancel Active Task', 'circle-slash', 'yodaman.cancelAgentTask')
+                SidebarItem.action('Cancel Active Task', 'circle-slash', 'yodaman.cancelAgentTask'),
+                SidebarItem.action('Clear Task History', 'trash', 'yodaman.clearTasks'),
+                SidebarItem.action('Clear Audit Logs', 'shield', 'yodaman.clearAudit')
             ];
         }
 
@@ -443,7 +481,9 @@ function activate(context) {
         vscode.commands.registerCommand('yodaman.cancelAgentTask', cancelAgentTask),
         vscode.commands.registerCommand('yodaman.searchWorkspace', searchWorkspace),
         vscode.commands.registerCommand('yodaman.reindexWorkspace', reindexWorkspace),
-        vscode.commands.registerCommand('yodaman.viewTaskDetails', viewTaskDetails)
+        vscode.commands.registerCommand('yodaman.viewTaskDetails', viewTaskDetails),
+        vscode.commands.registerCommand('yodaman.clearTasks', clearTasks),
+        vscode.commands.registerCommand('yodaman.clearAudit', clearAudit)
     );
 
     contextStorageUri.value = context.globalStorageUri;

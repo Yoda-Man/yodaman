@@ -392,4 +392,14 @@ router.post('/reindex', (req, res) => {
     res.json({ message: 'Indexing queued' });
 });
 
+router.delete('/agent/tasks', (req, res) => {
+    agentEngine.clearTasks();
+    res.json({ message: 'Task history cleared' });
+});
+
+router.delete('/audit', (req, res) => {
+    auditLog.clear();
+    res.json({ message: 'Audit logs cleared' });
+});
+
 module.exports = router;

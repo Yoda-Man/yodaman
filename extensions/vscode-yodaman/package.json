@@ -2,7 +2,7 @@
   "name": "vscode-yodaman",
   "displayName": "YodaMan",
   "description": "Editor-native access to the YodaMan local agent runtime.",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publisher": "yodaman",
   "license": "MIT",
   "repository": {
@@ -25,6 +25,8 @@
     "onCommand:yodaman.cancelAgentTask",
     "onCommand:yodaman.searchWorkspace",
     "onCommand:yodaman.reindexWorkspace",
+    "onCommand:yodaman.clearTasks",
+    "onCommand:yodaman.clearAudit",
     "onView:yodaman.sidebar"
   ],
   "main": "./src/extension.js",
@@ -40,7 +42,7 @@
         "yodaman.runtimeCommand": {
           "type": "string",
           "default": "yodaman",
-          "description": "Shell command used by the extension to start the local YodaMan runtime."
+          "description": "Command used by the extension to start the local YodaMan runtime."
         }
       }
     },
@@ -72,6 +74,14 @@
       {
         "command": "yodaman.reindexWorkspace",
         "title": "YodaMan: Reindex Workspace"
+      },
+      {
+        "command": "yodaman.clearTasks",
+        "title": "YodaMan: Clear Task History"
+      },
+      {
+        "command": "yodaman.clearAudit",
+        "title": "YodaMan: Clear Audit Logs"
       }
     ],
     "viewsContainers": {
@@ -113,6 +123,12 @@
         },
         {
           "command": "yodaman.reindexWorkspace"
+        },
+        {
+          "command": "yodaman.clearTasks"
+        },
+        {
+          "command": "yodaman.clearAudit"
         }
       ],
       "view/title": [

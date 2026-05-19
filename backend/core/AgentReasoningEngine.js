@@ -285,6 +285,13 @@ ${toolBox.getToolDefinitions()}
         this.cancelledTasks.delete(taskId);
         return finalAnswer;
     }
+
+    clearTasks() {
+        this.tasks.clear();
+        this.cancelledTasks.clear();
+        this.pendingApprovals.clear();
+        taskStore.clear();
+    }
 }
 
 module.exports = new AgentReasoningEngine();

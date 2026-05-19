@@ -12,7 +12,7 @@ npm run package
 This creates:
 
 ```text
-vscode-yodaman-0.1.6.vsix
+vscode-yodaman-0.1.7.vsix
 ```
 
 ## Publish

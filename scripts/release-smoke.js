@@ -15,6 +15,7 @@ const requiredFiles = [
     'shared/yodamanProtocol.d.ts',
     'backend/interfaces/RestController.js',
     'backend/infrastructure/TaskStore.js',
+    'backend/infrastructure/Database.js',
     'extensions/vscode-yodaman/package.json',
     'extensions/vscode-yodaman/README.md',
     'apps/mobile/README.md',
@@ -30,6 +31,7 @@ const checkFiles = [
     'backend/interfaces/RestController.js',
     'backend/infrastructure/AuditLog.js',
     'backend/infrastructure/TaskStore.js',
+    'backend/infrastructure/Database.js',
     'backend/infrastructure/ToolBox.js',
     'extensions/vscode-yodaman/src/extension.js',
     'electron/main.js',
@@ -64,6 +66,12 @@ function main() {
             throw new Error(`package.json files is missing ${entry}`);
         }
     });
+
+    // Verify Database.js and SQLite initialization if supported
+    const dbHelper = require(path.join(root, 'backend/infrastructure/Database.js'));
+    if (typeof dbHelper.useSqlite !== 'boolean') {
+        throw new Error('Database.js did not export useSqlite boolean');
+    }
 
     console.log('Release smoke checks passed.');
 }

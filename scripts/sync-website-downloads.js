@@ -5,18 +5,18 @@ const rootDir = path.resolve(__dirname, '..');
 const downloadsDir = path.join(rootDir, 'website', 'downloads');
 
 const artifacts = [
-    'YodaMan-0.1.6-arm64.dmg',
-    'YodaMan-0.1.6-arm64-mac.zip',
-    'YodaMan Setup 0.1.6.exe',
-    'YodaMan-0.1.6-win.zip',
-    'YodaMan-0.1.6.AppImage',
-    'yodaman-0.1.6.zip'
+    'YodaMan-0.1.7-arm64.dmg',
+    'YodaMan-0.1.7-arm64-mac.zip',
+    'YodaMan Setup 0.1.7.exe',
+    'YodaMan-0.1.7-win.zip',
+    'YodaMan-0.1.7.AppImage',
+    'yodaman-0.1.7.zip'
 ];
 
 fs.mkdirSync(downloadsDir, { recursive: true });
 
 for (const existing of fs.readdirSync(downloadsDir)) {
-    if (/^(YodaMan|yodaman).*0\.1\.6/.test(existing)) {
+    if (/^(YodaMan|yodaman).*0\.1\.7/.test(existing)) {
         fs.rmSync(path.join(downloadsDir, existing), { force: true });
     }
 }

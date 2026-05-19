@@ -24,8 +24,8 @@
     <main>
         <header>
             <h1>YodaMan Manual</h1>
-            <p class="lead">Local-first workspace intelligence with supervised agent automation across web, desktop, VS Code, and mobile clients.</p>
-            <p class="muted">Version 0.1.6</p>
+             <p class="lead">Local-first workspace intelligence with supervised agent automation across web, desktop, VS Code, and mobile clients.</p>
+            <p class="muted">Version 0.1.7</p>
         </header>
 
         <h2>1. Setup</h2>
@@ -43,12 +43,12 @@ npm start</code></pre>
                 <p>Project context starts from local watched directories and is reused by chat, search, agent tasks, and external clients.</p>
             </div>
             <div class="card">
-                <h3>Human-controlled automation</h3>
-                <p>Agent tasks stream progress and require approval before file writes are applied.</p>
+                <h3>SQLite Persistence</h3>
+                <p>Task history and audit logs persist locally in SQLite database (<code>yodaman.db</code>), falling back to JSON files if Node SQLite is unsupported.</p>
             </div>
             <div class="card">
-                <h3>One runtime</h3>
-                <p>The web UI, desktop app, VS Code extension, and mobile companion use the same runtime APIs.</p>
+                <h3>System Tray Controls</h3>
+                <p>Electron desktop app runs a system tray daemon allowing you to show/hide the app, copy pairing links, restart background daemon, or quit.</p>
             </div>
             <div class="card">
                 <h3>Restricted plugins</h3>
@@ -66,8 +66,9 @@ npm start</code></pre>
         </ul>
 
         <h2>4. Agent Tasks</h2>
-        <p>Recent task state and events persist in <code>task-history.json</code> and append to <code>task-history.jsonl</code>, so task timelines survive runtime restarts. Clients can inspect task starts, tool events, approval requests, cancellations, final answers, and errors.</p>
+        <p>Recent task state and events persist in SQLite database (or <code>task-history.json</code>), so task timelines survive runtime restarts. Clients can inspect task starts, tool events, approval requests, cancellations, final answers, and errors.</p>
         <p>When a write needs approval, clients show the proposal, send your approval or rejection, and the agent continues with that decision.</p>
+        <p>You can purge histories and audit trails directly from the UI or sidebar actions: <strong>Clear Task History</strong> (sends <code>DELETE /api/agent/tasks</code>) and <strong>Clear Audit Logs</strong> (sends <code>DELETE /api/audit</code>).</p>
 
         <h2>5. Desktop App</h2>
         <p>Run <code>npm run desktop</code> to launch the Electron shell. The desktop app starts the backend as a managed sidecar when no runtime is already available.</p>
@@ -76,10 +77,10 @@ npm start</code></pre>
             <li><code>Copy Mobile Pairing Link</code> creates and copies a <code>yodaman://pair</code> link.</li>
             <li><code>Add Project Folder</code> opens a native folder picker and registers the selected workspace.</li>
         </ul>
-        <p>The desktop app shows native notifications when a task needs approval or completes.</p>
+        <p>The desktop app shows native notifications when a task needs approval or completes, and manages app persistence via System Tray context options.</p>
 
         <h2>6. VS Code Extension</h2>
-        <p>The extension checks runtime status, starts the configured runtime command, asks/searches/reindexes the current workspace, streams agent events, opens proposed writes as diffs, and sends approve, reject, or cancel decisions.</p>
+        <p>The extension checks runtime status, starts the configured runtime command, asks/searches/reindexes the current workspace, streams agent events, opens proposed writes as diffs, sends approve, reject, or cancel decisions, and features a hierarchical tree sidebar with commands to view task details or clear histories/audits.</p>
 
         <h2>7. Mobile Companion</h2>
         <p>The mobile app parses pairing links, checks status, lists projects, routes ask/search to a selected project, inspects task timelines and event details, cancels active tasks, and handles pending approvals.</p>

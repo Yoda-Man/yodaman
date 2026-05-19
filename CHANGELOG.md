@@ -2,6 +2,16 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.1.7] - 2026-05-19
+
+### Added
+- **SQLite Database Persistence**: Added Zero-Dependency local SQLite persistence (`yodaman.db`) for task history and system audit logs with automatic JSON fallback if unsupported.
+- **Electron System Tray Controls**: Integrated custom System Tray menu with controls to show/hide the app, restart background daemon, copy pairing links, and quit.
+- **Hierarchical Sidebar Tree View**: Redesigned VS Code extension sidebar with collapsible sections for Status & Info, Actions, and Recent Tasks.
+- **API and UI Clearing Capabilities**: Added `DELETE /api/agent/tasks` and `DELETE /api/audit` API routes, client methods, and extension actions to purge history.
+- **Task Detail Inspection**: Added `yodaman.viewTaskDetails` command in VS Code extension to print step-by-step logs and tool activities.
+- **Integration Tests**: Added `tests/interfaces/RestController.test.js` to verify DELETE endpoint functionality, and expanded release smoke checks for Database.js integration.
+
 ## [Unreleased]
 
 ### Added

@@ -36,6 +36,14 @@ Add watched workspaces in `config.json`:
 
 YodaMan indexes local project folders and routes chat, search, and agent workflows through the local runtime.
 
+### SQLite Database Persistence
+
+As of version 0.1.7, YodaMan persists task history and system audit logs inside a local SQLite database (`yodaman.db`) if SQLite support is available in Node.js. If SQLite is not supported, it automatically falls back to standard JSON/JSONL files.
+
+### System Tray Controls
+
+The Electron desktop app runs a system tray daemon allowing you to toggle window visibility, restart the background process, copy pairing links, or quit from the OS menu bar.
+
 ### Human-controlled automation
 
 Agent tasks stream every important event: task start, tool activity, approval requests, cancellation, final answers, and errors. File writes require human approval.
@@ -70,6 +78,12 @@ Approval flow:
 5. The agent continues with that decision.
 
 You can cancel an active task from clients that expose task cancellation.
+
+### Purging History & Audit Logs
+
+If your task list or audit logs become too cluttered, you can purge them using the sidebar/action panel menu options:
+- **Clear Task History**: Sends a `DELETE /api/agent/tasks` request to wipe all recorded agent tasks and execution timelines.
+- **Clear Audit Logs**: Sends a `DELETE /api/audit` request to delete all recorded tool executions and logs.
 
 ## 5. Desktop App
 

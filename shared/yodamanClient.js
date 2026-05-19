@@ -128,6 +128,16 @@ function createYodaManClient(runtimeUrl, options = {}) {
         audit(limit = 25) {
             return request(`${API_PATHS.audit}?limit=${encodeURIComponent(limit)}`);
         },
+        clearTasks() {
+            return request(API_PATHS.tasks, {
+                method: 'DELETE'
+            });
+        },
+        clearAudit() {
+            return request(API_PATHS.audit, {
+                method: 'DELETE'
+            });
+        },
         createPairing(runtimeUrlOverride) {
             return request(API_PATHS.pairing, {
                 method: 'POST',
