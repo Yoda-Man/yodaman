@@ -149,13 +149,13 @@ The runtime should stop the reasoning loop at the next safe cancellation point.
 
 ## Task State APIs
 
-External clients can inspect recent in-memory agent state with:
+External clients can inspect recent persisted agent state with:
 
 ```http
 GET /api/agent/tasks
 ```
 
-Specific task event histories are available with:
+Specific persisted task event histories are available with:
 
 ```http
 GET /api/agent/tasks/:taskId/events
@@ -166,3 +166,5 @@ Mobile and secondary clients can inspect pending approvals with:
 ```http
 GET /api/agent/pending-approvals
 ```
+
+Task state is stored locally in `task-history.json` with bounded retention and appended to `task-history.jsonl`, so recent timelines can be replayed after a runtime restart. Shared protocol constants live in `shared/yodamanProtocol.js`, with TypeScript declarations in `shared/yodamanProtocol.d.ts`.

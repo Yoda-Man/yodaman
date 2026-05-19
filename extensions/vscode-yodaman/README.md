@@ -16,6 +16,7 @@ This is the first editor-native client for the YodaMan runtime.
 - Opens write proposals as VS Code diffs against the real target file when it exists.
 - Sends approval or rejection to `/api/agent/approve`.
 - Cancels the active task through `/api/agent/cancel`.
+- Uses the shared YodaMan API/SSE client and protocol declarations from the repository `shared/` package.
 
 ## Development
 
@@ -31,6 +32,8 @@ This is the first editor-native client for the YodaMan runtime.
 The default runtime URL is `http://localhost:3090`. Change `yodaman.runtimeUrl` in VS Code settings if needed.
 
 Use `YodaMan: Start Local Runtime` if the runtime is not already running. The default command is `yodaman`; change `yodaman.runtimeCommand` if you prefer a repo-local command such as `npm start`.
+
+Task state and event history now come from the persisted runtime task history, so recent timelines can survive runtime restarts.
 
 ## Commands
 

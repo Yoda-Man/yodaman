@@ -54,4 +54,27 @@ The initial builder configuration targets unpacked app directories for macOS, Wi
 - If a YodaMan runtime is already available on port `3090`, the desktop app reuses it.
 - If no runtime is available, Electron starts `server.js` as a sidecar process.
 - The sidecar process is stopped when the Electron app quits.
+- The desktop menu includes `Restart Managed Runtime` for sidecars started by Electron.
+- The desktop menu includes `Copy Mobile Pairing Link` to create and copy a `yodaman://pair` link.
+- The desktop menu includes `Add Project Folder`, which opens a native folder picker and registers the selected directory through the runtime.
+- The desktop app polls task state and shows native notifications when a task needs approval or transitions to completed.
 
+Native notifications are local desktop notifications. They do not require mobile push credentials.
+
+## Diagnostics and Pairing
+
+The dashboard calls:
+
+```http
+GET /api/desktop/diagnostics
+```
+
+to show the runtime PID, uptime, host details, task count, pending approvals, and plugin policy metadata.
+
+The dashboard can also create a mobile pairing link with:
+
+```http
+POST /api/pairing
+```
+
+Use the pairing link in the mobile companion to connect a phone on the same local network.

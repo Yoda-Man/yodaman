@@ -6,6 +6,14 @@ const contextEngine = require('./ContextEngine');
 const auditLog = require('./AuditLog');
 
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
+const PLUGIN_PERMISSION_ALLOWLIST = new Set([
+    'read',
+    'write',
+    'command',
+    'network',
+    'search',
+    'unrestricted'
+]);
 
 /**
  * ToolBox (Infrastructure Layer)
@@ -36,10 +44,12 @@ class ToolBox {
                     delete require.cache[require.resolve(pluginPath)];
                     
                     const plugin = require(pluginPath);
-                    if (plugin.name && typeof plugin.execute === 'function') {
+                    if (this.validatePlugin(plugin)) {
+                        const permissions = this.normalizePluginPermissions(plugin.permissions);
                         console.log(`[ToolBox] Loaded plugin: ${plugin.name}`);
                         this.plugins.set(plugin.name, {
                             ...plugin,
+                            permissions,
                             _filename: file // Store filename for deletion logic
                         });
                     }
@@ -227,7 +237,8 @@ class ToolBox {
             },
             plugins: Array.from(this.plugins.values()).map((plugin) => ({
                 name: plugin.name,
-                permissions: plugin.permissions || ['unrestricted']
+                permissions: plugin.permissions,
+                restricted: !plugin.permissions.includes('unrestricted')
             }))
         };
     }
@@ -270,15 +281,60 @@ class ToolBox {
 
     assertPluginPermissions(name) {
         const plugin = this.plugins.get(name);
-        const permissions = plugin.permissions || ['unrestricted'];
-        if (permissions.includes('unrestricted')) {
-            auditLog.record({
-                type: 'plugin_policy_warning',
-                plugin: name,
-                status: 'warning',
-                message: 'Plugin has unrestricted permissions metadata.'
-            });
+        if (!plugin) {
+            throw new Error(`Plugin not found: ${name}`);
         }
+
+        const permissions = this.normalizePluginPermissions(plugin.permissions);
+        plugin.permissions = permissions;
+
+        const invalid = permissions.filter((permission) => !PLUGIN_PERMISSION_ALLOWLIST.has(permission));
+        if (invalid.length > 0) {
+            throw new Error(`Plugin ${name} declares unsupported permissions: ${invalid.join(', ')}`);
+        }
+
+        if (permissions.includes('unrestricted')) {
+            if (process.env.YODAMAN_ALLOW_UNRESTRICTED_PLUGINS !== 'true') {
+                throw new Error(`Plugin ${name} is unrestricted. Set YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true to allow it.`);
+            }
+        }
+    }
+
+    validatePlugin(plugin, options = {}) {
+        if (!plugin || typeof plugin !== 'object') {
+            throw new Error('Plugin must export an object');
+        }
+        if (!plugin.name || typeof plugin.name !== 'string') {
+            throw new Error('Plugin name is required');
+        }
+        if (typeof plugin.execute !== 'function') {
+            throw new Error(`Plugin ${plugin.name} must export an execute function`);
+        }
+        if (options.requireExplicitPermissions && !Array.isArray(plugin.permissions)) {
+            throw new Error(`Plugin ${plugin.name} must declare a permissions array`);
+        }
+
+        const permissions = this.normalizePluginPermissions(plugin.permissions);
+        const invalid = permissions.filter((permission) => !PLUGIN_PERMISSION_ALLOWLIST.has(permission));
+        if (invalid.length > 0) {
+            throw new Error(`Plugin ${plugin.name} declares unsupported permissions: ${invalid.join(', ')}`);
+        }
+
+        return true;
+    }
+
+    normalizePluginPermissions(permissions) {
+        if (!permissions) return ['unrestricted'];
+        if (!Array.isArray(permissions)) {
+            throw new Error('Plugin permissions must be an array');
+        }
+
+        const normalized = permissions
+            .filter((permission) => typeof permission === 'string')
+            .map((permission) => permission.trim().toLowerCase())
+            .filter(Boolean);
+
+        return normalized.length > 0 ? Array.from(new Set(normalized)) : ['unrestricted'];
     }
 
     sanitizeParameters(parameters = {}) {

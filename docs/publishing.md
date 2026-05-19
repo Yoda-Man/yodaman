@@ -9,6 +9,7 @@ Prepare and verify:
 ```bash
 npm test -- --runInBand
 npm run build
+npm run release:smoke
 npm pack --dry-run
 ```
 
@@ -79,6 +80,7 @@ Reference: Expo's official EAS Submit docs require a Google service account key 
 Desktop builds are produced from the root package with Electron Builder:
 
 ```bash
+npm run release:smoke
 npm run desktop:pack
 npm run desktop:dist
 ```

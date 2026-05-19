@@ -9,6 +9,7 @@ const path = require('path');
 module.exports = {
     name: 'listDependencies',
     description: 'Lists all NPM dependencies and their versions from package.json in the current project.',
+    permissions: ['read'],
     parameters: {},
     async execute() {
         const pkgPath = path.resolve(process.cwd(), 'package.json');

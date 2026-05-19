@@ -1,5 +1,6 @@
 const contextEngine = require('../infrastructure/ContextEngine');
 const toolBox = require('../infrastructure/ToolBox');
+const taskStore = require('../infrastructure/TaskStore');
 
 /**
  * AgentReasoningEngine (Core Layer)
@@ -13,7 +14,7 @@ class AgentReasoningEngine {
         /** @type {Map<string, Function>} Pending approval resolvers. */
         this.pendingApprovals = new Map();
         /** @type {Map<string, object>} Recent task state for external clients. */
-        this.tasks = new Map();
+        this.tasks = new Map(taskStore.list().map((task) => [task.taskId, task]));
         /** @type {Set<string>} Task IDs that should stop at the next safe point. */
         this.cancelledTasks = new Set();
         /** @type {number} Maximum number of tool iterations to prevent infinite loops. */
@@ -85,7 +86,11 @@ ${toolBox.getToolDefinitions()}
     }
 
     getTasks() {
-        return Array.from(this.tasks.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        return Array.from(this.tasks.values()).sort((a, b) => {
+            const left = a.updatedAt || a.createdAt || '';
+            const right = b.updatedAt || b.createdAt || '';
+            return right.localeCompare(left);
+        });
     }
 
     getPendingApprovals() {
@@ -107,17 +112,20 @@ ${toolBox.getToolDefinitions()}
 
     recordTask(taskId, patch) {
         const current = this.tasks.get(taskId) || {};
-        this.tasks.set(taskId, {
+        const nextTask = {
             ...current,
             ...patch,
             taskId,
             updatedAt: new Date().toISOString()
-        });
+        };
+        this.tasks.set(taskId, nextTask);
 
         if (this.tasks.size > 50) {
             const oldest = this.getTasks().at(-1);
             if (oldest) this.tasks.delete(oldest.taskId);
         }
+
+        taskStore.upsert(taskId, nextTask);
     }
 
     recordTaskEvent(taskId, event) {

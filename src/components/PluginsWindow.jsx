@@ -132,6 +132,11 @@ export default function PluginsWindow() {
                             
                             <div className="mt-8 space-y-3">
                                 <div className="flex flex-wrap gap-2">
+                                    {(plugin.permissions || []).map(permission => (
+                                        <span key={permission} className={`px-2 py-1 rounded-lg text-[9px] font-mono ${permission === 'unrestricted' ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                                            {permission}
+                                        </span>
+                                    ))}
                                     {Object.keys(plugin.parameters || {}).map(param => (
                                         <span key={param} className="px-2 py-1 rounded-lg bg-black/40 text-[9px] font-mono text-purple-400">
                                             {param}
@@ -142,7 +147,7 @@ export default function PluginsWindow() {
                                     <span className="text-[10px] font-black uppercase tracking-widest text-purple-500/50">Custom Skill</span>
                                     <div className="flex items-center gap-1.5">
                                         <div className="h-1.5 w-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                                        <span className="text-[9px] font-bold text-emerald-500 uppercase">Active</span>
+                                        <span className="text-[9px] font-bold text-emerald-500 uppercase">{plugin.restricted ? 'Restricted' : 'Active'}</span>
                                     </div>
                                 </div>
                             </div>
@@ -185,6 +190,7 @@ export default function PluginsWindow() {
                                 <span className="text-purple-400">module</span>.<span className="text-white">exports</span> = {'{'} <br/>
                                 &nbsp;&nbsp;name: <span className="text-emerald-400">'mySkill'</span>, <br/>
                                 &nbsp;&nbsp;description: <span className="text-emerald-400">'...'</span>, <br/>
+                                &nbsp;&nbsp;permissions: [<span className="text-emerald-400">'read'</span>], <br/>
                                 &nbsp;&nbsp;<span className="text-indigo-400">async</span> execute(params) {'{'} <br/>
                                 &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-slate-600">// Logic here</span> <br/>
                                 &nbsp;&nbsp;{'}'} <br/>

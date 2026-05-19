@@ -14,6 +14,7 @@ describe('Plugin System', () => {
             module.exports = {
                 name: 'testPlugin',
                 description: 'A test plugin',
+                permissions: ['read'],
                 execute: async () => ({ success: true })
             };
         `;
@@ -35,6 +36,24 @@ describe('Plugin System', () => {
     test('should execute plugin tools', async () => {
         const result = await toolBox.callTool('testPlugin', {});
         expect(result.success).toBe(true);
+    });
+
+    test('should block unrestricted plugins by default', async () => {
+        toolBox.plugins.set('unsafePlugin', {
+            name: 'unsafePlugin',
+            permissions: ['unrestricted'],
+            execute: async () => ({ success: true })
+        });
+
+        await expect(toolBox.callTool('unsafePlugin', {})).rejects.toThrow('unrestricted');
+        toolBox.plugins.delete('unsafePlugin');
+    });
+
+    test('should require explicit permissions when validating uploaded plugins', () => {
+        expect(() => toolBox.validatePlugin({
+            name: 'missingPermissions',
+            execute: async () => ({ success: true })
+        }, { requireExplicitPermissions: true })).toThrow('permissions array');
     });
 
     test('should list plugins in tool definitions', () => {

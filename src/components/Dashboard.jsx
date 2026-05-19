@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Database, Cpu, HardDrive, Shield, Activity, Package, Server, FileText } from 'lucide-react'
+import { Database, Cpu, Shield, Activity, Package, Server, RefreshCw, Link, ClipboardList } from 'lucide-react'
+import { api } from '../api/api'
 
 export default function Dashboard() {
     const [status, setStatus] = useState(null)
+    const [diagnostics, setDiagnostics] = useState(null)
+    const [pairing, setPairing] = useState(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -11,13 +14,21 @@ export default function Dashboard() {
 
     const fetchStatus = async () => {
         try {
-            const res = await fetch('/api/status')
-            const data = await res.json()
+            const data = await api.getStatus()
             setStatus(data)
+            setDiagnostics(await api.getDesktopDiagnostics())
         } catch (err) {
             console.error('Failed to fetch status:', err)
         } finally {
             setLoading(false)
+        }
+    }
+
+    const createPairing = async () => {
+        try {
+            setPairing(await api.createPairing(window.location.origin))
+        } catch (err) {
+            console.error('Failed to create pairing link:', err)
         }
     }
 
@@ -44,11 +55,28 @@ export default function Dashboard() {
                         <h1 className="text-3xl font-outfit font-black text-slate-100 tracking-tight">System Dashboard</h1>
                         <p className="text-slate-500 font-medium mt-1">Real-time metrics from YodaMan Core</p>
                     </div>
-                    <div className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl">
-                        <Activity size={16} className="text-indigo-400" />
-                        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">System Optimal</span>
+                    <div className="flex items-center gap-3">
+                        <button onClick={fetchStatus} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-slate-300 uppercase tracking-widest hover:text-white hover:bg-white/10">
+                            <RefreshCw size={16} />
+                            Refresh
+                        </button>
+                        <button onClick={createPairing} className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-xs font-bold text-indigo-300 uppercase tracking-widest hover:bg-indigo-500/20">
+                            <Link size={16} />
+                            Pair Mobile
+                        </button>
+                        <div className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                            <Activity size={16} className="text-indigo-400" />
+                            <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">System Optimal</span>
+                        </div>
                     </div>
                 </header>
+
+                {pairing ? (
+                    <div className="glass-panel p-5 space-y-2">
+                        <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Mobile Pairing Link</div>
+                        <div className="text-sm text-slate-200 font-mono break-all">{pairing.link}</div>
+                    </div>
+                ) : null}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Database Stats */}
@@ -150,6 +178,36 @@ export default function Dashboard() {
                                 <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Node Version</div>
                                 <div className="text-sm font-bold text-slate-200">{status.nodeVersion}</div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="glass-panel p-8 space-y-6">
+                    <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl flex items-center justify-center">
+                            <ClipboardList size={20} className="text-cyan-300" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-100 tracking-tight">Runtime Diagnostics</h3>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Desktop and task state</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                            <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">PID</div>
+                            <div className="text-sm font-bold text-slate-200">{diagnostics?.runtime?.pid || '...'}</div>
+                        </div>
+                        <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                            <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Uptime</div>
+                            <div className="text-sm font-bold text-slate-200">{diagnostics?.runtime?.uptimeSeconds || 0}s</div>
+                        </div>
+                        <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                            <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Tasks</div>
+                            <div className="text-sm font-bold text-slate-200">{diagnostics?.tasks?.total || 0}</div>
+                        </div>
+                        <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                            <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Approvals</div>
+                            <div className="text-sm font-bold text-slate-200">{diagnostics?.tasks?.pendingApprovals || 0}</div>
                         </div>
                     </div>
                 </div>

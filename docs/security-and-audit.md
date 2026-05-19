@@ -34,7 +34,7 @@ This is not a full sandbox. It is a guardrail layer. A stronger version should u
 
 ## Audit Log
 
-Tool calls made through `ToolBox.callTool` are recorded in `audit-log.json`.
+Tool calls made through `ToolBox.callTool` are recorded in `audit-log.json` and appended to `audit-log.jsonl`.
 
 The audit log captures:
 
@@ -46,6 +46,10 @@ The audit log captures:
 - result summary or error
 
 Large file contents are summarized by character count instead of being stored verbatim.
+
+## Task History
+
+Agent task state and recent events are persisted in `task-history.json` and appended to `task-history.jsonl`. This lets the web UI, VS Code extension, mobile companion, and desktop app recover recent task timelines after the runtime restarts. The store keeps a bounded local snapshot and append-only local replay log, and it trims long event lists per task.
 
 ## APIs
 
@@ -65,10 +69,8 @@ Returns recent audit log entries.
 
 - Expand patch-based edits beyond the initial exact-text `applyPatch` tool.
 - Enforce tool-specific approval policies for commands and plugins.
-- Require plugin permission manifests instead of allowing unrestricted plugins with warnings.
 - Add structured command execution instead of shell strings.
-- Add authenticated pairing for mobile and remote clients.
-- Move audit storage to a proper append-only store.
+- Consider SQLite or another queryable local store if audit/task history volume outgrows JSONL.
 
 ## Patch-Based Edits
 
@@ -76,7 +78,18 @@ The runtime now includes an `applyPatch(filePath, oldText, newText)` tool. It re
 
 ## Plugin Permissions
 
-Plugins may declare a `permissions` array. Plugins without permission metadata are treated as `unrestricted` and produce an audit warning when executed. A future release should require explicit permissions before loading third-party plugins.
+Plugins declare a `permissions` array. Supported permissions are:
+
+- `read`
+- `write`
+- `command`
+- `network`
+- `search`
+- `unrestricted`
+
+Plugins without permission metadata are treated as `unrestricted`. Unrestricted plugins are blocked by default. Set `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true` only when you intentionally trust the plugin source.
+
+Uploaded plugins must declare a `permissions` array before the runtime accepts them through `POST /api/plugins`.
 
 ## Mobile Pairing
 

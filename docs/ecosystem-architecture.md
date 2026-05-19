@@ -31,6 +31,8 @@ The runtime currently exposes:
 - `GET /api/search` for semantic code search.
 - `GET /api/status` and `GET /api/check` for health and diagnostics.
 - `GET /api/plugins`, `POST /api/plugins`, and `DELETE /api/plugins/:name` for plugin management.
+- `GET /api/agent/tasks`, `GET /api/agent/tasks/:taskId/events`, and `GET /api/agent/pending-approvals` for persisted task timelines.
+- `GET /api/desktop/diagnostics` and `POST /api/pairing` for desktop and mobile companion flows.
 
 ## Target System
 
@@ -59,6 +61,7 @@ The runtime should own:
 - Agent execution and reasoning loops.
 - Tool registry and plugin loading.
 - Tool permissions, audit logs, and write approval state.
+- Append-only local audit and task history.
 - Project indexing and file watching.
 - Workspace identity and path validation.
 - Session persistence.
@@ -134,7 +137,9 @@ The API should become versioned and explicit. Near-term improvements:
 - Workspace-scoped path validation.
 - Patch-based file changes instead of full-file writes.
 
-Server-Sent Events are adequate for the first editor integration. WebSocket can be added later for richer bidirectional control, notifications, and collaborative state.
+Server-Sent Events are adequate for the first editor integration because task output primarily streams from the runtime to the client. WebSocket subscriptions would be useful later for live multi-client task control, faster approval notifications, cancellation, presence, and collaborative state. They would not automatically make every workflow better: REST is still simpler for request/response actions, SSE is still good for one-way task timelines, and WebSocket adds connection, authentication, reconnection, and back-pressure complexity.
+
+Shared protocol constants and TypeScript declarations live in `shared/`, so clients can share event names and task shapes while the runtime remains CommonJS-compatible.
 
 ## Security Direction
 
@@ -147,4 +152,3 @@ The most important safety areas are:
 - Add plugin permissions.
 - Prefer patch application over arbitrary full-file writes.
 - Treat mobile and remote clients as untrusted until paired and authorized.
-

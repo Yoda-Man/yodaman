@@ -17,11 +17,13 @@ class PairingService {
             expiresAt
         });
 
+        const link = `yodaman://pair?url=${encodeURIComponent(runtimeUrl)}&token=${encodeURIComponent(token)}`;
         return {
             runtimeUrl,
             token,
             expiresAt,
-            deepLink: `yodaman://pair?url=${encodeURIComponent(runtimeUrl)}&token=${encodeURIComponent(token)}`
+            link,
+            deepLink: link
         };
     }
 
@@ -65,4 +67,3 @@ class PairingService {
 }
 
 module.exports = new PairingService();
-

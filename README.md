@@ -1,25 +1,49 @@
-# YodaMan 🚀
+# YodaMan
 
-**YodaMan** is a premium, full-stack intelligence platform designed for developers who demand total privacy and deep semantic understanding across their entire ecosystem.
+YodaMan is a local-first AI workspace companion for developers. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private runtime.
 
 ![Version](https://img.shields.io/badge/Version-0.1.6-gold)
-![Architecture](https://img.shields.io/badge/Architecture-Clean-indigo)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-## 🌟 Key Features
+## Why YodaMan
 
--   **Autonomous Agent Mode**: Let Yoda-Agent refactor, search, and manage your codebase with multi-step reasoning.
--   **Intelligent Indexing**: Automatically watches project directories and triggers re-indexing on file changes.
--   **Local-First Privacy**: Designed to work with local LLMs (via Ollama) to keep your intellectual property on your machine.
--   **Premium UI**: High-tech dashboard featuring glassmorphism and real-time system telemetry.
+- **Keep code private**: YodaMan is designed around local project indexing and local model workflows through Context Expert and optional Ollama.
+- **Understand the whole workspace**: Search and ask across indexed repositories instead of juggling isolated editor tabs.
+- **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and approval gates for file changes.
+- **Work where you already are**: Use the web UI, desktop app, CLI package, VS Code extension, and mobile companion surfaces against the same runtime.
+- **Extend the assistant**: Add JavaScript plugins for custom tools while keeping tool activity visible through policy and audit endpoints.
 
-## 🚀 Quick Start
+## Core Pillars
 
-### 1. Prerequisites
-- Node.js (v18+)
-- [Context Expert CLI](https://github.com/Yoda-Man/context-expert) (`npm install -g @contextexpert/cli`)
+### Local-first intelligence
 
-### 2. Setup
+Project context starts on your machine. Watched directories are stored in `config.json`, indexed locally, and reused by chat, search, agent tasks, and external clients.
+
+### Human-controlled automation
+
+The agent can reason through multi-step coding work, but write proposals require review. Runtime events expose `task_started`, tool activity, approvals, cancellation, final answers, and errors so clients can stay transparent.
+
+### One ecosystem runtime
+
+The Express runtime is the shared contract for the React UI, desktop shell, VS Code extension, mobile app, and CLI package. Each client can ask, search, reindex, inspect task state, and participate in approvals.
+
+### Extensible tools
+
+Built-in tools cover file reads, controlled writes, exact patching, command execution, search, and file listing. Plugin tools can be dropped into `plugins/`, and declared permissions keep risky tools visible and restricted.
+
+## Prerequisites
+
+- Node.js 18 or newer
+- Context Expert CLI:
+
+```bash
+npm install -g @contextexpert/cli
+```
+
+- Ollama, optional but recommended for local model execution
+
+## Setup
+
 ```bash
 git clone https://github.com/Yoda-Man/yodaman.git
 cd yodaman
@@ -27,57 +51,58 @@ npm install
 sh setup.sh
 ```
 
-### 3. Launch
+Add or update watched project directories in `config.json`:
+
+```json
+{
+  "watchedDirectories": [
+    "/Users/username/projects/my-app"
+  ]
+}
+```
+
+## Run
+
+Start the local runtime and web UI:
+
 ```bash
 npm start
 ```
-Visit `http://localhost:5190` to start exploring.
 
-## 🚀 Features (v0.1.6)
+This checks that `ctx` is available, then runs the backend and Vite client. The runtime listens on `http://localhost:3090`, and the dev UI is available at `http://localhost:5190`.
 
-- **Ecosystem-Wide Search**: Unified semantic search across all your indexed repositories.
-- **Autonomous Agent (Yoda-Agent)**: A multi-step reasoning engine that can perform coding tasks.
-- **Plugin Marketplace (NEW)**: Extend the agent with custom JavaScript skills via a user-friendly GUI.
-- **High-Fidelity Persistence (NEW)**: Full chat history and reasoning step preservation across restarts.
-- **Trust & Safety (NEW)**: Human-in-the-loop Diff Approval for all agent-initiated file modifications.
-- **Professional GUI**: Modern, glassmorphic interface with real-time feedback and detailed logging.
-- **Stress-Free Startup (NEW)**: Automatic port conflict resolution and robust CLI output parsing.
-- **Context Expert (ctx) Integration**: Deep integration with the Context Expert CLI for semantic mapping.
-- **Multi-Client Release Hygiene**: Shared versioning, package ignore rules, and publishing docs for npm, VS Code, mobile, and desktop clients.
-- **Expanded Automated Tests**: Stronger coverage for exact patching, audit logs, approval rejection, malformed tool calls, and reasoning loop limits.
+You can also run the dev command directly:
 
-## Release and Publishing
+```bash
+npm run dev
+```
 
-The core runtime is published to npm as `yodaman`. Client packages live beside the runtime:
+## Common Commands
 
-- `extensions/vscode-yodaman` for VS Code Marketplace packaging.
-- `apps/mobile` for Expo/EAS Android and iOS builds.
-- `electron/` plus `electron-builder.json` for desktop packaging.
+```bash
+npm run build        # Build the React app
+npm test             # Run Jest tests
+npm run desktop      # Build and launch the Electron app
+npm run desktop:pack # Create an unpacked desktop build
+```
 
-Use `npm pack --dry-run` before publishing to verify that only runtime files are included in the npm package.
+The npm CLI entrypoint is `yodaman` after installation from the package.
 
-## 📚 Documentation
+Generated local state files such as `audit-log.json`, `audit-log.jsonl`, `task-history.json`, and `task-history.jsonl` are ignored by git.
 
-Detailed documentation is available in the `docs/` folder:
+Run release smoke checks before packaging:
 
--   [**Architecture Overview**](docs/architecture.md): Deep dive into the Clean Architecture and component interaction.
--   [**API Reference**](docs/api.md): Full documentation for REST and SSE endpoints.
--   [**Setup & Installation**](docs/setup.md): Detailed environment configuration.
--   [**Ecosystem Architecture**](docs/ecosystem-architecture.md): VS Code, desktop, and mobile client strategy.
--   [**Security & Audit**](docs/security-and-audit.md): Workspace policy, pairing, audit logs, and tool guardrails.
--   [**Publishing**](docs/publishing.md): VS Code Marketplace and Google Play release workflow.
--   [**Publishing Todo**](docs/publishing-todo.md): Checklist for macOS, Windows, Linux, app stores, mobile stores, and VS Code Marketplace.
--   [**Website**](website/README.md): Static product website for the ecosystem.
--   [**User Manual**](user_manual.html): Visual guide for primary workflows.
+```bash
+npm run release:smoke
+```
 
-## 🏗️ Clean Architecture
+## Clients
 
-YodaMan is built with a layered architecture to ensure scalability:
-- **Presentation**: React + Vite (Glassmorphic Design)
-- **Interface**: Express Controllers (REST/SSE)
-- **Core**: Business Logic (Agent Engine, Queue Management)
-- **Infrastructure**: System Integrations (CLI Wrapper, File Watcher)
+- **Web UI**: React control center for projects, chat, search, plugins, approvals, and status.
+- **Desktop app**: Electron shell for the same control center with desktop packaging.
+- **VS Code extension**: Editor-native status, ask, search, reindex, agent tasks, and diff approval.
+- **Mobile app**: Companion app for pairing, project status, task timelines, approvals, search, and prompts.
 
-## 📜 License
+## License
 
-This project is licensed under the MIT License.
+MIT

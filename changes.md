@@ -2,6 +2,15 @@
 
 All notable changes to the YodaMan project are documented here.
 
+## [Unreleased]
+
+### Ecosystem Roadmap Execution
+- Added shared protocol/client declarations for web, VS Code, mobile, and runtime consumers.
+- Added append-only local audit/task history logs alongside bounded JSON snapshots.
+- Added desktop task notifications and folder picker support.
+- Added mobile task event detail inspection.
+- Added release smoke checks and refreshed user-facing documentation.
+
 ## [0.1.5] - 2026-05-14
 
 ### 💎 Professional UI & Stability Overhaul

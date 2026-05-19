@@ -1,61 +1,138 @@
-# YodaMan User Manual 🧠
+# YodaMan User Manual
 
-Welcome to **YodaMan**, the professional intelligence platform for your entire development ecosystem. This manual will guide you through the setup, features, and best practices for mastering your codebases with 100% local privacy.
+YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine, helps you search and ask across indexed repositories, and lets you supervise agent tasks from the web UI, desktop app, VS Code, and mobile companion.
 
----
+## 1. Setup
 
-## 1. Introduction
-YodaMan is a professional, full-stack intelligence platform powered by high-performance deep semantic indexing. Unlike rival tools that are limited to single-project analysis or cloud-based data leaks, YodaMan provides a **local-first, high-performance engine** that unifies all your projects, documentation, and codebases into a single, coherent knowledge base.
+Install prerequisites:
 
-## 2. Quick Setup
-The fastest way to get started is using the **One-Command Setup**:
+```bash
+npm install -g @contextexpert/cli
+```
 
-1.  Open your terminal in the project root.
-2.  Run: `sh setup.sh`
-3.  The script will automatically audit your system and install Node.js, Python, Ollama, and the **Context Expert (ctx)** intelligence engine.
+Then start YodaMan from the project root:
 
-## 3. Core Concepts
+```bash
+npm install
+sh setup.sh
+npm start
+```
 
-### 📂 Ecosystem Intelligence
-YodaMan doesn't just look at one folder. It understands your entire digital workspace. Once indexed, the AI "remembers" the structure, logic, and patterns across all your disparate projects and documentation.
+The backend runtime listens on `http://localhost:3090`. The development web UI listens on `http://localhost:5190`.
 
-### 🔍 Deep Semantic Search
-Powered by vector mapping, YodaMan understands the *meaning* of your code. Searching for "authentication" will find login logic, JWT handlers, and security middleware even if the word "authentication" isn't explicitly used.
+Add watched workspaces in `config.json`:
 
-### 💬 Unified Context Chat
-The Chat window allows you to ask complex questions across your entire ecosystem. YodaMan retrieves the relevant context from multiple projects to generate accurate, low-latency answers.
+```json
+{
+  "watchedDirectories": [
+    "/Users/username/projects/my-app"
+  ]
+}
+```
 
----
+## 2. Core Ideas
 
-## 4. Using the Interface
+### Local-first intelligence
 
-### The Sidebar (Workspace Manager)
--   **Register Repository**: Click the `+` button to add a new folder.
--   **Auto-Sync**: YodaMan automatically detects projects you index via the CLI—no restart required.
--   **Sync Repository**: Click the "Sync Repository" button to re-scan your code after making changes.
--   **Health Check**: Monitor the "Valid" or "Error" status for each workspace in real-time.
+YodaMan indexes local project folders and routes chat, search, and agent workflows through the local runtime.
 
-### The Search Tab
--   Enter any query to see matching code blocks across all your repositories.
--   Use the **Project Filter** to limit results to a specific repository when needed.
--   View high-precision relevance scores (e.g., 98.5%) for every match.
+### Human-controlled automation
 
-### The High-Tech Status Bar
--   **Node Status**: Confirms the backend server is active.
--   **Engine Version**: Displays the current intelligence engine version.
--   **Active Model**: Shows which local AI model (e.g., Llama 3 or Qwen) is powering your insights.
+Agent tasks stream every important event: task start, tool activity, approval requests, cancellation, final answers, and errors. File writes require human approval.
 
----
+### Shared ecosystem runtime
 
-## 5. Pro Tips 💡
--   **Keep Ollama Running**: YodaMan relies on local models for privacy. Ensure Ollama is active on your machine.
--   **Unified Documentation**: Index your project's `.md` and `.txt` files alongside your code for the ultimate "Context Expert" experience.
--   **Natural Language Precision**: Ask full questions like *"How does the auth flow differ between my API and the frontend service?"* to leverage multi-project context.
+The web UI, Electron desktop app, VS Code extension, and mobile app use the same runtime APIs for projects, search, ask, task timelines, approvals, policy, audit, and pairing.
 
-## 6. Troubleshooting
--   **Engine not found**: Ensure the Intelligence Engine is in your PATH or run `sh setup.sh`.
--   **Port Conflict**: YodaMan runs on ports **5190** (Frontend) and **3090** (Backend). Ensure these are available.
--   **Re-indexing**: If results seem outdated, click the "Sync Repository" button to refresh the index.
+### Restricted plugins
 
----
-*YodaMan v0.1.5 - Total Privacy. Ecosystem Intelligence.*
+Plugins declare permissions such as `read`, `write`, `command`, `network`, or `search`. Uploaded plugins must include a `permissions` array. Unrestricted plugins are blocked unless you explicitly start the runtime with `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true`.
+
+## 3. Web UI
+
+- **Projects**: Add watched folders, select the current workspace, and queue reindexing.
+- **Chat**: Ask questions about the selected project.
+- **Search**: Run semantic search against all indexed code or a selected project.
+- **Dashboard**: View system status, runtime diagnostics, task counts, pending approvals, and create a mobile pairing link.
+- **Plugins**: Install JavaScript plugins and inspect their declared permissions.
+- **Manual**: Open the in-app guide.
+
+## 4. Agent Tasks
+
+When you run an agent task, YodaMan stores recent task state and events in `task-history.json` and appends changes to `task-history.jsonl`. This means task timelines survive runtime restarts.
+
+Approval flow:
+
+1. The agent proposes a write.
+2. YodaMan emits an `awaiting_approval` event.
+3. A client shows the diff or pending approval.
+4. You approve or reject.
+5. The agent continues with that decision.
+
+You can cancel an active task from clients that expose task cancellation.
+
+## 5. Desktop App
+
+Run the desktop shell:
+
+```bash
+npm run desktop
+```
+
+The Electron app starts the backend as a sidecar when no runtime is already running. The desktop menu includes:
+
+- `Restart Managed Runtime`
+- `Copy Mobile Pairing Link`
+- `Add Project Folder`
+
+The dashboard also exposes runtime diagnostics and mobile pairing. The desktop app shows native notifications when a task needs approval or completes.
+
+## 6. VS Code Extension
+
+The extension can:
+
+- Check runtime status.
+- Start the configured runtime command.
+- Ask about the current workspace.
+- Search and reindex the current workspace.
+- Run agent tasks.
+- Show streamed events in the YodaMan output channel.
+- Open proposed writes as VS Code diffs.
+- Approve, reject, or cancel agent work.
+
+The default runtime URL is `http://localhost:3090`.
+
+## 7. Mobile Companion
+
+The mobile app can:
+
+- Parse `yodaman://pair` links.
+- Check runtime status.
+- List projects and select one.
+- Ask/search against the selected project.
+- Inspect recent task timelines.
+- Open full event details from a task timeline.
+- Cancel active tasks.
+- Refresh pending approvals.
+- Approve or reject proposed writes.
+
+For a phone on the same network, use your desktop machine LAN address, for example `http://192.168.1.20:3090`.
+
+## 8. Troubleshooting
+
+- **Context Expert not found**: Install `@contextexpert/cli` and confirm `ctx --version` works.
+- **Runtime unreachable**: Check that port `3090` is available and the backend is running.
+- **Web UI unreachable**: Check that Vite is running on port `5190` during development.
+- **Search results are stale**: Reindex the selected workspace.
+- **Mobile cannot connect**: Use the desktop LAN IP, confirm firewall access to port `3090`, and generate a fresh pairing link.
+- **Plugin blocked**: Add explicit permissions to the plugin or intentionally allow unrestricted plugins with `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true`.
+
+## 9. Verification
+
+Before packaging or publishing, run:
+
+```bash
+npm test
+npm run build
+npm run release:smoke
+```

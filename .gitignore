@@ -8,6 +8,9 @@ dist/
 release/
 coverage/
 audit-log.json
+task-history.json
+audit-log.jsonl
+task-history.jsonl
 
 # Desktop clients
 electron/
@@ -45,3 +48,7 @@ apps/mobile/.eas/
 
 # Website
 website/
+
+# Roadmaps/docs
+docs/ecosystem-roadmap.md
+

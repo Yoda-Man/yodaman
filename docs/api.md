@@ -62,10 +62,10 @@ Requests cancellation of an active agent task.
 **Response:** `{ "message": "Cancellation requested", "taskId": "abc123" }`
 
 ### `GET /agent/tasks`
-Returns recent in-memory agent task state for external clients.
+Returns recent persisted agent task state for external clients. Task history is retained locally in `task-history.json` and appended to `task-history.jsonl`.
 
 ### `GET /agent/tasks/:taskId/events`
-Returns recent in-memory task events for a specific agent task.
+Returns recent persisted task events for a specific agent task.
 
 ### `GET /agent/pending-approvals`
 Returns active write approvals that are waiting for a human decision.
@@ -81,18 +81,47 @@ Performs semantic code search.
 Returns real-time system telemetry and AI model information.
 
 ### `GET /policy`
-Returns runtime safety policy details, including allowed workspace roots and blocked command patterns.
+Returns runtime safety policy details, including allowed workspace roots, blocked command patterns, and plugin permissions.
 
 ### `GET /audit`
 Returns recent tool audit log entries.
 
 **Query Params:** `limit` (default: 100)
 
+Audit entries are retained in `audit-log.json` and appended to `audit-log.jsonl`.
+
+### `GET /desktop/diagnostics`
+Returns desktop/runtime diagnostics for control surfaces.
+
+**Response:**
+```json
+{
+  "runtime": {
+    "pid": 12345,
+    "uptimeSeconds": 42,
+    "nodeVersion": "v20.0.0",
+    "platform": "darwin",
+    "cwd": "/path/to/yodaman",
+    "memory": {}
+  },
+  "host": {
+    "hostname": "machine",
+    "release": "23.0.0",
+    "arch": "arm64"
+  },
+  "tasks": {
+    "total": 3,
+    "pendingApprovals": 1
+  },
+  "plugins": []
+}
+```
+
 ### `POST /pairing`
 Creates a temporary mobile pairing payload.
 
 **Body:** `{ "runtimeUrl": "http://192.168.1.20:3090" }` (optional)
-**Response:** `{ "runtimeUrl": "...", "token": "...", "expiresAt": "...", "deepLink": "yodaman://pair?..." }`
+**Response:** `{ "runtimeUrl": "...", "token": "...", "expiresAt": "...", "link": "yodaman://pair?..." }`
 
 ### `GET /pairing`
 Lists active pairing token metadata.

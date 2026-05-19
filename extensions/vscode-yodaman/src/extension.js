@@ -1,4 +1,5 @@
 const vscode = require('vscode');
+const { createYodaManClient } = require('../../../shared/yodamanClient');
 
 let output;
 let statusBar;
@@ -21,26 +22,13 @@ function getWorkspaceProjectId() {
     return folder ? folder.uri.fsPath : undefined;
 }
 
-async function requestJson(path, options = {}) {
-    const response = await fetch(`${getRuntimeUrl()}${path}`, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...(options.headers || {})
-        }
-    });
-
-    if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `Request failed with ${response.status}`);
-    }
-
-    return response.json();
+function getClient() {
+    return createYodaManClient(getRuntimeUrl());
 }
 
 async function checkStatus(showMessage = true) {
     try {
-        const status = await requestJson('/api/status');
+        const status = await getClient().status();
         runtimeAvailable = true;
         lastStatus = status;
         statusBar.text = '$(check) YodaMan';
@@ -93,13 +81,7 @@ async function askWorkspace() {
     output.appendLine(`> ${question}`);
 
     try {
-        const result = await requestJson('/api/ask', {
-            method: 'POST',
-            body: JSON.stringify({
-                question,
-                projectId: getWorkspaceProjectId()
-            })
-        });
+        const result = await getClient().ask(question, getWorkspaceProjectId());
 
         output.appendLine(result.answer || JSON.stringify(result, null, 2));
     } catch (error) {
@@ -120,50 +102,12 @@ async function runAgentTask() {
     output.appendLine(`\n[task] ${task}`);
 
     try {
-        const response = await fetch(`${getRuntimeUrl()}/api/agent/task`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                task,
-                projectId: getWorkspaceProjectId()
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(await response.text());
-        }
-
-        await readEventStream(response, handleAgentEvent);
+        await getClient().runAgentTask(task, getWorkspaceProjectId(), handleAgentEvent);
     } catch (error) {
         output.appendLine(`[error] ${error.message}`);
         vscode.window.showErrorMessage(`YodaMan agent task failed: ${error.message}`);
     } finally {
         activeTaskId = null;
-    }
-}
-
-async function readEventStream(response, onEvent) {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const frames = buffer.split('\n\n');
-        buffer = frames.pop() || '';
-
-        for (const frame of frames) {
-            const dataLine = frame.split('\n').find((line) => line.startsWith('data: '));
-            if (!dataLine) continue;
-            await onEvent(JSON.parse(dataLine.slice(6)));
-        }
-    }
-
-    if (buffer.startsWith('data: ')) {
-        await onEvent(JSON.parse(buffer.slice(6)));
     }
 }
 
@@ -219,13 +163,7 @@ async function searchWorkspace() {
     output.appendLine(`\n[search] ${query}`);
 
     try {
-        const params = new URLSearchParams({ query });
-        const projectId = getWorkspaceProjectId();
-        if (projectId) params.set('project', projectId);
-
-        const results = await requestJson(`/api/search?${params.toString()}`, {
-            headers: {}
-        });
+        const results = await getClient().search(query, getWorkspaceProjectId());
 
         output.appendLine(JSON.stringify(results, null, 2));
     } catch (error) {
@@ -242,10 +180,7 @@ async function reindexWorkspace() {
     }
 
     try {
-        const result = await requestJson('/api/reindex', {
-            method: 'POST',
-            body: JSON.stringify({ path: projectId })
-        });
+        const result = await getClient().reindex(projectId);
         output.appendLine(`[reindex] ${projectId}`);
         vscode.window.showInformationMessage(result.message || 'YodaMan indexing queued.');
     } catch (error) {
@@ -274,13 +209,7 @@ async function reviewWriteProposal(event) {
         'Reject'
     );
 
-    await requestJson('/api/agent/approve', {
-        method: 'POST',
-        body: JSON.stringify({
-            taskId: event.taskId,
-            approved: choice === 'Approve'
-        })
-    });
+    await getClient().approve(event.taskId, choice === 'Approve');
 
     output.appendLine(choice === 'Approve' ? '[approval] approved' : '[approval] rejected');
 }
@@ -327,10 +256,7 @@ async function cancelAgentTask() {
     }
 
     try {
-        await requestJson('/api/agent/cancel', {
-            method: 'POST',
-            body: JSON.stringify({ taskId: activeTaskId })
-        });
+        await getClient().cancel(activeTaskId);
         output.appendLine(`[cancel] requested for ${activeTaskId}`);
         refreshSidebar();
     } catch (error) {

@@ -10,6 +10,7 @@
     "bin",
     "dist",
     "backend",
+    "shared",
     "server.js",
     "start.js",
     "public",
@@ -29,7 +30,8 @@
     "desktop:dist:all": "npm run build && electron-builder --config electron-builder.json --mac --arm64 && electron-builder --config electron-builder.json --win --linux --x64 && npm run website:downloads",
     "website:downloads": "node scripts/sync-website-downloads.js",
     "preview": "vite preview",
-    "test": "jest"
+    "test": "jest",
+    "release:smoke": "node scripts/release-smoke.js"
   },
   "jest": {
     "modulePathIgnorePatterns": [

@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 // Infrastructure Layer
 const contextEngine = require('../infrastructure/ContextEngine');
@@ -257,20 +258,30 @@ router.get('/agent/pending-approvals', (req, res) => {
 // --- Plugin Management ---
 
 router.get('/plugins', (req, res) => {
-    const plugins = Array.from(toolBox.plugins.values()).map(p => ({
+const plugins = Array.from(toolBox.plugins.values()).map(p => ({
         name: p.name,
         description: p.description,
-        parameters: p.parameters
+        parameters: p.parameters,
+        permissions: p.permissions,
+        restricted: !p.permissions.includes('unrestricted')
     }));
     res.json(plugins);
 });
 
 router.post('/plugins', upload.single('plugin'), (req, res) => {
     if (!req.file) return res.status(400).send('No file uploaded');
-    
-    // Reload plugins in ToolBox
-    toolBox.loadPlugins();
-    res.json({ message: 'Plugin uploaded and loaded', name: req.file.originalname });
+
+    try {
+        const pluginPath = path.join(PLUGINS_DIR, req.file.originalname);
+        delete require.cache[require.resolve(pluginPath)];
+        const plugin = require(pluginPath);
+        toolBox.validatePlugin(plugin, { requireExplicitPermissions: true });
+        toolBox.loadPlugins();
+        res.json({ message: 'Plugin uploaded and loaded', name: req.file.originalname });
+    } catch (err) {
+        fs.unlinkSync(path.join(PLUGINS_DIR, req.file.originalname));
+        res.status(400).json({ error: err.message });
+    }
 });
 
 router.delete('/plugins/:name', (req, res) => {
@@ -322,6 +333,29 @@ router.get('/policy', (req, res) => {
 router.get('/audit', (req, res) => {
     const { limit = 100 } = req.query;
     res.json(auditLog.list(limit));
+});
+
+router.get('/desktop/diagnostics', (req, res) => {
+    res.json({
+        runtime: {
+            pid: process.pid,
+            uptimeSeconds: Math.round(process.uptime()),
+            nodeVersion: process.version,
+            platform: process.platform,
+            cwd: process.cwd(),
+            memory: process.memoryUsage()
+        },
+        host: {
+            hostname: os.hostname(),
+            release: os.release(),
+            arch: os.arch()
+        },
+        tasks: {
+            total: agentEngine.getTasks().length,
+            pendingApprovals: agentEngine.getPendingApprovals().length
+        },
+        plugins: toolBox.getPolicy().plugins
+    });
 });
 
 router.post('/pairing', (req, res) => {

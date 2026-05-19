@@ -2,6 +2,20 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Shared YodaMan API/SSE client, protocol constants, and TypeScript declaration files under `shared/`.
+- Append-only local audit and task history logs via `audit-log.jsonl` and `task-history.jsonl`.
+- Desktop native notifications for approval-needed and completed task transitions.
+- Desktop folder picker for adding project workspaces.
+- Mobile task event detail view.
+- Release smoke check command: `npm run release:smoke`.
+
+### Changed
+- Updated roadmap, manuals, setup, API, desktop, mobile, security, publishing, and runtime protocol documentation for the new ecosystem phase.
+- Mobile app now consumes the shared client through Metro workspace configuration.
+
 ## [0.1.6] - 2026-05-17
 
 ### Added

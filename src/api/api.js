@@ -95,6 +95,25 @@ export const api = {
         return res.json();
     },
 
+    async getDesktopDiagnostics() {
+        const res = await fetch(`${API_BASE}/desktop/diagnostics`);
+        return res.json();
+    },
+
+    async createPairing(runtimeUrl) {
+        const res = await fetch(`${API_BASE}/pairing`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(runtimeUrl ? { runtimeUrl } : {})
+        });
+        return res.json();
+    },
+
+    async getTasks() {
+        const res = await fetch(`${API_BASE}/agent/tasks`);
+        return res.json();
+    },
+
     async agentTask(task, projectId, onStep) {
         const response = await fetch(`${API_BASE}/agent/task`, {
             method: 'POST',
@@ -147,4 +166,3 @@ export const api = {
         return res.json();
     }
 };
-
