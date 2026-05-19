@@ -31,6 +31,7 @@
     "website:downloads": "node scripts/sync-website-downloads.js",
     "preview": "vite preview",
     "test": "jest",
+    "generate:protocol": "node scripts/generate-protocol.js",
     "release:smoke": "node scripts/release-smoke.js"
   },
   "jest": {

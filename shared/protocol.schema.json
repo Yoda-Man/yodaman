@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "YodaManProtocol",
+  "description": "Single schema source for YodaMan protocol declarations, types, and constants.",
+  "enums": {
+    "TASK_EVENT_TYPES": {
+      "description": "Types of events emitted during task execution",
+      "values": {
+        "TASK_STARTED": "task_started",
+        "TOOL_START": "tool_start",
+        "TOOL_END": "tool_end",
+        "AWAITING_APPROVAL": "awaiting_approval",
+        "TASK_CANCELLED": "task_cancelled",
+        "FINAL_ANSWER": "final_answer",
+        "ERROR": "error"
+      }
+    },
+    "TASK_STATUSES": {
+      "description": "Possible statuses of a task",
+      "values": {
+        "RUNNING": "running",
+        "CANCELLING": "cancelling",
+        "CANCELLED": "cancelled",
+        "AWAITING_APPROVAL": "awaiting_approval",
+        "REJECTED": "rejected",
+        "ERROR": "error",
+        "COMPLETED": "completed"
+      }
+    },
+    "PLUGIN_PERMISSIONS": {
+      "description": "Permissions that plugins can request/declare",
+      "values": {
+        "READ": "read",
+        "WRITE": "write",
+        "COMMAND": "command",
+        "NETWORK": "network",
+        "SEARCH": "search",
+        "UNRESTRICTED": "unrestricted"
+      }
+    }
+  },
+  "interfaces": {
+    "YodaManTaskEvent": {
+      "properties": {
+        "type": { "type": "enum", "enumName": "TASK_EVENT_TYPES" },
+        "taskId": { "type": "string", "optional": true },
+        "timestamp": { "type": "string", "optional": true },
+        "message": { "type": "string", "optional": true },
+        "tool": { "type": "string", "optional": true },
+        "params": { "type": "Record<string, unknown>", "optional": true },
+        "result": { "type": "unknown", "optional": true },
+        "answer": { "type": "string", "optional": true }
+      }
+    },
+    "YodaManTask": {
+      "properties": {
+        "taskId": { "type": "string" },
+        "task": { "type": "string", "optional": true },
+        "projectId": { "type": "string", "optional": true },
+        "status": { "type": "enum", "enumName": "TASK_STATUSES" },
+        "createdAt": { "type": "string", "optional": true },
+        "updatedAt": { "type": "string", "optional": true },
+        "pendingApproval": { "type": "unknown", "optional": true },
+        "finalAnswer": { "type": "string | null", "optional": true },
+        "error": { "type": "string | null", "optional": true },
+        "events": { "type": "YodaManTaskEvent[]", "optional": true }
+      }
+    }
+  }
+}
