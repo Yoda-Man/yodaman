@@ -1,11 +1,11 @@
 import React from 'react';
-import { Book, CheckCircle, Zap, Terminal, Shield, Command, Bot } from 'lucide-react';
+import { Book, CheckCircle, Zap, Terminal, Shield, Command, Bot, Trash2, Database, Laptop } from 'lucide-react';
 
 export default function ManualWindow() {
     return (
         <div className="h-full overflow-y-auto custom-scrollbar bg-[#020617] text-slate-300 selection:bg-indigo-500/30">
             <div className="max-w-4xl mx-auto py-20 px-8">
-                <header class="mb-20 text-center">
+                <header className="mb-20 text-center">
                     <div className="inline-flex items-center justify-center h-20 w-20 rounded-3xl bg-slate-900 border border-white/10 shadow-2xl mb-8">
                         <Book size={40} className="text-indigo-400" />
                     </div>
@@ -13,8 +13,7 @@ export default function ManualWindow() {
                         YodaMan <span className="text-indigo-500">Manual</span>
                     </h1>
                     <div className="flex items-center justify-center gap-3">
-                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.1.4</span>
-
+                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.1.7</span>
                         <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-400">Stable Architecture</span>
                     </div>
                 </header>
@@ -70,9 +69,21 @@ export default function ManualWindow() {
                                 </div>
                                 <div className="p-6 rounded-3xl bg-slate-900/50 border border-white/5">
                                     <h4 className="font-bold text-amber-400 mb-2 flex items-center gap-2">
-                                        <Command size={16} /> Persistent Logic
+                                        <Database size={16} /> SQLite Database Persistence
                                     </h4>
-                                    <p className="text-xs text-slate-500">Every reasoning step, tool call, and decision is persisted locally. Refreshing your browser will <strong>not</strong> lose your complex agent tasks.</p>
+                                    <p className="text-xs text-slate-500">Every reasoning step, task state, and audit log is persisted locally inside <code>yodaman.db</code>. If SQLite is not supported, the engine automatically falls back to JSON files.</p>
+                                </div>
+                                <div className="p-6 rounded-3xl bg-slate-900/50 border border-white/5">
+                                    <h4 className="font-bold text-sky-400 mb-2 flex items-center gap-2">
+                                        <Laptop size={16} /> System Tray Controls
+                                    </h4>
+                                    <p className="text-xs text-slate-500">The Electron app runs in the system tray, allowing you to show/hide the app window, copy pairing links, restart backend services, or quit easily.</p>
+                                </div>
+                                <div className="p-6 rounded-3xl bg-slate-900/50 border border-white/5">
+                                    <h4 className="font-bold text-purple-400 mb-2 flex items-center gap-2">
+                                        <Trash2 size={16} /> Purging History & Audit Logs
+                                    </h4>
+                                    <p className="text-xs text-slate-500">Use the UI buttons or VS Code action menus to clear task history and audit logs. This invokes the secure <code>DELETE /api/agent/tasks</code> and <code>DELETE /api/audit</code> endpoints.</p>
                                 </div>
                             </div>
                         </div>
@@ -118,7 +129,6 @@ export default function ManualWindow() {
                         </div>
                     </section>
                 </div>
-
 
                 <footer className="mt-32 pt-12 border-t border-white/5 text-center">
                     <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-600">
