@@ -2,9 +2,10 @@
   "name": "vscode-yodaman",
   "displayName": "YodaMan",
   "description": "Editor-native access to the YodaMan local agent runtime.",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "publisher": "yodaman",
   "license": "MIT",
+  "icon": "media/logo.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Yoda-Man/yodaman.git",
