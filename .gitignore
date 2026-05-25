@@ -51,6 +51,7 @@ website/
 
 # Roadmaps/docs
 docs/ecosystem-roadmap.md
+docs/audit.md
 
 # Database files
 yodaman.db
