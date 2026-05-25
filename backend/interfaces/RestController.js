@@ -7,8 +7,11 @@ const os = require('os');
 const contextEngine = require('../infrastructure/ContextEngine');
 const watcherService = require('../infrastructure/FileSystemWatcher');
 const toolBox = require('../infrastructure/ToolBox');
+const searchRouter = require('../services/searchRouter');
+const chatHandler = require('../services/chatHandler');
+
+
 const auditLog = require('../infrastructure/AuditLog');
-const pairingService = require('../infrastructure/PairingService');
 
 const multer = require('multer');
 
@@ -17,6 +20,17 @@ const queueService = require('../core/QueueService');
 const agentEngine = require('../core/AgentReasoningEngine');
 
 const router = express.Router();
+
+// New endpoint to set query mode
+router.post('/mode', (req, res) => {
+  const { mode, projectId } = req.body;
+  try {
+    chatHandler.setMode(mode);
+    res.json({ ok: true, mode });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
 const PLUGINS_DIR = path.resolve(__dirname, '../../plugins');
 
@@ -154,7 +168,10 @@ router.delete('/sessions', (req, res) => {
 
 
 router.post('/ask', async (req, res) => {
-    const { question, projectId } = req.body;
+    const { question, projectId, mode } = req.body;
+    if (mode) {
+        chatHandler.setMode(mode);
+    }
     if (!question) return res.status(400).send('Question is required');
     
     if (projectId) {
@@ -301,19 +318,7 @@ router.delete('/plugins/:name', (req, res) => {
 });
 
 
-router.get('/search', async (req, res) => {
-
-
-    const { query, project, top = 10 } = req.query;
-    if (!query) return res.status(400).send('Query is required');
-
-    try {
-        const results = await toolBox.searchCode({ query, project, top });
-        res.json(results);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+router.use('/search', searchRouter);
 
 // --- System Status ---
 

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Terminal, Bot, User, AlertCircle, Sparkles, Command } from 'lucide-react'
 import { api } from '../api/api'
+import ModeToggle from './ModeToggle'
 
 export default function ChatWindow({ selectedProject }) {
     const [messages, setMessages] = useState([])
@@ -8,10 +9,22 @@ export default function ChatWindow({ selectedProject }) {
     const [isGenerating, setIsGenerating] = useState(false)
     const [isAgentMode, setIsAgentMode] = useState(false)
     const [agentSteps, setAgentSteps] = useState([])
+    const [mode, setMode] = useState(() => {
+        // Load from localStorage or default to 'code'
+        try { return localStorage.getItem('yodamanMode') || 'code' }
+        catch { return 'code' }
+    })
     const messagesEndRef = useRef(null)
-
-
     const [pendingApproval, setPendingApproval] = useState(null)
+
+    const handleModeChange = (newMode) => {
+        setMode(newMode)
+        try { localStorage.setItem('yodamanMode', newMode) } catch (e) {}
+        if (selectedProject) {
+            api.setMode(newMode, selectedProject.id).catch(console.error)
+        }
+    }
+
 
     const handleApproval = async (approved) => {
         if (!pendingApproval) return
@@ -88,7 +101,7 @@ export default function ChatWindow({ selectedProject }) {
                     }
                 })
             } else {
-                const data = await api.ask(inputText, selectedProject.id)
+                const data = await api.ask(inputText, selectedProject.id, mode)
                 const aiMsg = { 
                     role: 'ai', 
                     content: data.answer || 'I couldn\'t find a specific answer in the indexed files.', 
@@ -166,6 +179,7 @@ export default function ChatWindow({ selectedProject }) {
                         <div className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
                         <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Synced</span>
                     </div>
+                    <ModeToggle mode={mode} onChange={handleModeChange} />
                 </div>
             </div>
 

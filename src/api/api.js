@@ -76,11 +76,13 @@ export const api = {
         return res.json();
     },
 
-    async ask(question, projectId) {
+    async ask(question, projectId, mode) {
+        const body = { question, projectId };
+        if (mode) body.mode = mode;
         const res = await fetch(`${API_BASE}/ask`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question, projectId })
+            body: JSON.stringify(body)
         });
         return res.json();
     },
@@ -165,4 +167,12 @@ export const api = {
         });
         return res.json();
     }
-};
+    async setMode(mode) {
+        const res = await fetch(`${API_BASE}/mode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode })
+        });
+        return res.json();
+    },
+    };

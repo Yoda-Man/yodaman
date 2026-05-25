@@ -83,10 +83,19 @@ function createYodaManClient(runtimeUrl, options = {}) {
         projects() {
             return request(API_PATHS.projects);
         },
-        ask(question, projectId) {
+        ask(question, projectId, mode) {
+            const body = { question, projectId };
+            if (mode) body.mode = mode;
             return request(API_PATHS.ask, {
                 method: 'POST',
-                body: JSON.stringify({ question, projectId })
+                body: JSON.stringify(body)
+            });
+        },
+        // Set query mode globally (optional endpoint)
+        setMode(mode) {
+            return request('/mode', {
+                method: 'POST',
+                body: JSON.stringify({ mode })
             });
         },
         search(query, project, top) {

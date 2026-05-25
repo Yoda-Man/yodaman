@@ -1,4 +1,5 @@
 const vscode = require('vscode');
+// Access the client singleton
 const { createYodaManClient } = require('../../../shared/yodamanClient');
 
 let output;
@@ -7,6 +8,7 @@ let sidebarProvider;
 let activeTaskId = null;
 let runtimeTerminal = null;
 let runtimeAvailable = false;
+let storedMode = 'code'; // default mode
 let lastStatus = null;
 
 function getRuntimeUrl() {
@@ -22,9 +24,24 @@ function getWorkspaceProjectId() {
     return folder ? folder.uri.fsPath : undefined;
 }
 
-function getClient() {
-    return createYodaManClient(getRuntimeUrl());
+async function switchMode() {
+    const selection = await vscode.window.showQuickPick([
+        { label: 'Code', description: 'Answer from code' },
+        { label: 'Documentation', description: 'Answer from docs' }
+    ], {
+        placeHolder: 'Select query mode',
+        canPickMany: false,
+        ignoreFocusOut: true
+    });
+    if (!selection) return;
+    const mode = selection.label.toLowerCase();
+    storedMode = mode;
+    await context.globalState.update('yodamanMode', mode);
+    await getClient().setMode(mode);
+    vscode.window.showInformationMessage(`YodaMan query mode set to ${mode}`);
 }
+
+function getClient() { return createYodaManClient(getRuntimeUrl()); }
 
 async function checkStatus(showMessage = true) {
     try {
@@ -77,12 +94,26 @@ async function askWorkspace() {
 
     if (!question) return;
 
+    // Prompt user to select mode if not already set
+    const mode = await vscode.window.showQuickPick([
+        { label: 'Code', description: 'Answer from code context' },
+        { label: 'Documentation', description: 'Answer from docs and comments' }
+    ], {
+        placeHolder: 'Select query mode',
+        canPickMany: false,
+        ignoreFocusOut: true
+    }).then(item => item ? item.label.toLowerCase() : storedMode);
+
+    // Persist selected mode
+    storedMode = mode;
+    context.globalState.update('yodamanMode', mode);
+    await getClient().setMode(mode);
+
     output.show(true);
-    output.appendLine(`> ${question}`);
+    output.appendLine(`> ${question} (mode: ${mode})`);
 
     try {
-        const result = await getClient().ask(question, getWorkspaceProjectId());
-
+        const result = await getClient().ask(question, getWorkspaceProjectId(), mode);
         output.appendLine(result.answer || JSON.stringify(result, null, 2));
     } catch (error) {
         output.appendLine(`[error] ${error.message}`);
@@ -95,6 +126,11 @@ async function runAgentTask() {
         title: 'Run YodaMan Agent Task',
         prompt: 'Describe the coding task YodaMan should work on'
     });
+    // Use stored mode for agent tasks as well
+    const mode = storedMode;
+    if (mode) {
+        await getClient().setMode(mode);
+    }
 
     if (!task) return;
 
@@ -103,6 +139,7 @@ async function runAgentTask() {
 
     try {
         await getClient().runAgentTask(task, getWorkspaceProjectId(), handleAgentEvent);
+        // mode already set via setMode before
     } catch (error) {
         output.appendLine(`[error] ${error.message}`);
         vscode.window.showErrorMessage(`YodaMan agent task failed: ${error.message}`);
@@ -463,6 +500,8 @@ class SidebarItem extends vscode.TreeItem {
 }
 
 function activate(context) {
+    // Retrieve stored mode or default to 'code'
+    storedMode = context.globalState.get('yodamanMode') || 'code';
     output = vscode.window.createOutputChannel('YodaMan');
     sidebarProvider = new YodaManSidebarProvider();
     statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -483,8 +522,12 @@ function activate(context) {
         vscode.commands.registerCommand('yodaman.reindexWorkspace', reindexWorkspace),
         vscode.commands.registerCommand('yodaman.viewTaskDetails', viewTaskDetails),
         vscode.commands.registerCommand('yodaman.clearTasks', clearTasks),
-        vscode.commands.registerCommand('yodaman.clearAudit', clearAudit)
+        vscode.commands.registerCommand('yodaman.clearAudit', clearAudit),
+        // New command to switch query mode
+        vscode.commands.registerCommand('yodaman.switchMode', switchMode)
     );
+
+    // Store mode in global state for persistence (already handled on changes)
 
     contextStorageUri.value = context.globalStorageUri;
     checkStatus(false);
