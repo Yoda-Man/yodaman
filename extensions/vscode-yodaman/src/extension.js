@@ -10,6 +10,7 @@ let runtimeTerminal = null;
 let runtimeAvailable = false;
 let storedMode = 'code'; // default mode
 let lastStatus = null;
+let extensionContext = null;
 
 function getRuntimeUrl() {
     return vscode.workspace.getConfiguration('yodaman').get('runtimeUrl').replace(/\/$/, '');
@@ -26,22 +27,50 @@ function getWorkspaceProjectId() {
 
 async function switchMode() {
     const selection = await vscode.window.showQuickPick([
-        { label: 'Code', description: 'Answer from code' },
-        { label: 'Documentation', description: 'Answer from docs' }
+        { label: 'Code', value: 'code', description: 'Answer from code' },
+        { label: 'Documentation', value: 'doc', description: 'Answer from docs' }
     ], {
         placeHolder: 'Select query mode',
         canPickMany: false,
         ignoreFocusOut: true
     });
     if (!selection) return;
-    const mode = selection.label.toLowerCase();
+    const mode = selection.value;
     storedMode = mode;
-    await context.globalState.update('yodamanMode', mode);
+    await extensionContext.globalState.update('yodamanMode', mode);
+    if (!await ensureRuntimeAvailable()) return;
     await getClient().setMode(mode);
     vscode.window.showInformationMessage(`YodaMan query mode set to ${mode}`);
 }
 
 function getClient() { return createYodaManClient(getRuntimeUrl()); }
+
+function friendlyRuntimeMessage(error) {
+    return `YodaMan runtime is not available at ${getRuntimeUrl()}. Start the desktop app or run "${getRuntimeCommand()}" from a terminal, then try again. Details: ${error.message}`;
+}
+
+async function ensureRuntimeAvailable() {
+    const status = await checkStatus(false);
+    if (status) return true;
+
+    const choice = await vscode.window.showWarningMessage(
+        `YodaMan runtime is offline. Start it now with "${getRuntimeCommand()}"?`,
+        'Start Runtime',
+        'Open Settings'
+    );
+
+    if (choice === 'Open Settings') {
+        await vscode.commands.executeCommand('workbench.action.openSettings', 'yodaman.runtime');
+        return false;
+    }
+
+    if (choice === 'Start Runtime') {
+        await startRuntime();
+        vscode.window.showInformationMessage('YodaMan runtime start requested. Try again once the status indicator turns green.');
+    }
+
+    return false;
+}
 
 async function checkStatus(showMessage = true) {
     try {
@@ -61,7 +90,7 @@ async function checkStatus(showMessage = true) {
         statusBar.text = '$(warning) YodaMan';
         statusBar.tooltip = `YodaMan runtime unavailable: ${error.message}`;
         if (showMessage) {
-            vscode.window.showWarningMessage(`YodaMan runtime unavailable: ${error.message}`);
+            vscode.window.showWarningMessage(friendlyRuntimeMessage(error));
         }
         refreshSidebar();
         return null;
@@ -93,20 +122,21 @@ async function askWorkspace() {
     });
 
     if (!question) return;
+    if (!await ensureRuntimeAvailable()) return;
 
     // Prompt user to select mode if not already set
     const mode = await vscode.window.showQuickPick([
-        { label: 'Code', description: 'Answer from code context' },
-        { label: 'Documentation', description: 'Answer from docs and comments' }
+        { label: 'Code', value: 'code', description: 'Answer from code context' },
+        { label: 'Documentation', value: 'doc', description: 'Answer from docs and comments' }
     ], {
         placeHolder: 'Select query mode',
         canPickMany: false,
         ignoreFocusOut: true
-    }).then(item => item ? item.label.toLowerCase() : storedMode);
+    }).then(item => item ? item.value : storedMode);
 
     // Persist selected mode
     storedMode = mode;
-    context.globalState.update('yodamanMode', mode);
+    extensionContext.globalState.update('yodamanMode', mode);
     await getClient().setMode(mode);
 
     output.show(true);
@@ -126,13 +156,14 @@ async function runAgentTask() {
         title: 'Run YodaMan Agent Task',
         prompt: 'Describe the coding task YodaMan should work on'
     });
+    if (!task) return;
+    if (!await ensureRuntimeAvailable()) return;
+
     // Use stored mode for agent tasks as well
     const mode = storedMode;
     if (mode) {
         await getClient().setMode(mode);
     }
-
-    if (!task) return;
 
     output.show(true);
     output.appendLine(`\n[task] ${task}`);
@@ -195,6 +226,7 @@ async function searchWorkspace() {
     });
 
     if (!query) return;
+    if (!await ensureRuntimeAvailable()) return;
 
     output.show(true);
     output.appendLine(`\n[search] ${query}`);
@@ -215,6 +247,7 @@ async function reindexWorkspace() {
         vscode.window.showWarningMessage('Open a workspace folder before reindexing.');
         return;
     }
+    if (!await ensureRuntimeAvailable()) return;
 
     try {
         const result = await getClient().reindex(projectId);
@@ -293,6 +326,7 @@ async function cancelAgentTask() {
     }
 
     try {
+        if (!await ensureRuntimeAvailable()) return;
         await getClient().cancel(activeTaskId);
         output.appendLine(`[cancel] requested for ${activeTaskId}`);
         refreshSidebar();
@@ -303,6 +337,7 @@ async function cancelAgentTask() {
 
 async function clearTasks() {
     try {
+        if (!await ensureRuntimeAvailable()) return;
         const choice = await vscode.window.showWarningMessage(
             'Are you sure you want to clear the entire task history?',
             { modal: true },
@@ -321,6 +356,7 @@ async function clearTasks() {
 
 async function clearAudit() {
     try {
+        if (!await ensureRuntimeAvailable()) return;
         const choice = await vscode.window.showWarningMessage(
             'Are you sure you want to clear all system audit logs?',
             { modal: true },
@@ -355,6 +391,7 @@ async function viewTaskDetails(task) {
     if (task.error) output.appendLine(`Error: ${task.error}`);
 
     try {
+        if (!await ensureRuntimeAvailable()) return;
         const events = await getClient().taskEvents(task.taskId);
         if (events && events.length > 0) {
             output.appendLine('\nTask Events:');
@@ -500,6 +537,7 @@ class SidebarItem extends vscode.TreeItem {
 }
 
 function activate(context) {
+    extensionContext = context;
     // Retrieve stored mode or default to 'code'
     storedMode = context.globalState.get('yodamanMode') || 'code';
     output = vscode.window.createOutputChannel('YodaMan');

@@ -2,6 +2,40 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.1.9] - 2026-05-26
+
+### Added
+- Desktop runtime recovery screen with clear next steps instead of quitting when the local service cannot start.
+- Runtime retry/restart flow for the desktop app while keeping the tray and menu available.
+- Friendlier runtime-unavailable messages in the shared client, web chat, VS Code extension, and mobile app.
+
+### Changed
+- Desktop now opens a startup state first, attempts to start the managed runtime, then loads the app when the service is ready.
+- VS Code commands now check runtime availability before ask/search/task/reindex actions and offer to start the configured runtime command.
+- Mobile app now shows an inline runtime notice with pairing guidance when the configured runtime is unreachable.
+
+### Fixed
+- Shared client query-mode calls now target `/api/mode`.
+- Desktop no longer exits immediately on startup service failures.
+
+## [0.1.8] - 2026-05-26
+
+### Added
+- Query mode documentation and API reference for `code` and `doc` flows.
+- Operational runbooks, configuration reference, asset license notes, CODEOWNERS, Dockerfile, and CI workflow.
+- Structured request logging with request IDs and browser-visible `X-Request-Id` correlation.
+- Unit and integration coverage for query classification, documentation preprocessing, search routing, and request validation.
+
+### Changed
+- Browser API client now validates non-2xx responses, parses structured error bodies, and applies configurable request timeouts.
+- Runtime port and frontend API base can now be configured through environment variables.
+- README now documents new capabilities, dependencies, health endpoints, and operations docs.
+
+### Fixed
+- Imported the pairing service in the REST controller so pairing-token enforcement and pairing endpoints work.
+- Added validation for query mode, ask/session payloads, agent task payloads, and workspace paths.
+- Added basic security headers to the Express runtime.
+
 ## [0.1.7] - 2026-05-19
 
 ### Added

@@ -1,119 +1,134 @@
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_YODAMAN_API_BASE || '/api';
+const DEFAULT_TIMEOUT_MS = Number(import.meta.env.VITE_YODAMAN_FETCH_TIMEOUT_MS || 30000);
+
+async function parseResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    const payload = contentType.includes('application/json')
+        ? await response.json()
+        : await response.text();
+
+    if (!response.ok) {
+        const message = typeof payload === 'object' && payload?.error
+            ? payload.error
+            : payload || `Request failed with HTTP ${response.status}`;
+        const error = new Error(message);
+        error.status = response.status;
+        error.payload = payload;
+        throw error;
+    }
+
+    return payload;
+}
+
+async function request(url, options = {}) {
+    const controller = new AbortController();
+    const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        return await parseResponse(response);
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            throw new Error(`Request timed out after ${timeoutMs}ms`);
+        }
+        if (err instanceof TypeError) {
+            throw new Error('YodaMan runtime is not available. Start the desktop app or run "yodaman" from Terminal, then try again.');
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function jsonOptions(method, body) {
+    return {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    };
+}
 
 export const api = {
     async getProjects() {
-        const res = await fetch(`${API_BASE}/projects`);
-        return res.json();
+        return request(`${API_BASE}/projects`);
     },
 
     async addProject(path) {
-        const res = await fetch(`${API_BASE}/projects`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path })
-        });
-        return res.json();
+        return request(`${API_BASE}/projects`, jsonOptions('POST', { path }));
     },
 
     async removeProject(path) {
-        const res = await fetch(`${API_BASE}/projects`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path })
-        });
-        return res.json();
+        return request(`${API_BASE}/projects`, jsonOptions('DELETE', { path }));
     },
 
     async reindex(path) {
-        const res = await fetch(`${API_BASE}/reindex`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path })
-        });
-        return res.json();
+        return request(`${API_BASE}/reindex`, jsonOptions('POST', { path }));
     },
 
     async search(query, project) {
         const url = new URL(`${API_BASE}/search`, window.location.origin);
         url.searchParams.append('query', query);
         if (project) url.searchParams.append('project', project);
-        const res = await fetch(url);
-        return res.json();
+        return request(url);
     },
 
     async getPlugins() {
-        const res = await fetch(`${API_BASE}/plugins`);
-        return res.json();
+        return request(`${API_BASE}/plugins`);
     },
 
     async uploadPlugin(file) {
         const formData = new FormData();
         formData.append('plugin', file);
-        const res = await fetch(`${API_BASE}/plugins`, {
+        return request(`${API_BASE}/plugins`, {
             method: 'POST',
             body: formData
         });
-        return res.json();
     },
 
     async deletePlugin(name) {
-        const res = await fetch(`${API_BASE}/plugins/${encodeURIComponent(name)}`, {
+        return request(`${API_BASE}/plugins/${encodeURIComponent(name)}`, {
             method: 'DELETE'
         });
-        return res.json();
     },
 
     async getSessions(projectId) {
-
-        const res = await fetch(`${API_BASE}/sessions?projectId=${encodeURIComponent(projectId)}`);
-        return res.json();
+        return request(`${API_BASE}/sessions?projectId=${encodeURIComponent(projectId)}`);
     },
 
     async clearSessions(projectId) {
-        const res = await fetch(`${API_BASE}/sessions?projectId=${encodeURIComponent(projectId)}`, {
+        return request(`${API_BASE}/sessions?projectId=${encodeURIComponent(projectId)}`, {
             method: 'DELETE'
         });
-        return res.json();
     },
 
     async ask(question, projectId, mode) {
         const body = { question, projectId };
         if (mode) body.mode = mode;
-        const res = await fetch(`${API_BASE}/ask`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        return res.json();
+        return request(`${API_BASE}/ask`, jsonOptions('POST', body));
     },
 
     async checkHealth(path) {
-        const res = await fetch(`${API_BASE}/check?path=${encodeURIComponent(path)}`);
-        return res.json();
+        return request(`${API_BASE}/check?path=${encodeURIComponent(path)}`);
     },
 
     async getStatus() {
-        const res = await fetch(`${API_BASE}/status`);
-        return res.json();
+        return request(`${API_BASE}/status`);
     },
 
     async getDesktopDiagnostics() {
-        const res = await fetch(`${API_BASE}/desktop/diagnostics`);
-        return res.json();
+        return request(`${API_BASE}/desktop/diagnostics`);
     },
 
     async createPairing(runtimeUrl) {
-        const res = await fetch(`${API_BASE}/pairing`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(runtimeUrl ? { runtimeUrl } : {})
-        });
-        return res.json();
+        return request(`${API_BASE}/pairing`, jsonOptions('POST', runtimeUrl ? { runtimeUrl } : {}));
     },
 
     async getTasks() {
-        const res = await fetch(`${API_BASE}/agent/tasks`);
-        return res.json();
+        return request(`${API_BASE}/agent/tasks`);
     },
 
     async agentTask(task, projectId, onStep) {
@@ -123,6 +138,10 @@ export const api = {
             body: JSON.stringify({ task, projectId })
         });
 
+
+        if (!response.ok) {
+            await parseResponse(response);
+        }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -151,28 +170,14 @@ export const api = {
     },
 
     async approve(taskId, approved) {
-        const res = await fetch(`${API_BASE}/agent/approve`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ taskId, approved })
-        });
-        return res.json();
+        return request(`${API_BASE}/agent/approve`, jsonOptions('POST', { taskId, approved }));
     },
 
     async cancelAgentTask(taskId) {
-        const res = await fetch(`${API_BASE}/agent/cancel`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ taskId })
-        });
-        return res.json();
-    }
-    async setMode(mode) {
-        const res = await fetch(`${API_BASE}/mode`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode })
-        });
-        return res.json();
+        return request(`${API_BASE}/agent/cancel`, jsonOptions('POST', { taskId }));
     },
-    };
+
+    async setMode(mode, projectId) {
+        return request(`${API_BASE}/mode`, jsonOptions('POST', { mode, projectId }));
+    },
+};

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.9
+
+- Align extension package version with the YodaMan `0.1.9` hardening release.
+- Add runtime availability checks before workspace actions.
+- Offer to start the configured runtime command when YodaMan is offline.
+- Improve offline error messages for ask, search, agent task, reindex, and history actions.
+
 ## 0.1.7
 
 - Add TreeView-based sidebar hierarchy (Status & Info, Actions, Recent Tasks).

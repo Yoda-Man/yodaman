@@ -2,7 +2,7 @@
 
 YodaMan is a local-first AI workspace companion for developers. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private runtime.
 
-![Version](https://img.shields.io/badge/Version-0.1.7-gold)
+![Version](https://img.shields.io/badge/Version-0.1.9-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -12,6 +12,8 @@ YodaMan is a local-first AI workspace companion for developers. It connects your
 - **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and approval gates for file changes.
 - **Work where you already are**: Use the web UI, desktop app, CLI package, VS Code extension, and mobile companion surfaces against the same runtime.
 - **Extend the assistant**: Add JavaScript plugins for custom tools while keeping tool activity visible through policy and audit endpoints.
+- **Choose query intent**: Switch between code and documentation modes so answers and search flows match the kind of context you need.
+- **Recover gracefully**: Desktop, web, VS Code, and mobile clients show clear runtime recovery guidance when the local service is unavailable.
 
 ## Core Pillars
 
@@ -41,6 +43,10 @@ npm install -g @contextexpert/cli
 ```
 
 - Ollama, optional but recommended for local model execution
+
+## Dependencies
+
+Runtime dependencies include Express for the local API, React and Vite for the web UI, Context Expert (`ctx`) for workspace intelligence, Chokidar for file watching, Multer for plugin uploads, and Lucide React for UI icons. Development and packaging use Jest, Electron, Electron Builder, Tailwind CSS, PostCSS, Nodemon, Concurrently, and the release smoke-check script.
 
 ## Setup
 
@@ -77,6 +83,25 @@ You can also run the dev command directly:
 npm run dev
 ```
 
+Useful environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `YODAMAN_PORT` | `3090` | Backend runtime port. |
+| `VITE_YODAMAN_API_BASE` | `/api` | Frontend API base path for alternate hosts or proxies. |
+| `VITE_YODAMAN_FETCH_TIMEOUT_MS` | `30000` | Browser request timeout. |
+| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `false` | Requires `X-YodaMan-Token` for non-local API clients when set to `true`. |
+| `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `false` | Allows explicitly trusted unrestricted plugins. |
+
+## Query Modes
+
+YodaMan supports two query modes from the chat toolbar and `/api/mode`:
+
+- `code`: prioritizes source-oriented answers and searches.
+- `doc`: preprocesses Markdown, reST, text, AsciiDoc, and JSDoc into indexable documentation chunks before documentation search.
+
+The selected mode is stored in browser local storage and sent with `/api/ask` requests. See [docs/QUERY_MODE.md](docs/QUERY_MODE.md) for the API contract and troubleshooting notes.
+
 ## Common Commands
 
 ```bash
@@ -96,12 +121,20 @@ Run release smoke checks before packaging:
 npm run release:smoke
 ```
 
+## Operations
+
+Health and support endpoints are available at `/api/status`, `/api/check?path=...`, `/api/desktop/diagnostics`, `/api/policy`, and `/api/audit`. Runtime logs are emitted as structured JSON with request IDs, and responses include `X-Request-Id` for support correlation.
+
+Operational runbooks live in [docs/runbooks.md](docs/runbooks.md). Configuration details live in [docs/configuration.md](docs/configuration.md), and the ecosystem overview is in [docs/ecosystem-architecture.md](docs/ecosystem-architecture.md).
+
 ## Clients
 
 - **Web UI**: React control center for projects, chat, search, plugins, approvals, and status.
 - **Desktop app**: Electron shell for the same control center with desktop packaging.
 - **VS Code extension**: Editor-native status, ask, search, reindex, agent tasks, and diff approval.
 - **Mobile app**: Companion app for pairing, project status, task timelines, approvals, search, and prompts.
+
+The desktop app starts the managed runtime automatically. If the service cannot start, it stays open with a recovery screen, runtime logs, and restart guidance instead of closing unexpectedly.
 
 ## License
 

@@ -73,3 +73,23 @@ Allow intentionally trusted unrestricted plugins:
 ```bash
 YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true npm start
 ```
+
+Change the backend port:
+
+```bash
+YODAMAN_PORT=4090 npm start
+```
+
+Use an alternate API base from the web UI:
+
+```bash
+VITE_YODAMAN_API_BASE=http://localhost:4090/api npm run dev
+```
+
+Tune frontend request timeouts:
+
+```bash
+VITE_YODAMAN_FETCH_TIMEOUT_MS=45000 npm run dev
+```
+
+See `docs/configuration.md` for the full configuration schema and runtime variable reference.

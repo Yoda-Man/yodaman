@@ -1,0 +1,8 @@
+* @Yoda-Man/core-maintainers
+
+/backend/ @Yoda-Man/backend-maintainers
+/src/ @Yoda-Man/frontend-maintainers
+/shared/ @Yoda-Man/protocol-maintainers
+/extensions/vscode-yodaman/ @Yoda-Man/vscode-maintainers
+/docs/ @Yoda-Man/docs-maintainers
+/plugins/ @Yoda-Man/plugin-maintainers

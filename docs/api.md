@@ -30,10 +30,16 @@ Removes a directory from the watched list.
 
 ## Intelligence & AI
 
+### `POST /mode`
+Sets the active query mode. Valid modes are `code` and `doc`.
+
+**Body:** `{ "mode": "doc", "projectId": "/absolute/path/to/project" }`
+**Response:** `{ "ok": true, "mode": "doc", "projectId": "/absolute/path/to/project" }`
+
 ### `POST /ask`
 Queries the AI engine about the current project context.
 
-**Body:** `{ "question": "What does the auth service do?" }`
+**Body:** `{ "question": "What does the auth service do?", "projectId": "/absolute/path/to/project", "mode": "code" }`
 **Response:** `{ "answer": "The auth service handles..." }`
 
 ### `POST /agent/task`
@@ -71,7 +77,17 @@ Returns recent persisted task events for a specific agent task.
 Returns active write approvals that are waiting for a human decision.
 
 ### `GET /search`
-Performs semantic code search.
+Performs semantic search and automatically routes the query as `code` or `doc`.
+
+**Query Params:** `query`, `project` (optional), `top` (default: 10)
+
+### `GET /search/code`
+Forces source-code search.
+
+**Query Params:** `query`, `project` (optional), `top` (default: 10)
+
+### `GET /search/docs`
+Forces documentation preprocessing and documentation search.
 
 **Query Params:** `query`, `project` (optional), `top` (default: 10)
 
@@ -79,6 +95,8 @@ Performs semantic code search.
 
 ### `GET /status`
 Returns real-time system telemetry and AI model information.
+
+Responses include an `X-Request-Id` header. Runtime logs include the same request ID for incident correlation.
 
 ### `GET /policy`
 Returns runtime safety policy details, including allowed workspace roots, blocked command patterns, and plugin permissions.

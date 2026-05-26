@@ -113,7 +113,7 @@ export default function ChatWindow({ selectedProject }) {
             console.error(err)
             setMessages(prev => [...prev, { 
                 role: 'error', 
-                content: 'Network error: Failed to connect to YodaMan backend.', 
+                content: err.message || 'YodaMan runtime is not available. Start the desktop app or run "yodaman" from Terminal, then try again.', 
                 timestamp: new Date() 
             }])
         } finally {

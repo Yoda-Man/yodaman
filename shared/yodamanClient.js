@@ -18,20 +18,35 @@ function normalizeBaseUrl(runtimeUrl) {
     return String(runtimeUrl || '').replace(/\/$/, '');
 }
 
+function runtimeUnavailableMessage(baseUrl, reason) {
+    return [
+        `YodaMan runtime is not available at ${baseUrl || 'the configured URL'}.`,
+        'Start the YodaMan desktop app or run "yodaman" from Terminal, then try again.',
+        reason ? `Details: ${reason}` : ''
+    ].filter(Boolean).join(' ');
+}
+
 async function requestJson(runtimeUrl, path, options = {}) {
     const baseUrl = normalizeBaseUrl(runtimeUrl);
-    const response = await fetch(`${baseUrl}${path}`, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...(options.pairingToken ? { 'X-YodaMan-Token': options.pairingToken } : {}),
-            ...(options.headers || {})
-        }
-    });
+    let response;
+    try {
+        response = await fetch(`${baseUrl}${path}`, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...(options.pairingToken ? { 'X-YodaMan-Token': options.pairingToken } : {}),
+                ...(options.headers || {})
+            }
+        });
+    } catch (error) {
+        throw new Error(runtimeUnavailableMessage(baseUrl, error.message));
+    }
 
     if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `Request failed with ${response.status}`);
+        const contentType = response.headers.get('content-type') || '';
+        const payload = contentType.includes('application/json') ? await response.json() : await response.text();
+        const message = typeof payload === 'object' && payload?.error ? payload.error : payload;
+        throw new Error(message || `YodaMan request failed with HTTP ${response.status}`);
     }
 
     return response.json();
@@ -93,7 +108,7 @@ function createYodaManClient(runtimeUrl, options = {}) {
         },
         // Set query mode globally (optional endpoint)
         setMode(mode) {
-            return request('/mode', {
+            return request('/api/mode', {
                 method: 'POST',
                 body: JSON.stringify({ mode })
             });
@@ -154,14 +169,20 @@ function createYodaManClient(runtimeUrl, options = {}) {
             });
         },
         async runAgentTask(task, projectId, onEvent) {
-            const response = await fetch(`${normalizeBaseUrl(runtimeUrl)}/api/agent/task`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(pairingToken ? { 'X-YodaMan-Token': pairingToken } : {})
-                },
-                body: JSON.stringify({ task, projectId })
-            });
+            const baseUrl = normalizeBaseUrl(runtimeUrl);
+            let response;
+            try {
+                response = await fetch(`${baseUrl}/api/agent/task`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(pairingToken ? { 'X-YodaMan-Token': pairingToken } : {})
+                    },
+                    body: JSON.stringify({ task, projectId })
+                });
+            } catch (error) {
+                throw new Error(runtimeUnavailableMessage(baseUrl, error.message));
+            }
 
             if (!response.ok) {
                 throw new Error(await response.text());

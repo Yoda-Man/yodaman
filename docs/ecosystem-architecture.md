@@ -21,6 +21,33 @@ The current repository uses a clean layered architecture:
 - Core: Agent orchestration and indexing queue services in `backend/core`.
 - Infrastructure: Context Expert CLI wrapper, file watching, session storage, and tool execution in `backend/infrastructure`.
 
+```mermaid
+flowchart LR
+    Web["React Web UI"]
+    Desktop["Electron Desktop Shell"]
+    VSCode["VS Code Extension"]
+    Mobile["Mobile Companion"]
+    CLI["npm CLI"]
+
+    API["Express Runtime API<br/>REST + SSE"]
+    Core["Core Services<br/>Queue + Agent Engine"]
+    Infra["Infrastructure<br/>ctx, watchers, tools, sessions, audit, pairing"]
+    Search["Search Router<br/>code/doc query modes"]
+    Plugins["Plugin Registry<br/>permissions + policy"]
+
+    Web --> API
+    Desktop --> API
+    VSCode --> API
+    Mobile --> API
+    CLI --> API
+    API --> Core
+    API --> Search
+    API --> Infra
+    API --> Plugins
+    Core --> Infra
+    Search --> Infra
+```
+
 The runtime currently exposes:
 
 - `GET /api/projects` for indexed and watched projects.

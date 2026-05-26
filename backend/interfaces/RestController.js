@@ -9,9 +9,9 @@ const watcherService = require('../infrastructure/FileSystemWatcher');
 const toolBox = require('../infrastructure/ToolBox');
 const searchRouter = require('../services/searchRouter');
 const chatHandler = require('../services/chatHandler');
-
-
 const auditLog = require('../infrastructure/AuditLog');
+const pairingService = require('../infrastructure/PairingService');
+const logger = require('../infrastructure/Logger');
 
 const multer = require('multer');
 
@@ -20,19 +20,9 @@ const queueService = require('../core/QueueService');
 const agentEngine = require('../core/AgentReasoningEngine');
 
 const router = express.Router();
-
-// New endpoint to set query mode
-router.post('/mode', (req, res) => {
-  const { mode, projectId } = req.body;
-  try {
-    chatHandler.setMode(mode);
-    res.json({ ok: true, mode });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
 const PLUGINS_DIR = path.resolve(__dirname, '../../plugins');
+const ALLOWED_MODES = new Set(['code', 'doc']);
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -53,6 +43,57 @@ const upload = multer({ storage });
 
 let config = { watchedDirectories: [] };
 
+function jsonError(res, status, message, code) {
+    return res.status(status).json({ error: message, code });
+}
+
+function validateString(value, name, { required = true, max = 4000 } = {}) {
+    if (!required && (value === undefined || value === null || value === '')) return undefined;
+    if (typeof value !== 'string' || value.trim() === '') {
+        const err = new Error(`${name} must be a non-empty string`);
+        err.status = 400;
+        throw err;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length > max) {
+        const err = new Error(`${name} must be ${max} characters or fewer`);
+        err.status = 400;
+        throw err;
+    }
+    return trimmed;
+}
+
+function validateMode(mode, { required = false } = {}) {
+    const value = validateString(mode, 'mode', { required, max: 20 });
+    if (!value) return undefined;
+    if (!ALLOWED_MODES.has(value)) {
+        const err = new Error('mode must be one of: code, doc');
+        err.status = 400;
+        throw err;
+    }
+    return value;
+}
+
+function resolveUserPath(value, name = 'path') {
+    const inputPath = validateString(value, name, { max: 4096 });
+    if (inputPath.includes('\0')) {
+        const err = new Error(`${name} cannot contain null bytes`);
+        err.status = 400;
+        throw err;
+    }
+    const resolved = path.resolve(inputPath);
+    if (!path.isAbsolute(resolved)) {
+        const err = new Error(`${name} must resolve to an absolute path`);
+        err.status = 400;
+        throw err;
+    }
+    return resolved;
+}
+
+function validateProjectId(projectId) {
+    return validateString(projectId, 'projectId', { required: false, max: 4096 });
+}
+
 function isLocalRequest(req) {
     const ip = req.ip || req.socket?.remoteAddress || '';
     return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
@@ -69,6 +110,18 @@ router.use((req, res, next) => {
     }
 
     return next();
+});
+
+router.post('/mode', (req, res) => {
+    try {
+        const mode = validateMode(req.body?.mode, { required: true });
+        const projectId = validateProjectId(req.body?.projectId);
+        chatHandler.setMode(mode);
+        res.json({ ok: true, mode, projectId });
+    } catch (err) {
+        logger.warn('mode_update_rejected', { requestId: req.id, error: err.message });
+        jsonError(res, err.status || 400, err.message, 'invalid_mode');
+    }
 });
 
 function loadLocalConfig() {
@@ -120,9 +173,12 @@ router.get('/projects', async (req, res) => {
 });
 
 router.post('/projects', (req, res) => {
-    const { path: dirPath } = req.body;
-    if (!dirPath) return res.status(400).send('Path is required');
-    const resolvedPath = path.resolve(dirPath);
+    let resolvedPath;
+    try {
+        resolvedPath = resolveUserPath(req.body?.path);
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_path');
+    }
 
     loadLocalConfig();
     if (!config.watchedDirectories.includes(resolvedPath)) {
@@ -137,8 +193,12 @@ router.post('/projects', (req, res) => {
 });
 
 router.delete('/projects', (req, res) => {
-    const { path: dirPath } = req.body;
-    const resolvedPath = path.resolve(dirPath);
+    let resolvedPath;
+    try {
+        resolvedPath = resolveUserPath(req.body?.path);
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_path');
+    }
     
     loadLocalConfig();
     config.watchedDirectories = config.watchedDirectories.filter(p => p !== resolvedPath);
@@ -153,14 +213,22 @@ const sessionStore = require('../infrastructure/SessionStore');
 // --- AI & Intelligence ---
 
 router.get('/sessions', (req, res) => {
-    const { projectId } = req.query;
-    if (!projectId) return res.status(400).send('projectId is required');
+    let projectId;
+    try {
+        projectId = validateString(req.query.projectId, 'projectId', { max: 4096 });
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_project_id');
+    }
     res.json(sessionStore.getMessages(projectId));
 });
 
 router.delete('/sessions', (req, res) => {
-    const { projectId } = req.query;
-    if (!projectId) return res.status(400).send('projectId is required');
+    let projectId;
+    try {
+        projectId = validateString(req.query.projectId, 'projectId', { max: 4096 });
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_project_id');
+    }
     sessionStore.clearSession(projectId);
     res.json({ message: 'Session cleared' });
 });
@@ -168,11 +236,20 @@ router.delete('/sessions', (req, res) => {
 
 
 router.post('/ask', async (req, res) => {
-    const { question, projectId, mode } = req.body;
+    let question;
+    let projectId;
+    let mode;
+    try {
+        question = validateString(req.body?.question, 'question', { max: 20000 });
+        projectId = validateProjectId(req.body?.projectId);
+        mode = validateMode(req.body?.mode);
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_request');
+    }
+
     if (mode) {
         chatHandler.setMode(mode);
     }
-    if (!question) return res.status(400).send('Question is required');
     
     if (projectId) {
         sessionStore.saveMessage(projectId, { role: 'user', content: question, timestamp: new Date() });
@@ -188,13 +265,20 @@ router.post('/ask', async (req, res) => {
         
         res.json({ answer });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        logger.error('ask_failed', err, { requestId: req.id, projectId });
+        res.status(500).json({ error: err.message, requestId: req.id });
     }
 });
 
 router.post('/agent/task', async (req, res) => {
-    const { task, projectId } = req.body;
-    if (!task) return res.status(400).send('Task is required');
+    let task;
+    let projectId;
+    try {
+        task = validateString(req.body?.task, 'task', { max: 20000 });
+        projectId = validateProjectId(req.body?.projectId);
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_request');
+    }
 
     if (projectId) {
         sessionStore.saveMessage(projectId, { role: 'user', content: task, timestamp: new Date() });
@@ -237,6 +321,7 @@ router.post('/agent/task', async (req, res) => {
         sendEvent({ type: 'final_answer', answer: finalAnswer });
         res.end();
     } catch (err) {
+        logger.error('agent_task_failed', err, { requestId: req.id, taskId, projectId });
         sendEvent({ type: 'error', message: err.message });
         res.end();
     }
@@ -246,7 +331,7 @@ router.post('/agent/task', async (req, res) => {
 
 router.post('/agent/approve', (req, res) => {
     const { taskId, approved } = req.body;
-    if (!taskId) return res.status(400).send('taskId is required');
+    if (!taskId) return jsonError(res, 400, 'taskId is required', 'invalid_task_id');
     
     agentEngine.signalApproval(taskId, approved);
     res.json({ message: 'Signal sent' });
@@ -254,7 +339,7 @@ router.post('/agent/approve', (req, res) => {
 
 router.post('/agent/cancel', (req, res) => {
     const { taskId } = req.body;
-    if (!taskId) return res.status(400).send('taskId is required');
+    if (!taskId) return jsonError(res, 400, 'taskId is required', 'invalid_task_id');
 
     agentEngine.cancelTask(taskId);
     res.json({ message: 'Cancellation requested', taskId });
@@ -376,12 +461,17 @@ router.get('/pairing', (req, res) => {
 
 router.post('/pairing/revoke', (req, res) => {
     const { token } = req.body;
-    if (!token) return res.status(400).send('token is required');
+    if (!token) return jsonError(res, 400, 'token is required', 'invalid_token');
     res.json({ revoked: pairingService.revoke(token) });
 });
 
 router.get('/check', async (req, res) => {
-    const { path: dirPath } = req.query;
+    let dirPath;
+    try {
+        dirPath = resolveUserPath(req.query.path);
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_path');
+    }
     try {
         const data = await contextEngine.executeJson(['check', dirPath]);
         res.json(data);
@@ -391,9 +481,13 @@ router.get('/check', async (req, res) => {
 });
 
 router.post('/reindex', (req, res) => {
-    const { path: dirPath } = req.body;
-    if (!dirPath) return res.status(400).send('Path is required');
-    queueService.addToQueue(path.resolve(dirPath));
+    let dirPath;
+    try {
+        dirPath = resolveUserPath(req.body?.path);
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_path');
+    }
+    queueService.addToQueue(dirPath);
     res.json({ message: 'Indexing queued' });
 });
 

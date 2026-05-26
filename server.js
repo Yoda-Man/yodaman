@@ -9,20 +9,33 @@ const watcherService = require('./backend/infrastructure/FileSystemWatcher');
 const queueService = require('./backend/core/QueueService');
 const contextEngine = require('./backend/infrastructure/ContextEngine');
 const apiRoutes = require('./backend/interfaces/RestController');
+const logger = require('./backend/infrastructure/Logger');
 
 
 const app = express();
-const PORT = 3090;
+const PORT = Number(process.env.YODAMAN_PORT || 3090);
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 
 app.use(cors());
 app.use(express.json());
+app.use(logger.requestId);
+app.use(logger.requestLogger);
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:*"
+    );
+    next();
+});
 
 // --- Static File Serving ---
 const DIST_PATH = path.join(__dirname, 'dist');
 if (fs.existsSync(DIST_PATH)) {
     app.use(express.static(DIST_PATH));
-    console.log('📦 Serving production frontend');
+    logger.info('serving_production_frontend');
 }
 
 // --- API Routes ---
@@ -40,7 +53,7 @@ app.get('*', (req, res) => {
 
 // --- Startup Sync ---
 async function initialize() {
-    console.log('🔍 Syncing with YodaMan Engine...');
+    logger.info('startup_sync_started');
     try {
         const cliData = await contextEngine.executeJson(['list']);
 
@@ -58,20 +71,20 @@ async function initialize() {
             config.watchedDirectories = allPaths;
             fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
         }
-        console.log(`✅ Synced ${allPaths.length} projects.`);
+        logger.info('startup_sync_completed', { projects: allPaths.length });
     } catch (err) {
-        console.error('⚠️ Startup sync failed:', err.message);
+        logger.error('startup_sync_failed', err);
     }
 }
 
 app.listen(PORT, async () => {
-    console.log(`🌐 YodaMan Core running at http://localhost:${PORT}`);
+    logger.info('runtime_started', { url: `http://localhost:${PORT}` });
     await initialize();
 });
 
 // --- Graceful Shutdown ---
 function gracefulShutdown() {
-    console.log('\n🛑 Shutting down...');
+    logger.info('runtime_shutdown_started');
     queueService.killActive();
     watcherService.closeAll();
     process.exit(0);

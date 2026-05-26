@@ -1,6 +1,6 @@
 {
   "name": "yodaman",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "description": "Web GUI for Context Expert (ctx)",
   "author": "YodaMan",
   "bin": {
