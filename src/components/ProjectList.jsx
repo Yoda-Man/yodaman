@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Settings, RefreshCw, CheckCircle, Circle, Folder, Plus, CheckCircle2, AlertCircle } from 'lucide-react'
+import { RefreshCw, CheckCircle, Circle, Folder, Plus, CheckCircle2, AlertCircle, Pencil, Save, Trash2, X } from 'lucide-react'
 import { api } from '../api/api'
 
 export default function ProjectList({ 
@@ -8,10 +8,15 @@ export default function ProjectList({
     onSelect, 
     onToggle, 
     onReindex, 
-    onOpenSettings 
+    onOpenSettings,
+    onDelete,
+    onUpdatePath
 }) {
     const [checking, setChecking] = useState(null)
     const [health, setHealth] = useState({})
+    const [editingPath, setEditingPath] = useState(null)
+    const [draftPath, setDraftPath] = useState('')
+    const [savingPath, setSavingPath] = useState(null)
 
     const handleCheck = async (e, path) => {
         e.stopPropagation()
@@ -24,6 +29,47 @@ export default function ProjectList({
         } finally {
             setChecking(false)
         }
+    }
+
+    const startEditing = (e, project) => {
+        e.stopPropagation()
+        setEditingPath(project.path)
+        setDraftPath(project.path)
+    }
+
+    const cancelEditing = (e) => {
+        e.stopPropagation()
+        setEditingPath(null)
+        setDraftPath('')
+    }
+
+    const savePath = async (e, project) => {
+        e.stopPropagation()
+        const nextPath = draftPath.trim()
+        if (!nextPath || nextPath === project.path || savingPath) {
+            setEditingPath(null)
+            return
+        }
+
+        setSavingPath(project.path)
+        try {
+            await onUpdatePath(project.path, nextPath)
+            setHealth(prev => {
+                const next = { ...prev }
+                delete next[project.path]
+                return next
+            })
+            setEditingPath(null)
+            setDraftPath('')
+        } finally {
+            setSavingPath(null)
+        }
+    }
+
+    const deleteProject = async (e, project) => {
+        e.stopPropagation()
+        if (!window.confirm(`Delete workspace "${project.name}" from YodaMan?`)) return
+        await onDelete(project.path)
     }
 
     return (
@@ -100,6 +146,13 @@ export default function ProjectList({
                                     <RefreshCw size={14} className={checking === project.path ? 'animate-spin' : ''} />
                                 </button>
                                 <button 
+                                    onClick={(e) => startEditing(e, project)}
+                                    className="p-1.5 hover:bg-white/10 rounded-lg text-slate-500 hover:text-sky-400"
+                                    title="Update file path"
+                                >
+                                    <Pencil size={14} />
+                                </button>
+                                <button 
                                     onClick={(e) => { e.stopPropagation(); onToggle(project.id); }} 
                                     className={`p-1.5 rounded-lg transition-all ${
                                         project.included 
@@ -109,11 +162,50 @@ export default function ProjectList({
                                 >
                                     {project.included ? <CheckCircle size={16} /> : <Circle size={16} />}
                                 </button>
+                                <button 
+                                    onClick={(e) => deleteProject(e, project)}
+                                    className="p-1.5 hover:bg-rose-400/10 rounded-lg text-slate-500 hover:text-rose-400"
+                                    title="Delete workspace"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
                             </div>
                         </div>
-                        <p className="text-[9px] text-slate-500 font-mono truncate bg-white/[0.02] px-2 py-1 rounded-md">
-                            {project.path}
-                        </p>
+                        {editingPath === project.path ? (
+                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                    value={draftPath}
+                                    onChange={(e) => setDraftPath(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') savePath(e, project)
+                                        if (e.key === 'Escape') cancelEditing(e)
+                                    }}
+                                    className="min-w-0 flex-1 bg-white/[0.04] border border-white/10 rounded-md px-2 py-1 text-[10px] text-slate-200 font-mono outline-none focus:border-indigo-500/50"
+                                    autoFocus
+                                    disabled={savingPath === project.path}
+                                />
+                                <button
+                                    onClick={(e) => savePath(e, project)}
+                                    className="p-1.5 text-emerald-400 hover:bg-emerald-400/10 rounded-md"
+                                    title="Save path"
+                                    disabled={savingPath === project.path}
+                                >
+                                    <Save size={13} />
+                                </button>
+                                <button
+                                    onClick={cancelEditing}
+                                    className="p-1.5 text-slate-500 hover:text-slate-200 hover:bg-white/10 rounded-md"
+                                    title="Cancel"
+                                    disabled={savingPath === project.path}
+                                >
+                                    <X size={13} />
+                                </button>
+                            </div>
+                        ) : (
+                            <p className="text-[9px] text-slate-500 font-mono truncate bg-white/[0.02] px-2 py-1 rounded-md">
+                                {project.path}
+                            </p>
+                        )}
                     </div>
                 ))}
             </div>
@@ -131,5 +223,4 @@ export default function ProjectList({
         </div>
     )
 }
-
 

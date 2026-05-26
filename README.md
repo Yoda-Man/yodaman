@@ -2,7 +2,7 @@
 
 YodaMan is a local-first AI workspace companion for developers. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private runtime.
 
-![Version](https://img.shields.io/badge/Version-0.1.9-gold)
+![Version](https://img.shields.io/badge/Version-0.2.0-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan

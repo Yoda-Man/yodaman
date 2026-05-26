@@ -8,9 +8,11 @@ This is the first editor-native client for the YodaMan runtime.
 - Starts the runtime with the configured `yodaman.runtimeCommand`.
 - Shows runtime availability in the status bar.
 - Adds a YodaMan Activity Bar view with runtime, workspace, task state, and quick actions.
+- Adds workspaces by browsing for a folder, pasting an absolute path, or registering the current VS Code workspace.
 - Runs workspace questions through `/api/ask`.
 - Searches the workspace through `/api/search`.
 - Queues workspace reindexing through `/api/reindex`.
+- Opens runtime logs and index queue state from `/api/logs`.
 - Runs agent tasks through `/api/agent/task`.
 - Streams task events into a `YodaMan` output channel.
 - Opens write proposals as VS Code diffs against the real target file when it exists.
@@ -41,6 +43,9 @@ Task state and event history now come from the persisted runtime task history, s
 - `YodaMan: Start Local Runtime`
 - `YodaMan: Ask About Workspace`
 - `YodaMan: Search Workspace`
+- `YodaMan: Add Workspace`
+- `YodaMan: Add Workspace From Path`
 - `YodaMan: Reindex Workspace`
+- `YodaMan: Open Runtime Logs`
 - `YodaMan: Run Agent Task`
 - `YodaMan: Cancel Active Agent Task`

@@ -65,6 +65,10 @@ export const api = {
         return request(`${API_BASE}/projects`, jsonOptions('DELETE', { path }));
     },
 
+    async updateProjectPath(path, nextPath) {
+        return request(`${API_BASE}/projects`, jsonOptions('PUT', { path, nextPath }));
+    },
+
     async reindex(path) {
         return request(`${API_BASE}/reindex`, jsonOptions('POST', { path }));
     },
@@ -121,6 +125,10 @@ export const api = {
 
     async getDesktopDiagnostics() {
         return request(`${API_BASE}/desktop/diagnostics`);
+    },
+
+    async getLogs(limit = 200) {
+        return request(`${API_BASE}/logs?limit=${encodeURIComponent(limit)}`);
     },
 
     async createPairing(runtimeUrl) {

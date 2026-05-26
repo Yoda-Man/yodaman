@@ -259,6 +259,85 @@ async function reindexWorkspace() {
     }
 }
 
+async function addWorkspace() {
+    if (!await ensureRuntimeAvailable()) return;
+
+    const currentWorkspace = getWorkspaceProjectId();
+    const choices = [
+        { label: 'Browse Folder', value: 'browse', description: 'Choose a local folder with the native picker' },
+        { label: 'Paste Path', value: 'paste', description: 'Enter an absolute workspace path manually' }
+    ];
+
+    if (currentWorkspace) {
+        choices.unshift({
+            label: 'Use Current Workspace',
+            value: 'current',
+            description: currentWorkspace
+        });
+    }
+
+    const selected = await vscode.window.showQuickPick(choices, {
+        title: 'Add YodaMan Workspace',
+        placeHolder: 'Choose how to add a workspace',
+        ignoreFocusOut: true
+    });
+    if (!selected) return;
+
+    let workspacePath;
+    if (selected.value === 'current') {
+        workspacePath = currentWorkspace;
+    } else if (selected.value === 'browse') {
+        const picked = await vscode.window.showOpenDialog({
+            title: 'Choose YodaMan Workspace Folder',
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: 'Add Workspace'
+        });
+        workspacePath = picked && picked[0]?.fsPath;
+    } else {
+        workspacePath = await vscode.window.showInputBox({
+            title: 'Add YodaMan Workspace',
+            prompt: 'Paste an absolute repository path',
+            placeHolder: '/Users/dev/project',
+            ignoreFocusOut: true
+        });
+    }
+
+    if (!workspacePath) return;
+
+    try {
+        const result = await getClient().addProject(workspacePath.trim());
+        output.appendLine(`[workspace:add] ${result.path || workspacePath}`);
+        vscode.window.showInformationMessage(`YodaMan workspace added: ${result.path || workspacePath}`);
+        refreshSidebar();
+    } catch (error) {
+        output.appendLine(`[error] ${error.message}`);
+        vscode.window.showErrorMessage(`YodaMan add workspace failed: ${error.message}`);
+    }
+}
+
+async function addWorkspaceFromPath() {
+    if (!await ensureRuntimeAvailable()) return;
+    const workspacePath = await vscode.window.showInputBox({
+        title: 'Add YodaMan Workspace Path',
+        prompt: 'Paste an absolute repository path',
+        placeHolder: '/Users/dev/project',
+        ignoreFocusOut: true
+    });
+    if (!workspacePath) return;
+
+    try {
+        const result = await getClient().addProject(workspacePath.trim());
+        output.appendLine(`[workspace:add] ${result.path || workspacePath}`);
+        vscode.window.showInformationMessage(`YodaMan workspace added: ${result.path || workspacePath}`);
+        refreshSidebar();
+    } catch (error) {
+        output.appendLine(`[error] ${error.message}`);
+        vscode.window.showErrorMessage(`YodaMan add workspace failed: ${error.message}`);
+    }
+}
+
 async function reviewWriteProposal(event) {
     const params = event.params || {};
     const fileName = params.filePath ? params.filePath.split(/[\\/]/).pop() : 'proposal.txt';
@@ -373,6 +452,30 @@ async function clearAudit() {
     }
 }
 
+function formatRuntimeLog(entry) {
+    const meta = { ...entry };
+    delete meta.timestamp;
+    delete meta.level;
+    delete meta.message;
+    const detail = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+    return `[${entry.timestamp}] ${String(entry.level || '').toUpperCase()} ${entry.message}${detail}`;
+}
+
+async function openLogs() {
+    try {
+        if (!await ensureRuntimeAvailable()) return;
+        const payload = await getClient().logs(300);
+        output.show(true);
+        output.appendLine('\n=== YodaMan Runtime Logs ===');
+        output.appendLine(`Queue: ${JSON.stringify(payload.queue || {}, null, 2)}`);
+        output.appendLine('');
+        (payload.logs || []).forEach((entry) => output.appendLine(formatRuntimeLog(entry)));
+        output.appendLine('============================');
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to load YodaMan logs: ${error.message}`);
+    }
+}
+
 function refreshSidebar() {
     if (sidebarProvider) {
         sidebarProvider.refresh();
@@ -462,7 +565,10 @@ class YodaManSidebarProvider {
                 SidebarItem.action('Ask Workspace', 'comment-discussion', 'yodaman.askWorkspace'),
                 SidebarItem.action('Run Agent Task', 'sparkle', 'yodaman.runAgentTask'),
                 SidebarItem.action('Search Workspace', 'search', 'yodaman.searchWorkspace'),
+                SidebarItem.action('Add Workspace', 'folder-opened', 'yodaman.addWorkspace'),
+                SidebarItem.action('Paste Workspace Path', 'clippy', 'yodaman.addWorkspaceFromPath'),
                 SidebarItem.action('Reindex Workspace', 'refresh', 'yodaman.reindexWorkspace'),
+                SidebarItem.action('Open Logs', 'output', 'yodaman.openLogs'),
                 SidebarItem.action('Start Runtime', 'terminal', 'yodaman.startRuntime'),
                 SidebarItem.action('Cancel Active Task', 'circle-slash', 'yodaman.cancelAgentTask'),
                 SidebarItem.action('Clear Task History', 'trash', 'yodaman.clearTasks'),
@@ -557,7 +663,10 @@ function activate(context) {
         vscode.commands.registerCommand('yodaman.runAgentTask', runAgentTask),
         vscode.commands.registerCommand('yodaman.cancelAgentTask', cancelAgentTask),
         vscode.commands.registerCommand('yodaman.searchWorkspace', searchWorkspace),
+        vscode.commands.registerCommand('yodaman.addWorkspace', addWorkspace),
+        vscode.commands.registerCommand('yodaman.addWorkspaceFromPath', addWorkspaceFromPath),
         vscode.commands.registerCommand('yodaman.reindexWorkspace', reindexWorkspace),
+        vscode.commands.registerCommand('yodaman.openLogs', openLogs),
         vscode.commands.registerCommand('yodaman.viewTaskDetails', viewTaskDetails),
         vscode.commands.registerCommand('yodaman.clearTasks', clearTasks),
         vscode.commands.registerCommand('yodaman.clearAudit', clearAudit),

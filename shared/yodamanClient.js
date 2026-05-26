@@ -98,6 +98,12 @@ function createYodaManClient(runtimeUrl, options = {}) {
         projects() {
             return request(API_PATHS.projects);
         },
+        addProject(path) {
+            return request(API_PATHS.projects, {
+                method: 'POST',
+                body: JSON.stringify({ path })
+            });
+        },
         ask(question, projectId, mode) {
             const body = { question, projectId };
             if (mode) body.mode = mode;
@@ -151,6 +157,9 @@ function createYodaManClient(runtimeUrl, options = {}) {
         },
         audit(limit = 25) {
             return request(`${API_PATHS.audit}?limit=${encodeURIComponent(limit)}`);
+        },
+        logs(limit = 200) {
+            return request(`/api/logs?limit=${encodeURIComponent(limit)}`);
         },
         clearTasks() {
             return request(API_PATHS.tasks, {

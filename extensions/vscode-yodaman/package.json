@@ -2,7 +2,7 @@
   "name": "vscode-yodaman",
   "displayName": "YodaMan",
   "description": "Editor-native access to the YodaMan local agent runtime.",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "publisher": "yodaman",
   "license": "MIT",
   "icon": "media/logo.png",
@@ -25,7 +25,10 @@
     "onCommand:yodaman.runAgentTask",
     "onCommand:yodaman.cancelAgentTask",
     "onCommand:yodaman.searchWorkspace",
+    "onCommand:yodaman.addWorkspace",
+    "onCommand:yodaman.addWorkspaceFromPath",
     "onCommand:yodaman.reindexWorkspace",
+    "onCommand:yodaman.openLogs",
     "onCommand:yodaman.clearTasks",
     "onCommand:yodaman.clearAudit",
     "onView:yodaman.sidebar"
@@ -73,8 +76,20 @@
         "title": "YodaMan: Search Workspace"
       },
       {
+        "command": "yodaman.addWorkspace",
+        "title": "YodaMan: Add Workspace"
+      },
+      {
+        "command": "yodaman.addWorkspaceFromPath",
+        "title": "YodaMan: Add Workspace From Path"
+      },
+      {
         "command": "yodaman.reindexWorkspace",
         "title": "YodaMan: Reindex Workspace"
+      },
+      {
+        "command": "yodaman.openLogs",
+        "title": "YodaMan: Open Runtime Logs"
       },
       {
         "command": "yodaman.clearTasks",
@@ -123,7 +138,16 @@
           "command": "yodaman.searchWorkspace"
         },
         {
+          "command": "yodaman.addWorkspace"
+        },
+        {
+          "command": "yodaman.addWorkspaceFromPath"
+        },
+        {
           "command": "yodaman.reindexWorkspace"
+        },
+        {
+          "command": "yodaman.openLogs"
         },
         {
           "command": "yodaman.clearTasks"

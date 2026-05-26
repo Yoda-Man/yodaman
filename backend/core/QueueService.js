@@ -1,4 +1,5 @@
 const contextEngine = require('../infrastructure/ContextEngine');
+const logger = require('../infrastructure/Logger');
 
 /**
  * QueueService (Core Layer)
@@ -20,8 +21,11 @@ class QueueService {
     addToQueue(directoryPath) {
         if (!this.queue.includes(directoryPath)) {
             console.log(`[Queue] Adding to queue: ${directoryPath}`);
+            logger.info('index_queue_added', { path: directoryPath, queueLength: this.queue.length + 1 });
             this.queue.push(directoryPath);
             this.processNext();
+        } else {
+            logger.info('index_queue_duplicate_ignored', { path: directoryPath });
         }
     }
 
@@ -35,6 +39,7 @@ class QueueService {
         const targetDir = this.queue.shift();
 
         console.log(`[Queue] 🏗️ Starting index for: ${targetDir}`);
+        logger.info('index_started', { path: targetDir });
         
         try {
             // Using spawn from the ContextEngine (which I should add a method for if needed, or use execute)
@@ -45,21 +50,31 @@ class QueueService {
             this.activeProcess = spawn('ctx', ['index', targetDir]);
 
             this.activeProcess.stdout.on('data', (data) => {
-                process.stdout.write(`[ctx]: ${data}`);
+                const text = data.toString();
+                process.stdout.write(`[ctx]: ${text}`);
+                logger.info('ctx_index_stdout', { path: targetDir, output: text.trim() });
             });
 
             this.activeProcess.stderr.on('data', (data) => {
-                process.stderr.write(`[ctx-error]: ${data}`);
+                const text = data.toString();
+                process.stderr.write(`[ctx-error]: ${text}`);
+                logger.warn('ctx_index_stderr', { path: targetDir, output: text.trim() });
             });
 
             this.activeProcess.on('close', (code) => {
                 console.log(`[Queue] ✅ Finished indexing ${targetDir} (Exit Code: ${code})`);
+                if (code === 0) {
+                    logger.info('index_completed', { path: targetDir, exitCode: code });
+                } else {
+                    logger.error('index_failed', new Error(`ctx index exited with code ${code}`), { path: targetDir, exitCode: code });
+                }
                 this.activeProcess = null;
                 this.isProcessing = false;
                 this.processNext(); // Recursive call to process next item
             });
         } catch (err) {
             console.error(`[Queue] Failed to start indexing for ${targetDir}:`, err.message);
+            logger.error('index_start_failed', err, { path: targetDir });
             this.isProcessing = false;
             this.processNext();
         }
@@ -71,8 +86,19 @@ class QueueService {
     killActive() {
         if (this.activeProcess) {
             console.log('[Queue] Killing active indexing process...');
+            logger.warn('index_process_killed');
             this.activeProcess.kill();
         }
+    }
+
+    getStatus() {
+        return {
+            isProcessing: this.isProcessing,
+            queue: [...this.queue],
+            active: this.activeProcess ? {
+                pid: this.activeProcess.pid
+            } : null
+        };
     }
 }
 

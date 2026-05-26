@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const entries = [];
+const MAX_ENTRIES = 500;
 
 function now() {
     return new Date().toISOString();
@@ -18,6 +20,9 @@ function write(level, message, meta = {}) {
         message,
         ...meta
     };
+    entries.push(payload);
+    if (entries.length > MAX_ENTRIES) entries.shift();
+
     const line = JSON.stringify(payload);
     if (level === 'error') {
         console.error(line);
@@ -51,6 +56,10 @@ function requestLogger(req, res, next) {
 module.exports = {
     requestId,
     requestLogger,
+    list: (limit = 200) => entries.slice(-Number(limit || 200)).reverse(),
+    clear: () => {
+        entries.length = 0;
+    },
     info: (message, meta) => write('info', message, meta),
     warn: (message, meta) => write('warn', message, meta),
     error: (message, err, meta = {}) => write('error', message, { ...meta, error: serializeError(err) })

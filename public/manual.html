@@ -6,15 +6,16 @@
     <title>YodaMan User Manual</title>
     <style>
         body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #020617; color: #cbd5e1; }
-        main { max-width: 920px; margin: 0 auto; padding: 64px 24px 96px; }
+        main { max-width: 980px; margin: 0 auto; padding: 56px 24px 96px; }
         h1, h2, h3 { color: #f8fafc; letter-spacing: -0.02em; }
-        h1 { font-size: 48px; margin-bottom: 8px; }
-        h2 { margin-top: 48px; border-top: 1px solid rgba(148, 163, 184, 0.18); padding-top: 32px; }
+        h1 { font-size: 46px; margin: 0 0 8px; }
+        h2 { margin-top: 44px; border-top: 1px solid rgba(148, 163, 184, 0.18); padding-top: 28px; }
         p, li { line-height: 1.7; }
         code { background: rgba(148, 163, 184, 0.12); color: #93c5fd; padding: 2px 6px; border-radius: 4px; }
         pre { background: #0f172a; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 8px; padding: 16px; overflow-x: auto; }
         pre code { background: transparent; color: #e2e8f0; padding: 0; }
-        .lead { color: #94a3b8; font-size: 18px; }
+        .lead { color: #94a3b8; font-size: 18px; max-width: 760px; }
+        .version { color: #818cf8; font-weight: 800; text-transform: uppercase; letter-spacing: 0.16em; font-size: 12px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
         .card { background: rgba(15, 23, 42, 0.78); border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 8px; padding: 18px; }
         .muted { color: #94a3b8; }
@@ -24,80 +25,104 @@
     <main>
         <header>
             <h1>YodaMan Manual</h1>
-             <p class="lead">Local-first workspace intelligence with supervised agent automation across web, desktop, VS Code, and mobile clients.</p>
-            <p class="muted">Version 0.1.7</p>
+            <p class="lead">Local-first workspace intelligence with chat, search, supervised agent automation, plugins, desktop controls, VS Code commands, and mobile pairing.</p>
+            <p class="version">Version 0.2.0</p>
         </header>
 
         <h2>1. Setup</h2>
-        <p>Install Context Expert, then install and start YodaMan from the project root.</p>
+        <p>Install Context Expert, install dependencies, and start the runtime from the project root.</p>
         <pre><code>npm install -g @contextexpert/cli
 npm install
 sh setup.sh
 npm start</code></pre>
-        <p>The backend runtime listens on <code>http://localhost:3090</code>. The development web UI listens on <code>http://localhost:5190</code>.</p>
+        <p>The backend runtime listens on <code>http://localhost:3090</code>. The development web UI listens on <code>http://localhost:5190</code>. Use <code>npm run desktop</code> for the Electron app.</p>
 
-        <h2>2. Core Ideas</h2>
+        <h2>2. Core ideas</h2>
         <div class="grid">
             <div class="card">
-                <h3>Local-first intelligence</h3>
-                <p>Project context starts from local watched directories and is reused by chat, search, agent tasks, and external clients.</p>
+                <h3>Local runtime</h3>
+                <p>One private Express runtime powers the web UI, desktop app, VS Code extension, mobile companion, plugins, and runtime API.</p>
             </div>
             <div class="card">
-                <h3>SQLite Persistence</h3>
-                <p>Task history and audit logs persist locally in SQLite database (<code>yodaman.db</code>), falling back to JSON files if Node SQLite is unsupported.</p>
+                <h3>Workspace control</h3>
+                <p>Paste paths, browse folders in desktop clients, select, validate, edit, delete, and reindex absolute local workspace paths.</p>
             </div>
             <div class="card">
-                <h3>System Tray Controls</h3>
-                <p>Electron desktop app runs a system tray daemon allowing you to show/hide the app, copy pairing links, restart background daemon, or quit.</p>
+                <h3>Human-approved writes</h3>
+                <p>Agent tasks stream events and pause for approval before applying file writes.</p>
+            </div>
+            <div class="card">
+                <h3>Local persistence</h3>
+                <p>Task history and audit logs persist in SQLite when available, with JSON fallback.</p>
             </div>
             <div class="card">
                 <h3>Restricted plugins</h3>
-                <p>Uploaded plugins must declare permissions. Unrestricted plugins are blocked unless explicitly allowed by environment variable.</p>
+                <p>Plugins declare permissions. Unrestricted plugins are blocked unless deliberately allowed.</p>
+            </div>
+            <div class="card">
+                <h3>Crash recovery</h3>
+                <p>The desktop recovery screen shows the logo, runtime logs, retry/status actions, and Copy Error.</p>
             </div>
         </div>
 
         <h2>3. Web UI</h2>
         <ul>
-            <li><strong>Projects</strong>: Add watched folders, select workspaces, and queue reindexing.</li>
-            <li><strong>Chat</strong>: Ask questions about indexed project context.</li>
-            <li><strong>Search</strong>: Run semantic search across all projects or the selected project.</li>
-            <li><strong>Dashboard</strong>: View runtime diagnostics, task counts, pending approvals, and create mobile pairing links.</li>
-            <li><strong>Plugins</strong>: Install JavaScript plugins and inspect declared permissions.</li>
+            <li><strong>Settings</strong>: Open from the top-right Settings button, sidebar plus button, or Configuration modal. Paste an absolute path or use Browse in the desktop app, then add, edit, and delete workspace paths.</li>
+            <li><strong>Workspaces</strong>: Select a project, validate health, toggle inclusion, edit the file path, delete a workspace, and sync the selected repository.</li>
+            <li><strong>Chat</strong>: Ask questions using selected workspace context.</li>
+            <li><strong>Search</strong>: Run semantic search across indexed code and documentation, optionally scoped to the selected project.</li>
+            <li><strong>Dashboard</strong>: View status, database/index metrics, environment info, diagnostics, task counts, approvals, plugin policy, and mobile pairing.</li>
+            <li><strong>Logs</strong>: Open recent runtime logs, reindex requests, index queue state, and <code>ctx index</code> output. Use Copy when sharing an error.</li>
+            <li><strong>Manual</strong>: Read the in-app guide.</li>
+            <li><strong>Plugins</strong>: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, or delete plugin files.</li>
         </ul>
 
-        <h2>4. Agent Tasks</h2>
-        <p>Recent task state and events persist in SQLite database (or <code>task-history.json</code>), so task timelines survive runtime restarts. Clients can inspect task starts, tool events, approval requests, cancellations, final answers, and errors.</p>
-        <p>When a write needs approval, clients show the proposal, send your approval or rejection, and the agent continues with that decision.</p>
-        <p>You can purge histories and audit trails directly from the UI or sidebar actions: <strong>Clear Task History</strong> (sends <code>DELETE /api/agent/tasks</code>) and <strong>Clear Audit Logs</strong> (sends <code>DELETE /api/audit</code>).</p>
-
-        <h2>5. Desktop App</h2>
-        <p>Run <code>npm run desktop</code> to launch the Electron shell. The desktop app starts the backend as a managed sidecar when no runtime is already available.</p>
+        <h2>4. Desktop app</h2>
+        <p>The Electron app starts a managed runtime sidecar when no runtime is already available on port <code>3090</code>. It also runs from the system tray.</p>
         <ul>
-            <li><code>Restart Managed Runtime</code> restarts Electron-managed sidecars.</li>
+            <li><code>Restart Managed Runtime</code> restarts the managed backend.</li>
             <li><code>Copy Mobile Pairing Link</code> creates and copies a <code>yodaman://pair</code> link.</li>
-            <li><code>Add Project Folder</code> opens a native folder picker and registers the selected workspace.</li>
+            <li><code>Add Project Folder</code> opens a native folder picker.</li>
+            <li><code>Show YodaMan</code> restores the window from the tray.</li>
+            <li><code>Quit</code> stops the desktop app and managed runtime.</li>
         </ul>
-        <p>The desktop app shows native notifications when a task needs approval or completes, and manages app persistence via System Tray context options.</p>
 
-        <h2>6. VS Code Extension</h2>
-        <p>The extension checks runtime status, starts the configured runtime command, asks/searches/reindexes the current workspace, streams agent events, opens proposed writes as diffs, sends approve, reject, or cancel decisions, and features a hierarchical tree sidebar with commands to view task details or clear histories/audits.</p>
+        <h2>5. VS Code extension</h2>
+        <p>The extension checks runtime status, starts the runtime command, adds workspaces by browsing, pasting, or using the current VS Code workspace, asks/searches/reindexes the current workspace, opens runtime logs, runs and cancels agent tasks, streams events, opens proposed writes as diffs, approves or rejects changes, clears task/audit history, and exposes the YodaMan activity bar sidebar.</p>
 
-        <h2>7. Mobile Companion</h2>
-        <p>The mobile app parses pairing links, checks status, lists projects, routes ask/search to a selected project, inspects task timelines and event details, cancels active tasks, and handles pending approvals.</p>
+        <h2>6. Mobile companion</h2>
+        <p>The mobile companion pairs with <code>yodaman://pair</code> links. It can check status, list projects, choose a workspace, ask, search, inspect task timelines, open event details, cancel active tasks, refresh pending approvals, and approve or reject proposed writes.</p>
 
-        <h2>8. Verification</h2>
+        <h2>7. Runtime API highlights</h2>
+        <ul>
+            <li><code>GET/POST/PUT/DELETE /api/projects</code>: List, add, update, or remove workspace paths.</li>
+            <li><code>POST /api/reindex</code>: Queue a workspace for reindexing.</li>
+            <li><code>GET /api/search</code> and <code>POST /api/ask</code>: Search and ask against indexed context.</li>
+            <li><code>GET /api/status</code> and <code>GET /api/desktop/diagnostics</code>: Read status and diagnostics.</li>
+            <li><code>GET/POST/DELETE /api/plugins</code>: Manage JavaScript plugins.</li>
+            <li><code>/api/agent/*</code>: Run, inspect, approve, reject, cancel, or clear agent tasks.</li>
+            <li><code>GET/DELETE /api/audit</code>: Inspect or clear audit logs.</li>
+            <li><code>POST /api/pairing</code>: Create mobile pairing links.</li>
+        </ul>
+
+        <h2>8. Troubleshooting</h2>
+        <ul>
+            <li><strong>Context Expert not found</strong>: Install <code>@contextexpert/cli</code> and confirm <code>ctx --version</code> works.</li>
+            <li><strong>Runtime unreachable</strong>: Check port <code>3090</code>, restart the managed runtime, or run <code>yodaman</code> from Terminal.</li>
+            <li><strong>Moved repository</strong>: Open Settings, edit the workspace path, save, then sync.</li>
+            <li><strong>Search results are stale</strong>: Reindex the selected workspace.</li>
+            <li><strong>Mobile cannot connect</strong>: Use the desktop LAN IP, confirm firewall access to port <code>3090</code>, and generate a fresh pairing link.</li>
+            <li><strong>Plugin blocked</strong>: Add explicit permissions or intentionally allow unrestricted plugins.</li>
+            <li><strong>Crash screen</strong>: Use Copy Error to capture the message and logs.</li>
+        </ul>
+
+        <h2>9. Verification</h2>
         <pre><code>npm test
 npm run build
-npm run release:smoke</code></pre>
-
-        <h2>9. Troubleshooting</h2>
-        <ul>
-            <li><strong>Context Expert not found</strong>: Confirm <code>ctx --version</code> works.</li>
-            <li><strong>Runtime unreachable</strong>: Check port <code>3090</code>.</li>
-            <li><strong>Web UI unreachable</strong>: Check port <code>5190</code> during development.</li>
-            <li><strong>Mobile cannot connect</strong>: Use the desktop LAN IP and generate a fresh pairing link.</li>
-            <li><strong>Plugin blocked</strong>: Add explicit permissions or intentionally allow unrestricted plugins.</li>
-        </ul>
+npm run desktop:pack
+cd extensions/vscode-yodaman
+npm run lint
+npm run package</code></pre>
     </main>
 </body>
 </html>

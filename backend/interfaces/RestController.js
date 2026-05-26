@@ -208,6 +208,41 @@ router.delete('/projects', (req, res) => {
     res.json({ message: 'Project removed' });
 });
 
+router.put('/projects', (req, res) => {
+    let resolvedPath;
+    let nextResolvedPath;
+    try {
+        resolvedPath = resolveUserPath(req.body?.path);
+        nextResolvedPath = resolveUserPath(req.body?.nextPath, 'nextPath');
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_path');
+    }
+
+    loadLocalConfig();
+    if (!config.watchedDirectories.includes(resolvedPath)) {
+        return jsonError(res, 404, 'Project path is not being watched', 'project_not_found');
+    }
+
+    if (resolvedPath === nextResolvedPath) {
+        return res.status(200).json({ message: 'Project path unchanged', path: resolvedPath });
+    }
+
+    if (config.watchedDirectories.includes(nextResolvedPath)) {
+        return jsonError(res, 409, 'Target project path is already being watched', 'project_exists');
+    }
+
+    config.watchedDirectories = config.watchedDirectories.map(p => (
+        p === resolvedPath ? nextResolvedPath : p
+    ));
+    saveConfig();
+
+    watcherService.removeWatcher(resolvedPath);
+    watcherService.setupWatcher(nextResolvedPath);
+    queueService.addToQueue(nextResolvedPath);
+
+    res.json({ message: 'Project path updated', path: nextResolvedPath, previousPath: resolvedPath });
+});
+
 const sessionStore = require('../infrastructure/SessionStore');
 
 // --- AI & Intelligence ---
@@ -425,6 +460,14 @@ router.get('/audit', (req, res) => {
     res.json(auditLog.list(limit));
 });
 
+router.get('/logs', (req, res) => {
+    const { limit = 200 } = req.query;
+    res.json({
+        logs: logger.list(limit),
+        queue: queueService.getStatus()
+    });
+});
+
 router.get('/desktop/diagnostics', (req, res) => {
     res.json({
         runtime: {
@@ -487,6 +530,7 @@ router.post('/reindex', (req, res) => {
     } catch (err) {
         return jsonError(res, err.status || 400, err.message, 'invalid_path');
     }
+    logger.info('reindex_requested', { requestId: req.id, path: dirPath });
     queueService.addToQueue(dirPath);
     res.json({ message: 'Indexing queued' });
 });
