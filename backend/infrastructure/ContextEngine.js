@@ -26,6 +26,10 @@ class ContextEngine {
             proc.stdout.on('data', (data) => output += data.toString());
             proc.stderr.on('data', (data) => error += data.toString());
 
+            proc.on('error', (err) => {
+                reject(new Error(`Failed to start ${this.binary}: ${err.message}`));
+            });
+
             proc.on('close', (code) => {
                 if (code === 0 || (args.includes('--json') && output)) {
                     resolve({ output, code });

@@ -12,6 +12,7 @@ const chatHandler = require('../services/chatHandler');
 const auditLog = require('../infrastructure/AuditLog');
 const pairingService = require('../infrastructure/PairingService');
 const logger = require('../infrastructure/Logger');
+const graphifyService = require('../infrastructure/GraphifyService');
 
 const multer = require('multer');
 
@@ -41,7 +42,7 @@ const upload = multer({ storage });
  * Maps HTTP endpoints to business logic and infrastructure actions.
  */
 
-let config = { watchedDirectories: [] };
+let config = { watchedDirectories: [], removedDirectories: [] };
 
 function jsonError(res, status, message, code) {
     return res.status(status).json({ error: message, code });
@@ -128,24 +129,99 @@ function loadLocalConfig() {
     if (fs.existsSync(CONFIG_PATH)) {
         config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
     }
+    config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
+    config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];
 }
 
 function saveConfig() {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 
+function projectNameForPath(dirPath) {
+    return path.basename(dirPath) || dirPath;
+}
+
+async function removeFromCtxIndex(dirPath) {
+    const candidates = Array.from(new Set([dirPath, projectNameForPath(dirPath)]));
+    for (const candidate of candidates) {
+        try {
+            await contextEngine.execute(['remove', candidate]);
+            logger.info('ctx_project_removed', { path: dirPath, target: candidate });
+            return true;
+        } catch (err) {
+            logger.warn('ctx_project_remove_failed', { path: dirPath, target: candidate, error: err.message });
+        }
+    }
+    return false;
+}
+
+function validateIndexableDirectory(dirPath) {
+    let stat;
+    try {
+        stat = fs.statSync(dirPath);
+    } catch (err) {
+        const error = new Error(`Workspace path does not exist: ${dirPath}`);
+        error.status = 404;
+        error.code = 'workspace_missing';
+        throw error;
+    }
+
+    if (!stat.isDirectory()) {
+        const error = new Error(`Workspace path is not a directory: ${dirPath}`);
+        error.status = 400;
+        error.code = 'workspace_not_directory';
+        throw error;
+    }
+}
+
+function resolveProjectPath(projectId) {
+    if (!projectId) return undefined;
+    const resolved = path.resolve(projectId);
+    if (path.isAbsolute(resolved)) return resolved;
+
+    loadLocalConfig();
+    return config.watchedDirectories.find(dir => (
+        dir === projectId ||
+        path.basename(dir) === projectId
+    ));
+}
+
+function buildGraphAugmentedQuestion(question, graphInsights) {
+    if (!graphInsights) return question;
+    return [
+        'Use these Graphify knowledge graph insights when answering. Treat them as structural context from code, docs, and diagrams, and cite concrete files or entities when useful.',
+        '',
+        graphInsights,
+        '',
+        'User question:',
+        question
+    ].join('\n');
+}
+
+function resolveRegisteredProjectPath(value) {
+    const resolved = resolveUserPath(value);
+    loadLocalConfig();
+    if (!config.watchedDirectories.includes(resolved)) {
+        const err = new Error(`Workspace is not registered: ${resolved}`);
+        err.status = 404;
+        err.code = 'workspace_not_registered';
+        throw err;
+    }
+    return resolved;
+}
+
 // --- Project Management ---
 
 router.get('/projects', async (req, res) => {
+    loadLocalConfig();
     try {
         const cliData = await contextEngine.executeJson(['list']);
         const cliProjects = cliData.projects.map(p => ({
             name: p.name,
             path: p.path,
             id: p.id || p.path
-        }));
+        })).filter(p => !config.removedDirectories.includes(p.path));
 
-        loadLocalConfig();
         const cliPaths = cliProjects.map(p => p.path);
         let hasNew = false;
         
@@ -168,6 +244,7 @@ router.get('/projects', async (req, res) => {
 
         res.json(result);
     } catch (err) {
+        logger.warn('projects_list_ctx_failed', { requestId: req.id, error: err.message });
         res.json(config.watchedDirectories.map(d => ({ name: path.basename(d), path: d, id: d })));
     }
 });
@@ -183,6 +260,7 @@ router.post('/projects', (req, res) => {
     loadLocalConfig();
     if (!config.watchedDirectories.includes(resolvedPath)) {
         config.watchedDirectories.push(resolvedPath);
+        config.removedDirectories = config.removedDirectories.filter(p => p !== resolvedPath);
         saveConfig();
         watcherService.setupWatcher(resolvedPath);
         queueService.addToQueue(resolvedPath);
@@ -192,7 +270,7 @@ router.post('/projects', (req, res) => {
     }
 });
 
-router.delete('/projects', (req, res) => {
+router.delete('/projects', async (req, res) => {
     let resolvedPath;
     try {
         resolvedPath = resolveUserPath(req.body?.path);
@@ -201,11 +279,17 @@ router.delete('/projects', (req, res) => {
     }
     
     loadLocalConfig();
+    const wasWatched = config.watchedDirectories.includes(resolvedPath);
     config.watchedDirectories = config.watchedDirectories.filter(p => p !== resolvedPath);
+    if (!config.removedDirectories.includes(resolvedPath)) {
+        config.removedDirectories.push(resolvedPath);
+    }
     saveConfig();
     
     watcherService.removeWatcher(resolvedPath);
-    res.json({ message: 'Project removed' });
+    const ctxRemoved = await removeFromCtxIndex(resolvedPath);
+    logger.info('project_removed', { requestId: req.id, path: resolvedPath, wasWatched, ctxRemoved });
+    res.json({ message: 'Project removed', path: resolvedPath, wasWatched, ctxRemoved });
 });
 
 router.put('/projects', (req, res) => {
@@ -234,9 +318,13 @@ router.put('/projects', (req, res) => {
     config.watchedDirectories = config.watchedDirectories.map(p => (
         p === resolvedPath ? nextResolvedPath : p
     ));
+    config.removedDirectories = config.removedDirectories.filter(p => p !== nextResolvedPath);
     saveConfig();
 
     watcherService.removeWatcher(resolvedPath);
+    removeFromCtxIndex(resolvedPath).catch(err => {
+        logger.warn('ctx_project_remove_after_update_failed', { path: resolvedPath, error: err.message });
+    });
     watcherService.setupWatcher(nextResolvedPath);
     queueService.addToQueue(nextResolvedPath);
 
@@ -274,10 +362,12 @@ router.post('/ask', async (req, res) => {
     let question;
     let projectId;
     let mode;
+    let projectPath;
     try {
         question = validateString(req.body?.question, 'question', { max: 20000 });
         projectId = validateProjectId(req.body?.projectId);
         mode = validateMode(req.body?.mode);
+        projectPath = resolveProjectPath(projectId);
     } catch (err) {
         return jsonError(res, err.status || 400, err.message, 'invalid_request');
     }
@@ -291,8 +381,30 @@ router.post('/ask', async (req, res) => {
     }
 
     try {
-        const { output } = await contextEngine.execute(['ask', '--', question]);
+        let graphInsights = '';
+        if (projectPath) {
+            const report = graphifyService.readReport(projectPath, { maxChars: 4000 });
+            const queryInsights = await graphifyService.query(question, projectPath);
+            graphInsights = [
+                'Graph report summary:',
+                report || '(No Graphify report generated yet.)',
+                '',
+                'Question-specific graph traversal:',
+                queryInsights
+            ].join('\n');
+        }
+        const augmentedQuestion = buildGraphAugmentedQuestion(question, graphInsights);
+        const { output } = await contextEngine.execute(['ask', '--', augmentedQuestion]);
         const answer = output.trim();
+        if (projectPath && answer) {
+            graphifyService.saveResult(projectPath, {
+                question,
+                answer,
+                type: 'query'
+            }).catch(err => {
+                logger.warn('graphify_save_answer_failed', { requestId: req.id, path: projectPath, error: err.message });
+            });
+        }
         
         if (projectId) {
             sessionStore.saveMessage(projectId, { role: 'ai', content: answer, timestamp: new Date() });
@@ -423,6 +535,10 @@ router.post('/plugins', upload.single('plugin'), (req, res) => {
 
 router.delete('/plugins/:name', (req, res) => {
     const { name } = req.params;
+    if (name === 'graphify') {
+        return jsonError(res, 403, 'Graphify is mandatory and cannot be removed', 'mandatory_plugin');
+    }
+
     const plugin = toolBox.plugins.get(name);
     
     if (plugin && plugin._filename) {
@@ -491,6 +607,110 @@ router.get('/desktop/diagnostics', (req, res) => {
     });
 });
 
+router.get('/graphify/status', (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.query.path);
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, err.code || 'invalid_path');
+    }
+
+    res.json(graphifyService.freshness(dirPath));
+});
+
+router.post('/graphify/build', async (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.body?.path);
+        validateIndexableDirectory(dirPath);
+        const result = await graphifyService.build(dirPath, { update: true });
+        res.json({ message: 'Graphify knowledge graph updated', ...result });
+    } catch (err) {
+        logger.error('graphify_build_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_build_failed');
+    }
+});
+
+router.post('/graphify/query', async (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.body?.path);
+        const query = validateString(req.body?.query, 'query', { max: 20000 });
+        const insights = await graphifyService.query(query, dirPath);
+        res.json({ path: dirPath, insights, graphPath: graphifyService.graphPath(dirPath) });
+    } catch (err) {
+        logger.error('graphify_query_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_query_failed');
+    }
+});
+
+router.post('/graphify/explain', async (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.body?.path);
+        const node = validateString(req.body?.node, 'node', { max: 1000 });
+        const explanation = await graphifyService.explain(node, dirPath);
+        res.json({ path: dirPath, node, explanation, graphPath: graphifyService.graphPath(dirPath) });
+    } catch (err) {
+        logger.error('graphify_explain_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_explain_failed');
+    }
+});
+
+router.post('/graphify/path', async (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.body?.path);
+        const source = validateString(req.body?.source, 'source', { max: 1000 });
+        const target = validateString(req.body?.target, 'target', { max: 1000 });
+        const graphPathResult = await graphifyService.pathBetween(source, target, dirPath);
+        res.json({ path: dirPath, source, target, graphPath: graphifyService.graphPath(dirPath), result: graphPathResult });
+    } catch (err) {
+        logger.error('graphify_path_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_path_failed');
+    }
+});
+
+router.post('/graphify/affected', async (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.body?.path);
+        const node = validateString(req.body?.node, 'node', { max: 1000 });
+        const depth = Number(req.body?.depth || 2);
+        const relations = Array.isArray(req.body?.relations)
+            ? req.body.relations.map(relation => validateString(relation, 'relation', { max: 100 }))
+            : [];
+        const impact = await graphifyService.affected(node, dirPath, { depth, relations });
+        res.json({ path: dirPath, node, depth, relations, graphPath: graphifyService.graphPath(dirPath), impact });
+    } catch (err) {
+        logger.error('graphify_affected_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_affected_failed');
+    }
+});
+
+router.get('/graphify/map', async (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.query.path);
+        const limit = Number(req.query.limit || 80);
+        res.json(await graphifyService.map(dirPath, { limit }));
+    } catch (err) {
+        logger.error('graphify_map_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_map_failed');
+    }
+});
+
+router.post('/graphify/tree', async (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.body?.path);
+        res.json(await graphifyService.tree(dirPath));
+    } catch (err) {
+        logger.error('graphify_tree_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_tree_failed');
+    }
+});
+
 router.post('/pairing', (req, res) => {
     const host = req.get('host');
     const protocol = req.protocol || 'http';
@@ -527,12 +747,21 @@ router.post('/reindex', (req, res) => {
     let dirPath;
     try {
         dirPath = resolveUserPath(req.body?.path);
+        loadLocalConfig();
+        if (!config.watchedDirectories.includes(dirPath)) {
+            const err = new Error(`Workspace is not registered: ${dirPath}`);
+            err.status = 404;
+            err.code = 'workspace_not_registered';
+            throw err;
+        }
+        validateIndexableDirectory(dirPath);
     } catch (err) {
-        return jsonError(res, err.status || 400, err.message, 'invalid_path');
+        logger.warn('reindex_rejected', { requestId: req.id, path: dirPath, error: err.message, code: err.code || 'invalid_path' });
+        return jsonError(res, err.status || 400, err.message, err.code || 'invalid_path');
     }
     logger.info('reindex_requested', { requestId: req.id, path: dirPath });
     queueService.addToQueue(dirPath);
-    res.json({ message: 'Indexing queued' });
+    res.json({ message: 'Indexing and Graphify graph update queued' });
 });
 
 router.delete('/agent/tasks', (req, res) => {

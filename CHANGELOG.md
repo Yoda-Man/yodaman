@@ -2,6 +2,22 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.2.1] - 2026-05-26
+
+### Added
+- Mandatory Graphify knowledge graph integration for workspace graph builds, graph-aware chat answers, and graph-aware agent context.
+- Graphify plugin metadata, a required Graphify agent tool, and Graphify controls in the Plugins tab.
+- Graphify REST endpoints for status, build, query, explain, and path operations.
+- Default coding skill for Yoda-Agent with assumptions, simplicity, surgical edits, and verification guidance.
+
+### Changed
+- Reindexing now queues both Context Expert indexing and Graphify graph updates.
+- Updated README, user manual, in-app manual, static manual, setup docs, configuration docs, runbooks, and API reference for Graphify and 0.2.1.
+- Bumped the core app and VS Code extension package versions to `0.2.1`.
+
+### Fixed
+- Workspace refresh, stale workspace deletion, invalid-path reindex diagnostics, and Graphify protection from deletion.
+
 ## [0.1.9] - 2026-05-26
 
 ### Added

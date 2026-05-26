@@ -127,6 +127,34 @@ export const api = {
         return request(`${API_BASE}/desktop/diagnostics`);
     },
 
+    async getGraphifyStatus(path) {
+        return request(`${API_BASE}/graphify/status?path=${encodeURIComponent(path)}`);
+    },
+
+    async buildGraphify(path) {
+        return request(`${API_BASE}/graphify/build`, jsonOptions('POST', { path }));
+    },
+
+    async queryGraphify(path, query) {
+        return request(`${API_BASE}/graphify/query`, jsonOptions('POST', { path, query }));
+    },
+
+    async explainGraphify(path, node) {
+        return request(`${API_BASE}/graphify/explain`, jsonOptions('POST', { path, node }));
+    },
+
+    async pathGraphify(path, source, target) {
+        return request(`${API_BASE}/graphify/path`, jsonOptions('POST', { path, source, target }));
+    },
+
+    async affectedGraphify(path, node, depth = 2, relations = []) {
+        return request(`${API_BASE}/graphify/affected`, jsonOptions('POST', { path, node, depth, relations }));
+    },
+
+    async mapGraphify(path, limit = 80) {
+        return request(`${API_BASE}/graphify/map?path=${encodeURIComponent(path)}&limit=${encodeURIComponent(limit)}`);
+    },
+
     async getLogs(limit = 200) {
         return request(`${API_BASE}/logs?limit=${encodeURIComponent(limit)}`);
     },

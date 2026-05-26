@@ -37,13 +37,13 @@ Sets the active query mode. Valid modes are `code` and `doc`.
 **Response:** `{ "ok": true, "mode": "doc", "projectId": "/absolute/path/to/project" }`
 
 ### `POST /ask`
-Queries the AI engine about the current project context.
+Queries the AI engine about the current project context. When `projectId` resolves to a workspace path, YodaMan injects Graphify graph report context and question-specific graph traversal output before calling Context Expert.
 
 **Body:** `{ "question": "What does the auth service do?", "projectId": "/absolute/path/to/project", "mode": "code" }`
 **Response:** `{ "answer": "The auth service handles..." }`
 
 ### `POST /agent/task`
-Starts an autonomous agent task. This endpoint uses **Server-Sent Events (SSE)**.
+Starts an autonomous agent task. The agent loads the default coding skill, receives Graphify graph context when a workspace is provided, and streams progress over **Server-Sent Events (SSE)**.
 
 **Body:** `{ "task": "Implement a login form" }`
 **Events:**
@@ -90,6 +90,50 @@ Forces source-code search.
 Forces documentation preprocessing and documentation search.
 
 **Query Params:** `query`, `project` (optional), `top` (default: 10)
+
+## Graphify
+
+Graphify is a required knowledge graph layer in YodaMan 0.2.1. The runtime fails startup when the `graphify` CLI cannot be found. Graphify endpoints require a registered workspace path.
+
+### `GET /graphify/status`
+Returns graph availability and artifact paths.
+
+**Query Params:** `path`
+
+### `POST /graphify/build`
+Builds or updates the workspace graph.
+
+**Body:** `{ "path": "/absolute/path/to/project" }`
+
+### `POST /graphify/query`
+Runs a natural-language graph traversal query.
+
+**Body:** `{ "path": "/absolute/path/to/project", "query": "How does auth connect to sessions?" }`
+
+### `POST /graphify/explain`
+Explains a node and its neighboring graph context.
+
+**Body:** `{ "path": "/absolute/path/to/project", "node": "AuthService" }`
+
+### `POST /graphify/path`
+Finds a graph path between two entities.
+
+**Body:** `{ "path": "/absolute/path/to/project", "source": "LoginForm", "target": "SessionStore" }`
+
+### `POST /graphify/affected`
+Runs impact analysis for a node by reverse-traversing related graph edges.
+
+**Body:** `{ "path": "/absolute/path/to/project", "node": "AuthService", "depth": 3, "relations": [] }`
+
+### `GET /graphify/map`
+Returns a compact graph summary for architecture map views.
+
+**Query Params:** `path`, `limit` (default: 80)
+
+### `POST /graphify/tree`
+Generates Graphify's D3 collapsible tree HTML artifact.
+
+**Body:** `{ "path": "/absolute/path/to/project" }`
 
 ## System
 

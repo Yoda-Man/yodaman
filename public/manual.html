@@ -25,13 +25,14 @@
     <main>
         <header>
             <h1>YodaMan Manual</h1>
-            <p class="lead">Local-first workspace intelligence with chat, search, supervised agent automation, plugins, desktop controls, VS Code commands, and mobile pairing.</p>
-            <p class="version">Version 0.2.0</p>
+            <p class="lead">Local-first workspace intelligence with chat, search, mandatory Graphify knowledge graphs, supervised agent automation, plugins, desktop controls, VS Code commands, and mobile pairing.</p>
+            <p class="version">Version 0.2.1</p>
         </header>
 
         <h2>1. Setup</h2>
-        <p>Install Context Expert, install dependencies, and start the runtime from the project root.</p>
+        <p>Install Context Expert, install Graphify, install dependencies, and start the runtime from the project root.</p>
         <pre><code>npm install -g @contextexpert/cli
+python3 -m pip install graphifyy
 npm install
 sh setup.sh
 npm start</code></pre>
@@ -45,11 +46,15 @@ npm start</code></pre>
             </div>
             <div class="card">
                 <h3>Workspace control</h3>
-                <p>Paste paths, browse folders in desktop clients, select, validate, edit, delete, and reindex absolute local workspace paths.</p>
+                <p>Paste paths, browse folders in desktop clients, select, refresh, validate, edit, delete, and reindex absolute local workspace paths.</p>
+            </div>
+            <div class="card">
+                <h3>Knowledge graph</h3>
+                <p>Graphify builds required workspace graphs for graph-aware answers, impact analysis, freshness warnings, and architecture maps, using Ollama local execution only.</p>
             </div>
             <div class="card">
                 <h3>Human-approved writes</h3>
-                <p>Agent tasks stream events and pause for approval before applying file writes.</p>
+                <p>Agent tasks use graph context, stream events, and pause for approval before applying file writes.</p>
             </div>
             <div class="card">
                 <h3>Local persistence</h3>
@@ -68,13 +73,13 @@ npm start</code></pre>
         <h2>3. Web UI</h2>
         <ul>
             <li><strong>Settings</strong>: Open from the top-right Settings button, sidebar plus button, or Configuration modal. Paste an absolute path or use Browse in the desktop app, then add, edit, and delete workspace paths.</li>
-            <li><strong>Workspaces</strong>: Select a project, validate health, toggle inclusion, edit the file path, delete a workspace, and sync the selected repository.</li>
+            <li><strong>Workspaces</strong>: Select a project, refresh the workspace list, validate health, toggle inclusion, edit the file path, delete a workspace, and sync the selected repository.</li>
             <li><strong>Chat</strong>: Ask questions using selected workspace context.</li>
             <li><strong>Search</strong>: Run semantic search across indexed code and documentation, optionally scoped to the selected project.</li>
             <li><strong>Dashboard</strong>: View status, database/index metrics, environment info, diagnostics, task counts, approvals, plugin policy, and mobile pairing.</li>
             <li><strong>Logs</strong>: Open recent runtime logs, reindex requests, index queue state, and <code>ctx index</code> output. Use Copy when sharing an error.</li>
             <li><strong>Manual</strong>: Read the in-app guide.</li>
-            <li><strong>Plugins</strong>: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, or delete plugin files.</li>
+            <li><strong>Plugins</strong>: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, delete non-mandatory plugin files, and manage Graphify graph status, rebuilds, direct graph queries, impact analysis, and architecture maps.</li>
         </ul>
 
         <h2>4. Desktop app</h2>
@@ -97,6 +102,7 @@ npm start</code></pre>
         <ul>
             <li><code>GET/POST/PUT/DELETE /api/projects</code>: List, add, update, or remove workspace paths.</li>
             <li><code>POST /api/reindex</code>: Queue a workspace for reindexing.</li>
+            <li><code>/api/graphify/*</code>: Read graph status, rebuild graphs, query relationships, explain nodes, find paths, run impact analysis, and load architecture maps.</li>
             <li><code>GET /api/search</code> and <code>POST /api/ask</code>: Search and ask against indexed context.</li>
             <li><code>GET /api/status</code> and <code>GET /api/desktop/diagnostics</code>: Read status and diagnostics.</li>
             <li><code>GET/POST/DELETE /api/plugins</code>: Manage JavaScript plugins.</li>
@@ -108,6 +114,7 @@ npm start</code></pre>
         <h2>8. Troubleshooting</h2>
         <ul>
             <li><strong>Context Expert not found</strong>: Install <code>@contextexpert/cli</code> and confirm <code>ctx --version</code> works.</li>
+            <li><strong>Graphify not found</strong>: Install <code>graphifyy</code>, confirm <code>graphify --help</code> works, or set <code>YODAMAN_GRAPHIFY_BIN</code>.</li>
             <li><strong>Runtime unreachable</strong>: Check port <code>3090</code>, restart the managed runtime, or run <code>yodaman</code> from Terminal.</li>
             <li><strong>Moved repository</strong>: Open Settings, edit the workspace path, save, then sync.</li>
             <li><strong>Search results are stale</strong>: Reindex the selected workspace.</li>

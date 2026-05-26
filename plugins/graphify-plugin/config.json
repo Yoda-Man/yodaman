@@ -1,0 +1,22 @@
+{
+  "name": "graphify",
+  "displayName": "Knowledge Graph (Graphify)",
+  "description": "Adds multi-modal knowledge graph capabilities to understand relationships between code, docs, and diagrams",
+  "version": "1.0.0",
+  "author": "YodaMan",
+  "mandatory": true,
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "readOnly": true,
+      "description": "Graphify knowledge graph is required for YodaMan answers"
+    },
+    "autoUpdate": {
+      "type": "string",
+      "enum": ["on-index", "hourly", "manual"],
+      "default": "on-index",
+      "description": "When to rebuild the knowledge graph"
+    }
+  }
+}

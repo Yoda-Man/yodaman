@@ -10,6 +10,7 @@ const queueService = require('./backend/core/QueueService');
 const contextEngine = require('./backend/infrastructure/ContextEngine');
 const apiRoutes = require('./backend/interfaces/RestController');
 const logger = require('./backend/infrastructure/Logger');
+const graphifyService = require('./backend/infrastructure/GraphifyService');
 
 
 const app = express();
@@ -54,17 +55,21 @@ app.get('*', (req, res) => {
 // --- Startup Sync ---
 async function initialize() {
     logger.info('startup_sync_started');
+    await graphifyService.assertAvailable();
     try {
         const cliData = await contextEngine.executeJson(['list']);
 
         const cliPaths = cliData.projects.map(p => p.path);
         
-        let config = { watchedDirectories: [] };
+        let config = { watchedDirectories: [], removedDirectories: [] };
         if (fs.existsSync(CONFIG_PATH)) {
             config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
         }
+        config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
+        config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];
 
-        const allPaths = Array.from(new Set([...config.watchedDirectories, ...cliPaths]));
+        const activeCliPaths = cliPaths.filter(p => !config.removedDirectories.includes(p));
+        const allPaths = Array.from(new Set([...config.watchedDirectories, ...activeCliPaths]));
         allPaths.forEach(p => watcherService.setupWatcher(p));
         
         if (allPaths.length > config.watchedDirectories.length) {
@@ -79,7 +84,12 @@ async function initialize() {
 
 app.listen(PORT, async () => {
     logger.info('runtime_started', { url: `http://localhost:${PORT}` });
-    await initialize();
+    try {
+        await initialize();
+    } catch (err) {
+        logger.error('runtime_startup_failed', err);
+        process.exit(1);
+    }
 });
 
 // --- Graceful Shutdown ---

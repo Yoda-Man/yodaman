@@ -1,6 +1,8 @@
 const contextEngine = require('../infrastructure/ContextEngine');
 const toolBox = require('../infrastructure/ToolBox');
 const taskStore = require('../infrastructure/TaskStore');
+const graphifyService = require('../infrastructure/GraphifyService');
+const defaultCodingSkill = require('./DefaultCodingSkill');
 
 /**
  * AgentReasoningEngine (Core Layer)
@@ -30,6 +32,8 @@ You are Yoda-Agent, a powerful coding assistant integrated into the YodaMan plat
 You have access to the following tools to help the user with their coding tasks:
 
 ${toolBox.getToolDefinitions()}
+
+${defaultCodingSkill}
 
 ### Process:
 - Use tools to gather information or make changes.
@@ -150,7 +154,22 @@ ${toolBox.getToolDefinitions()}
             error: null
         });
 
-        let conversation = `${this.getSystemPrompt()}\n\nUser Task: ${task}`;
+        let graphContext = '';
+        if (metadata.projectId) {
+            const insights = await graphifyService.query(task, metadata.projectId);
+            const report = graphifyService.readReport(metadata.projectId, { maxChars: 4000 });
+            graphContext = [
+                '',
+                '',
+                'Graphify knowledge graph report:',
+                report || '(No Graphify report generated yet.)',
+                '',
+                'Graphify query insights:',
+                insights
+            ].join('\n');
+        }
+
+        let conversation = `${this.getSystemPrompt()}${graphContext}\n\nUser Task: ${task}`;
         let iteration = 0;
         let finalAnswer = '';
 

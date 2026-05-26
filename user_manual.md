@@ -1,15 +1,16 @@
 # YodaMan User Manual
 
-Version: 0.2.0
+Version: 0.2.1
 
-YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, plugin system, and local runtime API.
+YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, mandatory Graphify knowledge graph, plugin system, and local runtime API.
 
 ## 1. Setup
 
-Install Context Expert, then install and start YodaMan from the project root:
+Install Context Expert and Graphify, then install and start YodaMan from the project root:
 
 ```bash
 npm install -g @contextexpert/cli
+python3 -m pip install graphifyy
 npm install
 sh setup.sh
 npm start
@@ -27,11 +28,19 @@ npm run desktop
 
 ### Local runtime
 
-The Express runtime is the shared contract for every client. It serves the React UI, exposes project/search/chat/task/plugin endpoints, and uses Context Expert for code and documentation intelligence.
+The Express runtime is the shared contract for every client. It serves the React UI, exposes project/search/chat/task/plugin endpoints, uses Context Expert for code and documentation intelligence, and requires Graphify for graph-aware answers.
 
 ### Workspaces
 
-Workspaces are absolute local folder paths. Add them by pasting a path, browsing with a native folder picker in desktop clients, using the sidebar plus button, or using the desktop menu item `Add Project Folder`. In version 0.2.0 you can also edit a workspace path when a project moves, delete stale workspaces, validate workspace health, and run `Sync Repository` to reindex the active workspace.
+Workspaces are absolute local folder paths. Add them by pasting a path, browsing with a native folder picker in desktop clients, using the sidebar plus button, or using the desktop menu item `Add Project Folder`. In version 0.2.1 you can edit a workspace path when a project moves, delete stale workspaces, validate workspace health, refresh the workspace list, and run `Sync Repository` to reindex the active workspace and update its Graphify graph.
+
+### Graphify knowledge graph
+
+Graphify is mandatory in 0.2.1 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered. The Plugins tab includes Graphify status, graph freshness warnings, manual graph rebuilds, direct graph queries, impact analysis, and an architecture map.
+
+### Default coding skill
+
+Yoda-Agent loads a default coding skill for implementation work. It emphasizes explicit assumptions, simple solutions, surgical edits, matching existing style, and verifying changes with targeted tests or builds.
 
 ### Supervised agent work
 
@@ -48,13 +57,13 @@ Plugins are JavaScript modules that extend the agent with custom tools. A plugin
 ## 3. Web UI
 
 - **Settings**: Open from the top-right Settings button, sidebar plus button, or Configuration modal. Paste an absolute path or use Browse in the desktop app, then add, edit, and delete workspace paths.
-- **Workspaces sidebar**: Select a project, validate health, toggle inclusion, edit the file path, delete a workspace, and sync the selected repository.
+- **Workspaces sidebar**: Select a project, refresh the list, validate health, toggle inclusion, edit the file path, delete a workspace, and sync the selected repository.
 - **Chat**: Ask questions using the selected workspace context.
 - **Search**: Run semantic search across indexed code and documentation, optionally scoped to the selected workspace.
 - **Dashboard**: View runtime status, database/index metrics, environment information, runtime diagnostics, task counts, pending approvals, plugin policy information, and mobile pairing.
 - **Logs**: Open recent runtime logs, reindex requests, index queue state, and `ctx index` output. Use Copy when sharing an error.
 - **Manual**: Read the in-app version of this guide.
-- **Plugins**: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, or delete plugin files.
+- **Plugins**: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, delete non-mandatory plugin files, and manage Graphify graph status, rebuilds, and direct graph queries.
 
 ## 4. Desktop app
 
@@ -104,6 +113,14 @@ Use your desktop LAN address when pairing from a phone, for example `http://192.
 - `PUT /api/projects`: Update a tracked workspace path.
 - `DELETE /api/projects`: Remove a tracked workspace path.
 - `POST /api/reindex`: Queue a workspace for reindexing.
+- `GET /api/graphify/status`: Read Graphify graph state for a workspace.
+- `POST /api/graphify/build`: Rebuild or update a workspace graph.
+- `POST /api/graphify/query`: Query the workspace graph.
+- `POST /api/graphify/explain`: Explain a graph node and its neighbors.
+- `POST /api/graphify/path`: Find a graph path between two entities.
+- `POST /api/graphify/affected`: Run impact analysis for a graph node.
+- `GET /api/graphify/map`: Read a compact architecture map summary.
+- `POST /api/graphify/tree`: Generate Graphify's D3 tree artifact.
 - `GET /api/search`: Run semantic search.
 - `POST /api/ask`: Ask a question.
 - `GET /api/status`: Read Context Expert status.
@@ -117,6 +134,7 @@ Use your desktop LAN address when pairing from a phone, for example `http://192.
 ## 8. Troubleshooting
 
 - **Context Expert not found**: Install `@contextexpert/cli` and confirm `ctx --version` works.
+- **Graphify not found**: Install `graphifyy`, confirm `graphify --help` works, or set `YODAMAN_GRAPHIFY_BIN` to the executable path.
 - **Runtime unreachable**: Check port `3090`, then use `Restart Managed Runtime` or run `yodaman` from Terminal.
 - **Moved repository**: Open Settings, edit the workspace path, save, then sync the repository.
 - **Search results are stale**: Select the workspace and run `Sync Repository`.

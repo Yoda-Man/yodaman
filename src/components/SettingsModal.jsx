@@ -19,6 +19,7 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
             onWatchChange()
         } catch (err) {
             console.error('Failed to add project:', err)
+            window.alert(`Add workspace failed: ${err.message}`)
         } finally {
             setIsSubmitting(false)
         }
@@ -38,11 +39,13 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
     }
 
     const removeDir = async (dir) => {
+        if (!window.confirm(`Delete workspace "${dir.split('/').pop() || dir}" from YodaMan?`)) return
         try {
             await api.removeProject(dir)
             onWatchChange()
         } catch (err) {
             console.error('Failed to remove project:', err)
+            window.alert(`Delete workspace failed: ${err.message}`)
         }
     }
 
@@ -70,6 +73,7 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
             onWatchChange()
         } catch (err) {
             console.error('Failed to update project path:', err)
+            window.alert(`Update workspace failed: ${err.message}`)
         } finally {
             setSavingDir(null)
         }

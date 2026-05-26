@@ -7,7 +7,12 @@
   ```bash
   npm install -g @contextexpert/cli
   ```
-- **Ollama**: (Optional but recommended) For local AI model execution.
+- **Graphify**: The required knowledge graph engine must be installed and reachable as `graphify`.
+  ```bash
+  python3 -m pip install graphifyy
+  graphify --help
+  ```
+- **Ollama**: Required for local AI model execution and Graphify full semantic extraction.
 
 ## Installation
 
@@ -47,6 +52,9 @@ YodaMan stores its configuration in `config.json` at the root of the project.
 ```
 
 - **watchedDirectories**: A list of absolute paths that YodaMan will monitor for changes.
+- **removedDirectories**: A local tombstone list for workspaces deleted from YodaMan so they are not re-added from stale index metadata.
+
+YodaMan 0.2.1 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
 
 Runtime state files such as `audit-log.json`, `audit-log.jsonl`, `task-history.json`, and `task-history.jsonl` are local machine artifacts and are ignored by git.
 
@@ -84,6 +92,24 @@ Use an alternate API base from the web UI:
 
 ```bash
 VITE_YODAMAN_API_BASE=http://localhost:4090/api npm run dev
+```
+
+Point YodaMan at a Graphify executable outside `PATH`:
+
+```bash
+YODAMAN_GRAPHIFY_BIN=/Users/you/Library/Python/3.14/bin/graphify npm start
+```
+
+Tune Graphify subprocess timeouts:
+
+```bash
+YODAMAN_GRAPHIFY_TIMEOUT_MS=180000 npm start
+```
+
+Enable Graphify full semantic extraction through Ollama only:
+
+```bash
+YODAMAN_GRAPHIFY_FULL_EXTRACT=true YODAMAN_GRAPHIFY_OLLAMA_MODEL=qwen3:5b npm start
 ```
 
 Tune frontend request timeouts:

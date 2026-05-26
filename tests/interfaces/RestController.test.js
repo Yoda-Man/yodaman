@@ -87,4 +87,27 @@ describe('RestController Integration', () => {
             code: 'invalid_project_id'
         }));
     });
+
+    test('POST /reindex rejects missing workspace paths with a useful error', async () => {
+        const response = await invoke('post', '/reindex', {
+            body: { path: '/definitely/not/a/yodaman/workspace' }
+        });
+
+        expect(response.statusCode).toBe(404);
+        expect(response.payload).toEqual(expect.objectContaining({
+            code: 'workspace_not_registered',
+            error: expect.stringContaining('Workspace is not registered')
+        }));
+    });
+
+    test('DELETE /plugins/:name refuses to remove mandatory Graphify plugin', async () => {
+        const response = await invoke('delete', '/plugins/:name', {
+            params: { name: 'graphify' }
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.payload).toEqual(expect.objectContaining({
+            code: 'mandatory_plugin'
+        }));
+    });
 });

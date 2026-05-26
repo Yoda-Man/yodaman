@@ -9,6 +9,8 @@ export default function ProjectList({
     onToggle, 
     onReindex, 
     onOpenSettings,
+    onRefresh,
+    isRefreshing,
     onDelete,
     onUpdatePath
 }) {
@@ -79,12 +81,23 @@ export default function ProjectList({
                     <Folder size={18} className="text-indigo-400" />
                     <h2 className="font-outfit font-bold text-sm uppercase tracking-widest text-slate-200">Workspaces</h2>
                 </div>
-                <button 
-                    onClick={onOpenSettings} 
-                    className="p-2 hover:bg-white/5 rounded-xl text-slate-400 hover:text-indigo-400 transition-all active:scale-95 border border-transparent hover:border-white/10"
-                >
-                    <Plus size={18} />
-                </button>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={onRefresh}
+                        className="p-2 hover:bg-white/5 rounded-xl text-slate-400 hover:text-cyan-300 transition-all active:scale-95 border border-transparent hover:border-white/10"
+                        title="Refresh workspaces"
+                        disabled={isRefreshing}
+                    >
+                        <RefreshCw size={17} className={isRefreshing ? 'animate-spin' : ''} />
+                    </button>
+                    <button
+                        onClick={onOpenSettings}
+                        className="p-2 hover:bg-white/5 rounded-xl text-slate-400 hover:text-indigo-400 transition-all active:scale-95 border border-transparent hover:border-white/10"
+                        title="Add workspace"
+                    >
+                        <Plus size={18} />
+                    </button>
+                </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
@@ -223,4 +236,3 @@ export default function ProjectList({
         </div>
     )
 }
-

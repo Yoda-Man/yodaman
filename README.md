@@ -2,13 +2,14 @@
 
 YodaMan is a local-first AI workspace companion for developers. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private runtime.
 
-![Version](https://img.shields.io/badge/Version-0.2.0-gold)
+![Version](https://img.shields.io/badge/Version-0.2.1-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
 
 - **Keep code private**: YodaMan is designed around local project indexing and local model workflows through Context Expert and optional Ollama.
 - **Understand the whole workspace**: Search and ask across indexed repositories instead of juggling isolated editor tabs.
+- **See relationships, not fragments**: Graphify builds mandatory knowledge graphs that connect code, docs, diagrams, and architectural concepts.
 - **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and approval gates for file changes.
 - **Work where you already are**: Use the web UI, desktop app, CLI package, VS Code extension, and mobile companion surfaces against the same runtime.
 - **Extend the assistant**: Add JavaScript plugins for custom tools while keeping tool activity visible through policy and audit endpoints.
@@ -36,17 +37,30 @@ Built-in tools cover file reads, controlled writes, exact patching, command exec
 ## Prerequisites
 
 - Node.js 18 or newer
+- Python 3.10 or newer
 - Context Expert CLI:
 
 ```bash
 npm install -g @contextexpert/cli
 ```
 
-- Ollama, optional but recommended for local model execution
+- Graphify knowledge graph CLI:
+
+```bash
+python3 -m pip install graphifyy
+```
+
+- Ollama is required for local model execution. Graphify runs through Ollama only; YodaMan strips cloud provider API keys from Graphify subprocesses.
+
+- Ollama, required for local model execution
 
 ## Dependencies
 
-Runtime dependencies include Express for the local API, React and Vite for the web UI, Context Expert (`ctx`) for workspace intelligence, Chokidar for file watching, Multer for plugin uploads, and Lucide React for UI icons. Development and packaging use Jest, Electron, Electron Builder, Tailwind CSS, PostCSS, Nodemon, Concurrently, and the release smoke-check script.
+Runtime dependencies include Express for the local API, React and Vite for the web UI, Context Expert (`ctx`) for workspace intelligence, Graphify (`graphify`, installed from the `graphifyy` Python package) for mandatory knowledge graph construction and graph-aware answer context, Chokidar for file watching, Multer for plugin uploads, and Lucide React for UI icons. Development and packaging use Jest, Electron, Electron Builder, Tailwind CSS, PostCSS, Nodemon, Concurrently, and the release smoke-check script.
+
+Graphify is wired into YodaMan as a required knowledge layer. Reindexing a workspace updates both the Context Expert index and the Graphify graph, then adds the project graph to Graphify's global graph. Chat and agent answers receive graph report context plus question-specific graph traversal output; stale graphs rebuild before answer context is gathered. The Plugins tab exposes Graphify status, freshness warnings, manual graph rebuilds, direct graph queries, impact analysis, and architecture maps. Runtime clients can also call `/api/graphify/status`, `/api/graphify/build`, `/api/graphify/query`, `/api/graphify/explain`, `/api/graphify/path`, `/api/graphify/affected`, `/api/graphify/map`, and `/api/graphify/tree`.
+
+Yoda-Agent also loads a default coding skill inspired by the Karpathy-style guidance for AI coding agents: surface assumptions, keep changes small, avoid speculative abstractions, make surgical edits, and verify work with targeted checks.
 
 ## Setup
 
@@ -92,6 +106,10 @@ Useful environment variables:
 | `VITE_YODAMAN_FETCH_TIMEOUT_MS` | `30000` | Browser request timeout. |
 | `YODAMAN_REQUIRE_PAIRING_TOKEN` | `false` | Requires `X-YodaMan-Token` for non-local API clients when set to `true`. |
 | `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `false` | Allows explicitly trusted unrestricted plugins. |
+| `YODAMAN_GRAPHIFY_BIN` | `graphify` | Graphify CLI binary used to build and query workspace knowledge graphs. |
+| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `120000` | Timeout for Graphify build and query subprocesses. |
+| `YODAMAN_GRAPHIFY_FULL_EXTRACT` | `false` | Use Graphify full semantic extraction through Ollama only. |
+| `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | `qwen3:5b` | Ollama model passed to Graphify when full extraction is enabled. |
 
 ## Query Modes
 

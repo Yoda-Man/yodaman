@@ -6,9 +6,10 @@ These runbooks are for local support and handover of a YodaMan runtime.
 
 1. Confirm Node.js 18 or newer is available.
 2. Confirm `ctx --version` succeeds.
-3. Install dependencies with `npm install`.
-4. Start YodaMan with `npm start`.
-5. Open `http://localhost:5190` for the development UI or `http://localhost:3090` for packaged runtime endpoints.
+3. Confirm `graphify --help` succeeds, or set `YODAMAN_GRAPHIFY_BIN`.
+4. Install dependencies with `npm install`.
+5. Start YodaMan with `npm start`.
+6. Open `http://localhost:5190` for the development UI or `http://localhost:3090` for packaged runtime endpoints.
 
 ## Stop the runtime
 
@@ -31,6 +32,7 @@ Use these endpoints:
 | `GET /api/status` | Context Expert runtime status. |
 | `GET /api/check?path=/absolute/workspace` | Workspace health check through `ctx`. |
 | `GET /api/desktop/diagnostics` | Process, host, memory, task, and plugin diagnostics. |
+| `GET /api/graphify/status?path=/absolute/workspace` | Graphify graph artifact status. |
 | `GET /api/policy` | Current workspace roots, blocked commands, and plugin permissions. |
 | `GET /api/audit?limit=100` | Recent tool/audit activity. |
 
@@ -55,6 +57,14 @@ To archive logs, stop the runtime, move the files to a dated backup directory, t
 3. Confirm watched directories in `config.json` still exist.
 4. Reindex a workspace with `POST /api/reindex`.
 5. Restart YodaMan if `ctx` remains unresponsive.
+
+## Recover from Graphify failures
+
+1. Run `graphify --help`, or check `YODAMAN_GRAPHIFY_BIN`.
+2. Confirm the workspace path is registered with `GET /api/projects`.
+3. Run `GET /api/graphify/status?path=/absolute/workspace`.
+4. Run `POST /api/graphify/build` for the workspace.
+5. If semantic extraction fails, confirm Ollama is running and the model named by `YODAMAN_GRAPHIFY_OLLAMA_MODEL` is available locally.
 
 ## Handle out-of-disk errors
 

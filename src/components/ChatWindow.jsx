@@ -21,7 +21,7 @@ export default function ChatWindow({ selectedProject }) {
         setMode(newMode)
         try { localStorage.setItem('yodamanMode', newMode) } catch (e) {}
         if (selectedProject) {
-            api.setMode(newMode, selectedProject.id).catch(console.error)
+            api.setMode(newMode, selectedProject.path).catch(console.error)
         }
     }
 
@@ -82,7 +82,7 @@ export default function ChatWindow({ selectedProject }) {
                 let currentAiMsg = { role: 'ai', content: '', timestamp: new Date(), isAgent: true }
                 setMessages(prev => [...prev, currentAiMsg])
 
-                await api.agentTask(inputText, selectedProject.id, (step) => {
+                await api.agentTask(inputText, selectedProject.path, (step) => {
                     if (step.type === 'tool_start') {
                         setAgentSteps(prev => [...prev, { type: 'start', tool: step.tool, params: step.params }])
                     } else if (step.type === 'tool_end') {
@@ -101,7 +101,7 @@ export default function ChatWindow({ selectedProject }) {
                     }
                 })
             } else {
-                const data = await api.ask(inputText, selectedProject.id, mode)
+                const data = await api.ask(inputText, selectedProject.path, mode)
                 const aiMsg = { 
                     role: 'ai', 
                     content: data.answer || 'I couldn\'t find a specific answer in the indexed files.', 

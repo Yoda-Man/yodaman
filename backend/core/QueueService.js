@@ -1,5 +1,6 @@
 const contextEngine = require('../infrastructure/ContextEngine');
 const logger = require('../infrastructure/Logger');
+const graphifyService = require('../infrastructure/GraphifyService');
 
 /**
  * QueueService (Core Layer)
@@ -48,6 +49,7 @@ class QueueService {
             // Wait, original used spawn for streaming logs.
             const { spawn } = require('child_process');
             this.activeProcess = spawn('ctx', ['index', targetDir]);
+            let stderr = '';
 
             this.activeProcess.stdout.on('data', (data) => {
                 const text = data.toString();
@@ -57,16 +59,28 @@ class QueueService {
 
             this.activeProcess.stderr.on('data', (data) => {
                 const text = data.toString();
+                stderr += text;
                 process.stderr.write(`[ctx-error]: ${text}`);
                 logger.warn('ctx_index_stderr', { path: targetDir, output: text.trim() });
+            });
+
+            this.activeProcess.on('error', (err) => {
+                logger.error('index_process_error', err, { path: targetDir });
             });
 
             this.activeProcess.on('close', (code) => {
                 console.log(`[Queue] ✅ Finished indexing ${targetDir} (Exit Code: ${code})`);
                 if (code === 0) {
                     logger.info('index_completed', { path: targetDir, exitCode: code });
+                    graphifyService.build(targetDir, { update: true }).catch((err) => {
+                        logger.error('graphify_build_failed', err, { path: targetDir });
+                    });
                 } else {
-                    logger.error('index_failed', new Error(`ctx index exited with code ${code}`), { path: targetDir, exitCode: code });
+                    const detail = stderr.trim();
+                    const message = detail
+                        ? `ctx index exited with code ${code}: ${detail}`
+                        : `ctx index exited with code ${code}`;
+                    logger.error('index_failed', new Error(message), { path: targetDir, exitCode: code });
                 }
                 this.activeProcess = null;
                 this.isProcessing = false;

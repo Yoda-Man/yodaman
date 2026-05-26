@@ -19,6 +19,7 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isLogsOpen, setIsLogsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('chat') // 'chat', 'search', 'dashboard', 'manual', 'plugins'
+  const [isRefreshingProjects, setIsRefreshingProjects] = useState(false)
 
   useEffect(() => {
     fetchProjects()
@@ -26,17 +27,25 @@ export default function App() {
 
 
   const fetchProjects = async () => {
+    setIsRefreshingProjects(true)
     try {
       const data = await api.getProjects()
-      setProjects(data.map(p => ({
+      const nextProjects = data.map(p => ({
         id: p.id,
         name: p.name,
         path: p.path,
         included: true,
         files: []
-      })))
+      }))
+      setProjects(nextProjects)
+      setSelectedProject(current => {
+        if (!current) return null
+        return nextProjects.find(p => p.path === current.path || p.id === current.id) || null
+      })
     } catch (err) {
       console.error('Failed to fetch projects:', err)
+    } finally {
+      setIsRefreshingProjects(false)
     }
   }
 
@@ -49,9 +58,12 @@ export default function App() {
   const handleReindex = async () => {
     if (!selectedProject) return
     try {
-      await api.reindex(selectedProject.path)
+      const result = await api.reindex(selectedProject.path)
+      await fetchProjects()
+      window.alert(result.message || 'Indexing queued.')
     } catch (err) {
       console.error('Reindex failed:', err)
+      window.alert(`Sync failed: ${err.message}`)
     }
   }
 
@@ -103,6 +115,8 @@ export default function App() {
           onToggle={handleToggleProject}
           onReindex={handleReindex}
           onOpenSettings={() => setIsModalOpen(true)}
+          onRefresh={fetchProjects}
+          isRefreshing={isRefreshingProjects}
           onDelete={handleDeleteProject}
           onUpdatePath={handleUpdateProjectPath}
         />
@@ -172,7 +186,7 @@ export default function App() {
             {activeTab === 'search' && <SearchWindow selectedProject={selectedProject} />}
             {activeTab === 'dashboard' && <Dashboard />}
             {activeTab === 'manual' && <ManualWindow />}
-            {activeTab === 'plugins' && <PluginsWindow />}
+            {activeTab === 'plugins' && <PluginsWindow selectedProject={selectedProject} />}
           </div>
 
         </div>

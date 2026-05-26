@@ -104,6 +104,18 @@ function createYodaManClient(runtimeUrl, options = {}) {
                 body: JSON.stringify({ path })
             });
         },
+        removeProject(path) {
+            return request(API_PATHS.projects, {
+                method: 'DELETE',
+                body: JSON.stringify({ path })
+            });
+        },
+        updateProjectPath(path, nextPath) {
+            return request(API_PATHS.projects, {
+                method: 'PUT',
+                body: JSON.stringify({ path, nextPath })
+            });
+        },
         ask(question, projectId, mode) {
             const body = { question, projectId };
             if (mode) body.mode = mode;
@@ -160,6 +172,43 @@ function createYodaManClient(runtimeUrl, options = {}) {
         },
         logs(limit = 200) {
             return request(`/api/logs?limit=${encodeURIComponent(limit)}`);
+        },
+        graphifyStatus(path) {
+            return request(`/api/graphify/status?path=${encodeURIComponent(path)}`);
+        },
+        graphifyBuild(path) {
+            return request('/api/graphify/build', {
+                method: 'POST',
+                body: JSON.stringify({ path })
+            });
+        },
+        graphifyQuery(path, query) {
+            return request('/api/graphify/query', {
+                method: 'POST',
+                body: JSON.stringify({ path, query })
+            });
+        },
+        graphifyExplain(path, node) {
+            return request('/api/graphify/explain', {
+                method: 'POST',
+                body: JSON.stringify({ path, node })
+            });
+        },
+        graphifyPath(path, source, target) {
+            return request('/api/graphify/path', {
+                method: 'POST',
+                body: JSON.stringify({ path, source, target })
+            });
+        },
+        graphifyAffected(path, node, depth = 2, relations = []) {
+            return request('/api/graphify/affected', {
+                method: 'POST',
+                body: JSON.stringify({ path, node, depth, relations })
+            });
+        },
+        graphifyMap(path, limit = 80) {
+            const params = new URLSearchParams({ path, limit: String(limit) });
+            return request(`/api/graphify/map?${params.toString()}`);
         },
         clearTasks() {
             return request(API_PATHS.tasks, {

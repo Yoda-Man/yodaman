@@ -4,6 +4,7 @@ const os = require('os');
 const { exec } = require('child_process');
 const contextEngine = require('./ContextEngine');
 const auditLog = require('./AuditLog');
+const graphifyService = require('./GraphifyService');
 
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
 const PLUGIN_PERMISSION_ALLOWLIST = new Set([
@@ -111,7 +112,11 @@ class ToolBox {
             "3. applyPatch(filePath, oldText, newText): Replaces an exact text range in a file.",
             "4. executeCommand(command, cwd): Runs a shell command and returns output.",
             "5. searchCode(query): Searches the codebase for relevant snippets.",
-            "6. listFiles(directoryPath): Lists files in a directory."
+            "6. listFiles(directoryPath): Lists files in a directory.",
+            "7. graphifyQuery(query, project): Queries the workspace knowledge graph for related code, docs, and diagram relationships.",
+            "8. graphifyExplain(node, project): Explains a graph node and its neighbors.",
+            "9. graphifyPath(source, target, project): Finds a graph path between two entities.",
+            "10. graphifyAffected(node, project, depth): Finds nodes likely impacted by a change to a graph entity."
         ];
 
         const pluginDocs = Array.from(this.plugins.values()).map((p, i) => {
@@ -192,6 +197,30 @@ class ToolBox {
             name: f.name,
             isDir: f.isDirectory()
         }));
+    }
+
+    async graphifyQuery({ query, project }) {
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        const insights = await graphifyService.query(query, projectPath);
+        return { insights, graphPath: graphifyService.graphPath(projectPath) };
+    }
+
+    async graphifyExplain({ node, project }) {
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        const explanation = await graphifyService.explain(node, projectPath);
+        return { explanation, graphPath: graphifyService.graphPath(projectPath) };
+    }
+
+    async graphifyPath({ source, target, project }) {
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        const result = await graphifyService.pathBetween(source, target, projectPath);
+        return { result, graphPath: graphifyService.graphPath(projectPath) };
+    }
+
+    async graphifyAffected({ node, project, depth = 2, relations = [] }) {
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        const impact = await graphifyService.affected(node, projectPath, { depth, relations });
+        return { impact, graphPath: graphifyService.graphPath(projectPath) };
     }
 
     async getFileContent(filePath) {

@@ -22,6 +22,11 @@ check_cmd() {
     command -v "$1" >/dev/null 2>&1
 }
 
+check_graphify() {
+    check_cmd graphify && return 0
+    ls "$HOME"/Library/Python/*/bin/graphify >/dev/null 2>&1
+}
+
 # 1. Check for Homebrew (MacOS Package Manager)
 echo -ne "🔍 Checking Homebrew... "
 if check_cmd brew; then
@@ -71,6 +76,16 @@ else
     echo -e "${YELLOW}Missing${NC}"
     echo -e "📦 Installing @contextexpert/cli globally..."
     npm install -g @contextexpert/cli
+fi
+
+# 6. Check for Graphify
+echo -ne "🔍 Checking Graphify... "
+if check_graphify; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${YELLOW}Missing${NC}"
+    echo -e "📦 Installing graphifyy..."
+    python3 -m pip install --user graphifyy || python3 -m pip install --user --break-system-packages graphifyy
 fi
 
 echo -e "${BLUE}------------------------------------------------${NC}"
