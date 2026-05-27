@@ -13,7 +13,6 @@ audit-log.jsonl
 task-history.jsonl
 
 # Desktop clients
-electron/
 electron/dist/
 electron/out/
 electron/release/
@@ -59,4 +58,3 @@ yodaman.db
 yodaman.db-journal
 yodaman.db-wal
 yodaman.db-shm
-
