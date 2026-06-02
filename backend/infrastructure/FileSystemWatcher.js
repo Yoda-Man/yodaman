@@ -11,7 +11,14 @@ class FileSystemWatcher {
     constructor() {
         this.watchers = new Map();
         this.debounceTimers = new Map();
-        this.ignored = ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'];
+        this.ignored = [
+            '**/node_modules/**',
+            '**/.git/**',
+            '**/dist/**',
+            '**/build/**',
+            '**/release/**',
+            '**/graphify-out/**'
+        ];
         this.debounceMs = Number(process.env.YODAMAN_WATCH_DEBOUNCE_MS || 1500);
     }
 

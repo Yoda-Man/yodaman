@@ -292,6 +292,120 @@ function summarizeBuildStatus(projectPath, buildStatus, { now = new Date() } = {
     return buildStatus;
 }
 
+function extractJsonArray(html, variableName) {
+    const marker = `const ${variableName} = `;
+    const start = html.indexOf(marker);
+    if (start === -1) return null;
+    const arrayStart = html.indexOf('[', start + marker.length);
+    if (arrayStart === -1) return null;
+
+    let depth = 0;
+    let inString = false;
+    let quote = '';
+    let escaped = false;
+    for (let index = arrayStart; index < html.length; index += 1) {
+        const char = html[index];
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+            } else if (char === '\\') {
+                escaped = true;
+            } else if (char === quote) {
+                inString = false;
+            }
+            continue;
+        }
+        if (char === '"' || char === "'") {
+            inString = true;
+            quote = char;
+            continue;
+        }
+        if (char === '[') depth += 1;
+        if (char === ']') {
+            depth -= 1;
+            if (depth === 0) {
+                return {
+                    json: html.slice(arrayStart, index + 1),
+                    start: arrayStart,
+                    end: index + 1
+                };
+            }
+        }
+    }
+    return null;
+}
+
+function sourceLabelForCommunity(nodes) {
+    const counts = new Map();
+    nodes.forEach(node => {
+        const source = node.source_file || node.sourceFile || '';
+        if (!source) return;
+        const basename = path.basename(source);
+        const dir = path.basename(path.dirname(source));
+        const label = basename && basename !== '.' ? basename : dir;
+        if (!label) return;
+        counts.set(label, (counts.get(label) || 0) + 1);
+    });
+
+    const [label] = Array.from(counts.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || [];
+    return label ? `${label} cluster` : '';
+}
+
+function enhanceArtifactHtml(html) {
+    if (!html || !html.includes('Community ')) return html;
+
+    const nodesBlock = extractJsonArray(html, 'RAW_NODES');
+    const legendBlock = extractJsonArray(html, 'LEGEND');
+    if (!nodesBlock || !legendBlock) return html;
+
+    let nodes;
+    let legend;
+    try {
+        nodes = JSON.parse(nodesBlock.json);
+        legend = JSON.parse(legendBlock.json);
+    } catch {
+        return html;
+    }
+
+    const nodesByCommunity = new Map();
+    nodes.forEach(node => {
+        const community = node.community;
+        if (community === undefined || community === null) return;
+        const key = String(community);
+        if (!nodesByCommunity.has(key)) nodesByCommunity.set(key, []);
+        nodesByCommunity.get(key).push(node);
+    });
+
+    const labelsByCommunity = new Map();
+    legend.forEach(item => {
+        const current = String(item.label || '');
+        if (!/^Community\s+\d+$/i.test(current)) return;
+        const label = sourceLabelForCommunity(nodesByCommunity.get(String(item.cid)) || []);
+        if (label) {
+            item.label = label;
+            labelsByCommunity.set(String(item.cid), label);
+        }
+    });
+
+    if (labelsByCommunity.size === 0) return html;
+
+    nodes.forEach(node => {
+        const label = labelsByCommunity.get(String(node.community));
+        if (label && /^Community\s+\d+$/i.test(String(node.community_name || ''))) {
+            node.community_name = label;
+        }
+    });
+
+    let nextHtml = html;
+    nextHtml = `${nextHtml.slice(0, legendBlock.start)}${JSON.stringify(legend)}${nextHtml.slice(legendBlock.end)}`;
+    const adjustedNodesBlock = extractJsonArray(nextHtml, 'RAW_NODES');
+    if (adjustedNodesBlock) {
+        nextHtml = `${nextHtml.slice(0, adjustedNodesBlock.start)}${JSON.stringify(nodes)}${nextHtml.slice(adjustedNodesBlock.end)}`;
+    }
+    return nextHtml;
+}
+
 module.exports = {
     graphPath,
     reportPath,
@@ -300,6 +414,7 @@ module.exports = {
     artifactTypes: () => Object.keys(ARTIFACTS),
     graphifyEnvironment,
     needsArtifactRegeneration,
+    enhanceArtifactHtml,
     hasGraph,
     getGraphifyBin,
 
@@ -463,6 +578,11 @@ module.exports = {
             artifactPath: currentArtifactPath,
             filename: path.basename(currentArtifactPath)
         };
+    },
+
+    readArtifact(projectPath, type) {
+        const artifact = this.artifact(projectPath, type);
+        return enhanceArtifactHtml(fs.readFileSync(artifact.artifactPath, 'utf8'));
     },
 
     readReport(projectPath, { maxChars = 8000 } = {}) {

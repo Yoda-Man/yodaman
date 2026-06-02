@@ -177,6 +177,73 @@ describe('RestController Integration', () => {
         }));
     });
 
+    test('POST /ask returns a local fallback answer when ctx ask fails', async () => {
+        const originalExecute = contextEngine.execute;
+        const originalQuery = graphifyService.query;
+        const originalReadReport = graphifyService.readReport;
+        const originalSaveResult = graphifyService.saveResult;
+        const originalSearchCode = require('../../backend/infrastructure/ToolBox').searchCode;
+        const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-rest-chat-workspace-'));
+
+        try {
+            fs.writeFileSync(configPath(), JSON.stringify({
+                watchedDirectories: [workspace],
+                removedDirectories: []
+            }, null, 2));
+            router.loadConfig();
+            contextEngine.execute = jest.fn(async () => {
+                throw new Error('ctx ask unavailable');
+            });
+            graphifyService.query = jest.fn(async () => 'Graph node: publishMenu connects menu routes.');
+            graphifyService.readReport = jest.fn(() => [
+                'Architecture summary mentions menu publishing.',
+                '',
+                '## Community Hubs (Navigation)',
+                '- [[_COMMUNITY_Community 1|Community 1]]',
+                '- [[_COMMUNITY_Community 2|Community 2]]',
+                '',
+                '## Top Nodes',
+                '- MenuScreen()'
+            ].join('\n'));
+            graphifyService.saveResult = jest.fn(async () => ({ skipped: true }));
+            require('../../backend/infrastructure/ToolBox').searchCode = jest.fn(async () => [
+                {
+                    content: 'function publishMenu() {}',
+                    score: 0.9,
+                    metadata: { path: path.join(workspace, 'menu.js') }
+                }
+            ]);
+
+            const response = await invoke('post', '/ask', {
+                body: {
+                    question: 'menu',
+                    projectId: workspace,
+                    mode: 'code'
+                }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(contextEngine.execute).toHaveBeenCalledWith(
+                expect.arrayContaining(['ask', '--']),
+                expect.objectContaining({ timeoutMs: expect.any(Number) })
+            );
+            expect(response.payload.answer).toContain('YodaMan could not reach ctx ask');
+            expect(response.payload.answer).toContain('publishMenu');
+            expect(response.payload.answer).toContain('Graph node');
+            expect(response.payload.answer).toContain('Top Nodes');
+            expect(response.payload.answer).not.toContain('Community Hubs');
+            expect(response.payload.answer).not.toContain('_COMMUNITY_Community');
+        } finally {
+            contextEngine.execute = originalExecute;
+            graphifyService.query = originalQuery;
+            graphifyService.readReport = originalReadReport;
+            graphifyService.saveResult = originalSaveResult;
+            require('../../backend/infrastructure/ToolBox').searchCode = originalSearchCode;
+            router.loadConfig();
+            fs.rmSync(workspace, { recursive: true, force: true });
+        }
+    });
+
     test('GET /sessions returns structured errors for missing project id', async () => {
         const response = await invoke('get', '/sessions');
         expect(response.statusCode).toBe(400);
@@ -316,7 +383,7 @@ describe('RestController Integration', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(response.filePath).toBe(artifactPath);
+            expect(response.payload).toContain('<html><body>graph</body></html>');
             expect(response.headers['Content-Security-Policy']).toContain("'unsafe-inline'");
             expect(response.headers['Content-Security-Policy']).toContain('https://unpkg.com');
         });

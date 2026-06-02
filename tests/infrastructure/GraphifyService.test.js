@@ -99,6 +99,21 @@ describe('GraphifyService build status', () => {
         })).toBe(true);
     });
 
+    test('enhanceArtifactHtml replaces generic community labels with source-based labels', () => {
+        const html = `
+<script>
+const RAW_NODES = [{"id":"one","label":"publishMenu()","community":7,"community_name":"Community 7","source_file":"Anchorstay/web/menu.js"},{"id":"two","label":"MenuPage","community":7,"community_name":"Community 7","source_file":"Anchorstay/web/menu.js"}];
+const RAW_EDGES = [];
+const LEGEND = [{"cid":7,"color":"#fff","label":"Community 7","count":2}];
+</script>`;
+
+        const enhanced = graphifyService.enhanceArtifactHtml(html);
+
+        expect(enhanced).toContain('"label":"menu.js cluster"');
+        expect(enhanced).toContain('"community_name":"menu.js cluster"');
+        expect(enhanced).not.toContain('"label":"Community 7"');
+    });
+
     test('freshness can skip expensive source tree scans for status endpoints', () => {
         fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [], links: [] }));
         const status = graphifyService.freshness(workspace, { scanSources: false });

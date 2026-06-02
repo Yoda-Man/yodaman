@@ -51,4 +51,23 @@ describe('ContextEngine', () => {
 
         await expect(contextEngine.execute(['bad-command'])).rejects.toThrow('execution failed');
     });
+
+    test('execute should kill hung ctx processes after timeout', async () => {
+        jest.useFakeTimers();
+        const handlers = {};
+        const mockProc = {
+            stdout: { on: jest.fn() },
+            stderr: { on: jest.fn() },
+            on: jest.fn((event, cb) => { handlers[event] = cb; }),
+            kill: jest.fn()
+        };
+        spawn.mockReturnValue(mockProc);
+
+        const promise = contextEngine.execute(['ask', '--', 'menu'], { timeoutMs: 25 });
+        jest.advanceTimersByTime(25);
+
+        await expect(promise).rejects.toThrow('ctx command timed out after 25ms');
+        expect(mockProc.kill).toHaveBeenCalledWith('SIGTERM');
+        jest.useRealTimers();
+    });
 });

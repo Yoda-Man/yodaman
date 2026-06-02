@@ -16,25 +16,41 @@ class ContextEngine {
      * @param {string[]} args - Arguments to pass to the CLI.
      * @returns {Promise<{output: string, code: number}>}
      */
-    async execute(args = []) {
+    async execute(args = [], { timeoutMs } = {}) {
         return new Promise((resolve, reject) => {
             console.log(`[ContextEngine] Executing: ${this.binary} ${args.join(' ')}`);
             const proc = spawn(this.binary, args);
             let output = '';
             let error = '';
+            let settled = false;
+            const timeout = Number(timeoutMs || 0) > 0
+                ? setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    proc.kill?.('SIGTERM');
+                    reject(new Error(`${this.binary} command timed out after ${timeoutMs}ms`));
+                }, Number(timeoutMs))
+                : null;
+
+            const finish = (fn) => {
+                if (settled) return;
+                settled = true;
+                if (timeout) clearTimeout(timeout);
+                fn();
+            };
 
             proc.stdout.on('data', (data) => output += data.toString());
             proc.stderr.on('data', (data) => error += data.toString());
 
             proc.on('error', (err) => {
-                reject(new Error(`Failed to start ${this.binary}: ${err.message}`));
+                finish(() => reject(new Error(`Failed to start ${this.binary}: ${err.message}`)));
             });
 
             proc.on('close', (code) => {
                 if (code === 0 || (args.includes('--json') && output)) {
-                    resolve({ output, code });
+                    finish(() => resolve({ output, code }));
                 } else {
-                    reject(new Error(error || `CLI command failed with code ${code}`));
+                    finish(() => reject(new Error(error || `CLI command failed with code ${code}`)));
                 }
             });
         });

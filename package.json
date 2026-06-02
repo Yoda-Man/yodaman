@@ -23,7 +23,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node start.js",
-    "server": "nodemon server.js",
+    "server": "node server.js",
+    "server:watch": "nodemon server.js",
     "client": "vite",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "build": "vite build",

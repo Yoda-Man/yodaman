@@ -1,4 +1,5 @@
 const toolBox = require('../../backend/infrastructure/ToolBox');
+const contextEngine = require('../../backend/infrastructure/ContextEngine');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -103,5 +104,66 @@ describe('ToolBox', () => {
                 process.env.YODAMAN_ALLOW_AGENT_COMMANDS = original;
             }
         }
+    });
+
+    test('searchCode falls back to filesystem search when ctx JSON search fails', async () => {
+        const originalExecuteJson = contextEngine.executeJson;
+        const searchFile = path.join(tempDir, 'menu-controller.js');
+        fs.writeFileSync(searchFile, 'export function publishMenu() { return "menu"; }\n', 'utf8');
+        contextEngine.executeJson = jest.fn(async () => {
+            throw new Error('Failed to parse CLI JSON: No valid JSON block found in CLI output');
+        });
+
+        try {
+            const results = await toolBox.searchCode({ query: 'menu', project: tempDir, top: 5 });
+
+            expect(results.length).toBeGreaterThan(0);
+            expect(results[0]).toEqual(expect.objectContaining({
+                content: expect.stringContaining('publishMenu'),
+                score: expect.any(Number),
+                metadata: expect.objectContaining({
+                    path: searchFile
+                })
+            }));
+        } finally {
+            contextEngine.executeJson = originalExecuteJson;
+        }
+    });
+
+    test('searchCode falls back when ctx returns a non-search JSON object', async () => {
+        const originalExecuteJson = contextEngine.executeJson;
+        const searchFile = path.join(tempDir, 'menu-service.js');
+        fs.writeFileSync(searchFile, 'export const menuService = { publish: true };\n', 'utf8');
+        contextEngine.executeJson = jest.fn(async () => ({
+            error: 'No valid JSON block found in CLI output'
+        }));
+
+        try {
+            const results = await toolBox.searchCode({ query: 'menuService', project: tempDir, top: 5 });
+
+            expect(results).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    content: expect.stringContaining('menuService'),
+                    metadata: expect.objectContaining({
+                        source: 'filesystem-fallback'
+                    })
+                })
+            ]));
+        } finally {
+            contextEngine.executeJson = originalExecuteJson;
+        }
+    });
+
+    test('filesystem search fallback skips secret environment files', async () => {
+        const secretFile = path.join(tempDir, '.env');
+        const publicFile = path.join(tempDir, 'menu-docs.md');
+        fs.writeFileSync(secretFile, 'SECRET_MENU_TOKEN=do-not-return\n', 'utf8');
+        fs.writeFileSync(publicFile, 'menu docs are safe to return\n', 'utf8');
+
+        const results = toolBox.searchCodeFilesystem({ query: 'menu', project: tempDir, top: 10 });
+        const resultPaths = results.map(result => result.metadata.path);
+
+        expect(resultPaths).toContain(publicFile);
+        expect(resultPaths).not.toContain(secretFile);
     });
 });

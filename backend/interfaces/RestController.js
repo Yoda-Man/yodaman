@@ -326,6 +326,35 @@ function buildGraphAugmentedQuestion(question, graphInsights) {
     ].join('\n');
 }
 
+function sanitizeGraphReportForChat(report) {
+    return String(report || '')
+        .replace(/\n## Community Hubs \(Navigation\)[\s\S]*?(?=\n## |\s*$)/, '\n')
+        .trim();
+}
+
+function formatSearchResult(result, index) {
+    const filePath = result.metadata?.path || result.path || 'unknown file';
+    const line = result.metadata?.line ? `:${result.metadata.line}` : '';
+    const snippet = result.content || result.text || result.snippet || '';
+    return `${index + 1}. ${filePath}${line}\n${snippet}`.trim();
+}
+
+async function buildLocalAskFallbackAnswer({ question, projectPath, graphInsights, cause }) {
+    const searchResults = projectPath
+        ? await toolBox.searchCode({ query: question, project: projectPath, top: 5 }).catch(() => [])
+        : [];
+    const snippets = searchResults.slice(0, 5).map(formatSearchResult).join('\n\n');
+    return [
+        `YodaMan could not reach ctx ask (${cause.message}), so it answered from local workspace context instead.`,
+        '',
+        graphInsights ? `Graph context:\n${graphInsights}` : 'Graph context: no graph context was available.',
+        '',
+        snippets ? `Matching code snippets:\n${snippets}` : 'Matching code snippets: no local search matches were found.',
+        '',
+        `Question: ${question}`
+    ].join('\n');
+}
+
 function resolveRegisteredProjectPath(value) {
     const resolved = resolveUserPath(value);
     loadConfig();
@@ -498,7 +527,7 @@ router.post('/ask', async (req, res) => {
     try {
         let graphInsights = '';
         if (projectPath) {
-            const report = graphifyService.readReport(projectPath, { maxChars: 4000 });
+            const report = sanitizeGraphReportForChat(graphifyService.readReport(projectPath, { maxChars: 4000 }));
             const queryInsights = await graphifyService.query(question, projectPath);
             graphInsights = [
                 'Graph report summary:',
@@ -509,8 +538,28 @@ router.post('/ask', async (req, res) => {
             ].join('\n');
         }
         const augmentedQuestion = buildGraphAugmentedQuestion(question, graphInsights);
-        const { output } = await contextEngine.execute(['ask', '--', augmentedQuestion]);
-        const answer = output.trim();
+        let answer;
+        try {
+            const timeoutMs = Number(process.env.YODAMAN_CTX_ASK_TIMEOUT_MS || 12000);
+            const { output } = await contextEngine.execute(['ask', '--', augmentedQuestion], { timeoutMs });
+            answer = output.trim();
+        } catch (ctxErr) {
+            logger.warn('ask_ctx_fallback_started', {
+                requestId: req.id,
+                projectId,
+                projectPath,
+                mode,
+                error: ctxErr.message,
+                userAction: 'chat_ask',
+                severity: 'medium'
+            });
+            answer = await buildLocalAskFallbackAnswer({
+                question,
+                projectPath,
+                graphInsights,
+                cause: ctxErr
+            });
+        }
         if (projectPath && answer) {
             graphifyService.saveResult(projectPath, {
                 question,
@@ -840,9 +889,9 @@ router.get('/graphify/artifact', (req, res) => {
     try {
         dirPath = resolveRegisteredProjectPath(req.query.path);
         const type = validateString(req.query.type, 'type', { max: 100 });
-        const artifact = graphifyService.artifact(dirPath, type);
+        const html = graphifyService.readArtifact(dirPath, type);
         setGraphifyArtifactHeaders(res);
-        res.sendFile(artifact.artifactPath);
+        res.send(html);
     } catch (err) {
         logger.error('graphify_artifact_request_failed', err, { requestId: req.id, path: dirPath });
         jsonError(res, err.status || 500, err.message, err.code || 'graphify_artifact_failed');

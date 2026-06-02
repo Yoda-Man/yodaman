@@ -1,0 +1,17 @@
+{
+  "ignore": [
+    "dist/**",
+    "release/**",
+    "website/downloads/**",
+    "graphify-out/**",
+    "**/graphify-out/**",
+    "sessions.json",
+    "audit-log.json",
+    "audit-log.jsonl",
+    "task-history.json",
+    "task-history.jsonl",
+    "yodaman.db*",
+    "extensions/vscode-yodaman/*.vsix",
+    "*.tgz"
+  ]
+}
