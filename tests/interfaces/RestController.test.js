@@ -1,3 +1,6 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const router = require('../../backend/interfaces/RestController');
 const agentEngine = require('../../backend/core/AgentReasoningEngine');
 const auditLog = require('../../backend/infrastructure/AuditLog');
@@ -32,6 +35,10 @@ describe('RestController Integration', () => {
             }),
             send: jest.fn(function send(payload) {
                 this.payload = payload;
+                return this;
+            }),
+            sendFile: jest.fn(function sendFile(filePath) {
+                this.filePath = filePath;
                 return this;
             })
         };
@@ -109,5 +116,83 @@ describe('RestController Integration', () => {
         expect(response.payload).toEqual(expect.objectContaining({
             code: 'mandatory_plugin'
         }));
+    });
+
+    describe('Graphify artifact routes', () => {
+        let workspace;
+        let originalConfig;
+
+        beforeEach(() => {
+            workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-graph-studio-'));
+            fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
+            originalConfig = fs.existsSync('config.json')
+                ? fs.readFileSync('config.json', 'utf8')
+                : undefined;
+            fs.writeFileSync('config.json', JSON.stringify({
+                watchedDirectories: [workspace],
+                removedDirectories: []
+            }, null, 2));
+            router.loadConfig();
+        });
+
+        afterEach(() => {
+            if (originalConfig === undefined) {
+                fs.rmSync('config.json', { force: true });
+            } else {
+                fs.writeFileSync('config.json', originalConfig);
+            }
+            router.loadConfig();
+            fs.rmSync(workspace, { recursive: true, force: true });
+        });
+
+        test('GET /graphify/artifact serves a known generated artifact', async () => {
+            const artifactPath = path.join(workspace, 'graphify-out', 'graph.html');
+            fs.writeFileSync(artifactPath, '<html><body>graph</body></html>');
+
+            const response = await invoke('get', '/graphify/artifact', {
+                query: { path: workspace, type: 'mindmap' }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(response.filePath).toBe(artifactPath);
+            expect(response.headers['Content-Security-Policy']).toContain("'unsafe-inline'");
+        });
+
+        test('GET /graphify/artifact rejects unknown artifact types', async () => {
+            const response = await invoke('get', '/graphify/artifact', {
+                query: { path: workspace, type: 'passwd' }
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(response.payload).toEqual(expect.objectContaining({
+                code: 'invalid_graphify_artifact'
+            }));
+        });
+
+        test('GET /graphify/artifact reports missing generated artifacts', async () => {
+            const response = await invoke('get', '/graphify/artifact', {
+                query: { path: workspace, type: 'visualizer' }
+            });
+
+            expect(response.statusCode).toBe(404);
+            expect(response.payload).toEqual(expect.objectContaining({
+                code: 'graphify_artifact_missing'
+            }));
+        });
+
+        test('GET /graphify/report returns markdown report text', async () => {
+            fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph_report.md'), '# Report\n\nHello graph.');
+
+            const response = await invoke('get', '/graphify/report', {
+                query: { path: workspace }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(response.payload).toEqual({
+                path: workspace,
+                report: '# Report\n\nHello graph.',
+                reportPath: path.join(workspace, 'graphify-out', 'graph_report.md')
+            });
+        });
     });
 });

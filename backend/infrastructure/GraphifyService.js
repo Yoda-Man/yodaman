@@ -14,6 +14,11 @@ const CLOUD_MODEL_KEYS = [
     'DEEPSEEK_API_KEY',
     'MOONSHOT_API_KEY'
 ];
+const ARTIFACTS = {
+    mindmap: 'graph.html',
+    visualizer: 'graph_visualizer.html'
+};
+const REPORT_FILENAMES = ['graph_report.md', 'GRAPH_REPORT.md'];
 let resolvedGraphifyBin = null;
 
 function findUserGraphifyBins() {
@@ -68,8 +73,30 @@ function graphPath(projectPath) {
     return path.join(projectPath, 'graphify-out', 'graph.json');
 }
 
+function graphifyOutPath(projectPath) {
+    return path.join(projectPath, 'graphify-out');
+}
+
+function artifactPath(projectPath, type) {
+    const filename = ARTIFACTS[type];
+    if (!filename) {
+        const err = new Error(`Unknown Graphify artifact type: ${type}`);
+        err.status = 400;
+        err.code = 'invalid_graphify_artifact';
+        throw err;
+    }
+    return path.join(graphifyOutPath(projectPath), filename);
+}
+
+function existingReportPath(projectPath) {
+    const found = REPORT_FILENAMES
+        .map(filename => path.join(graphifyOutPath(projectPath), filename))
+        .find(candidate => fs.existsSync(candidate));
+    return found || path.join(graphifyOutPath(projectPath), REPORT_FILENAMES[0]);
+}
+
 function reportPath(projectPath) {
-    return path.join(projectPath, 'graphify-out', 'GRAPH_REPORT.md');
+    return existingReportPath(projectPath);
 }
 
 function hasGraph(projectPath) {
@@ -111,6 +138,8 @@ function truncate(text, max = 6000) {
 module.exports = {
     graphPath,
     reportPath,
+    artifactPath,
+    artifactTypes: () => Object.keys(ARTIFACTS),
     hasGraph,
     getGraphifyBin,
 
@@ -173,7 +202,32 @@ module.exports = {
             graphExists,
             reportExists,
             graphUpdatedAt: graphStat?.mtime?.toISOString(),
-            reportUpdatedAt: reportStat?.mtime?.toISOString()
+            reportUpdatedAt: reportStat?.mtime?.toISOString(),
+            artifacts: Object.fromEntries(Object.keys(ARTIFACTS).map(type => {
+                const currentArtifactPath = artifactPath(projectPath, type);
+                const exists = fs.existsSync(currentArtifactPath);
+                const stat = exists ? fs.statSync(currentArtifactPath) : null;
+                return [type, {
+                    path: currentArtifactPath,
+                    exists,
+                    updatedAt: stat?.mtime?.toISOString()
+                }];
+            }))
+        };
+    },
+
+    artifact(projectPath, type) {
+        const currentArtifactPath = artifactPath(projectPath, type);
+        if (!fs.existsSync(currentArtifactPath)) {
+            const err = new Error(`Graphify artifact not found: ${currentArtifactPath}`);
+            err.status = 404;
+            err.code = 'graphify_artifact_missing';
+            throw err;
+        }
+        return {
+            type,
+            artifactPath: currentArtifactPath,
+            filename: path.basename(currentArtifactPath)
         };
     },
 
