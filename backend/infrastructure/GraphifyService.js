@@ -88,6 +88,13 @@ function artifactPath(projectPath, type) {
     return path.join(graphifyOutPath(projectPath), filename);
 }
 
+function artifactMissingError(currentArtifactPath) {
+    const err = new Error(`Graphify artifact not found: ${currentArtifactPath}`);
+    err.status = 404;
+    err.code = 'graphify_artifact_missing';
+    return err;
+}
+
 function existingReportPath(projectPath) {
     const found = REPORT_FILENAMES
         .map(filename => path.join(graphifyOutPath(projectPath), filename))
@@ -218,12 +225,24 @@ module.exports = {
 
     artifact(projectPath, type) {
         const currentArtifactPath = artifactPath(projectPath, type);
-        if (!fs.existsSync(currentArtifactPath)) {
-            const err = new Error(`Graphify artifact not found: ${currentArtifactPath}`);
-            err.status = 404;
-            err.code = 'graphify_artifact_missing';
-            throw err;
+        let stat;
+        try {
+            stat = fs.lstatSync(currentArtifactPath);
+        } catch (err) {
+            throw artifactMissingError(currentArtifactPath);
         }
+
+        if (stat.isSymbolicLink() || !stat.isFile()) {
+            throw artifactMissingError(currentArtifactPath);
+        }
+
+        const outDir = fs.realpathSync(graphifyOutPath(projectPath));
+        const realArtifactPath = fs.realpathSync(currentArtifactPath);
+        const relativeArtifactPath = path.relative(outDir, realArtifactPath);
+        if (relativeArtifactPath.startsWith('..') || path.isAbsolute(relativeArtifactPath)) {
+            throw artifactMissingError(currentArtifactPath);
+        }
+
         return {
             type,
             artifactPath: currentArtifactPath,

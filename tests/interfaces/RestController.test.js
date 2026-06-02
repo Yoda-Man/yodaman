@@ -180,6 +180,32 @@ describe('RestController Integration', () => {
             }));
         });
 
+        test('GET /graphify/artifact rejects symlinked generated artifacts', async () => {
+            const externalFile = path.join(os.tmpdir(), `yodaman-graph-artifact-${Date.now()}.html`);
+            const artifactPath = path.join(workspace, 'graphify-out', 'graph.html');
+            fs.writeFileSync(externalFile, '<html><body>outside</body></html>');
+
+            try {
+                fs.symlinkSync(externalFile, artifactPath);
+            } catch (err) {
+                fs.rmSync(externalFile, { force: true });
+                return;
+            }
+
+            try {
+                const response = await invoke('get', '/graphify/artifact', {
+                    query: { path: workspace, type: 'mindmap' }
+                });
+
+                expect(response.statusCode).toBe(404);
+                expect(response.payload).toEqual(expect.objectContaining({
+                    code: 'graphify_artifact_missing'
+                }));
+            } finally {
+                fs.rmSync(externalFile, { force: true });
+            }
+        });
+
         test('GET /graphify/report returns markdown report text', async () => {
             fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph_report.md'), '# Report\n\nHello graph.');
 
