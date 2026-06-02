@@ -165,8 +165,8 @@ export default function GraphStudio({ selectedProject }) {
             <GitBranch size={22} className="text-cyan-300" />
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-black text-white">Graph Studio</h1>
-            <p className="truncate text-[10px] font-mono text-slate-500" title={selectedProject.path}>{selectedProject.name}</p>
+            <h1 className="text-lg font-black text-white">Graph Studio</h1>
+            <p className="break-words text-[10px] font-mono leading-4 text-slate-500" title={selectedProject.path}>{selectedProject.name}</p>
           </div>
         </div>
 
@@ -200,8 +200,8 @@ export default function GraphStudio({ selectedProject }) {
             <RefreshCw size={16} />
           </button>
           <button onClick={buildGraph} disabled={busy} className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-cyan-500 px-3 text-xs font-black uppercase tracking-widest text-slate-950 hover:bg-cyan-300 disabled:opacity-40">
-            <Play size={15} />
-            Build
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
+            {busy ? 'Building...' : 'Build'}
           </button>
         </div>
 

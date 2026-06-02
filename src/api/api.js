@@ -132,7 +132,10 @@ export const api = {
     },
 
     async buildGraphify(path) {
-        return request(`${API_BASE}/graphify/build`, jsonOptions('POST', { path }));
+        return request(`${API_BASE}/graphify/build`, {
+            ...jsonOptions('POST', { path }),
+            timeoutMs: 300000
+        });
     },
 
     graphifyArtifactUrl(path, type) {

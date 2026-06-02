@@ -123,65 +123,64 @@ export default function ProjectList({
                             : 'hover:bg-white/5 border-transparent'
                         }`}
                     >
-                        <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-center gap-3 truncate">
+                        <div className="mb-3 space-y-3">
+                            <div className="flex items-start justify-between gap-3">
                                 <div className={`p-2 rounded-xl transition-colors ${
                                     selectedProject?.id === project.id ? 'bg-indigo-500 text-white' : 'bg-white/5 text-slate-500 group-hover:text-slate-300'
                                 }`}>
                                     <Folder size={16} />
                                 </div>
-                                <div className="truncate">
-                                    <p className={`text-sm font-bold truncate ${selectedProject?.id === project.id ? 'text-white' : 'text-slate-300'}`}>
-                                        {project.name}
-                                    </p>
-                                    <div className="flex items-center gap-1.5 mt-1">
-                                        {health[project.path] === 'healthy' ? (
-                                            <span className="flex items-center gap-1 text-[9px] font-black text-emerald-500 uppercase tracking-widest">
-                                                <CheckCircle2 size={10} /> Valid
-                                            </span>
-                                        ) : health[project.path] === 'error' ? (
-                                            <span className="flex items-center gap-1 text-[9px] font-black text-rose-500 uppercase tracking-widest">
-                                                <AlertCircle size={10} /> Error
-                                            </span>
-                                        ) : (
-                                            <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Indexed</span>
-                                        )}
-                                    </div>
+                                <div className="flex shrink-0 gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                        onClick={(e) => handleCheck(e, project.path)}
+                                        className="p-1.5 hover:bg-white/10 rounded-lg text-slate-500 hover:text-emerald-400"
+                                        title="Validate Health"
+                                    >
+                                        <RefreshCw size={14} className={checking === project.path ? 'animate-spin' : ''} />
+                                    </button>
+                                    <button 
+                                        onClick={(e) => startEditing(e, project)}
+                                        className="p-1.5 hover:bg-white/10 rounded-lg text-slate-500 hover:text-sky-400"
+                                        title="Update file path"
+                                    >
+                                        <Pencil size={14} />
+                                    </button>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onToggle(project.id); }} 
+                                        className={`p-1.5 rounded-lg transition-all ${
+                                            project.included 
+                                            ? 'text-indigo-400 bg-indigo-400/10' 
+                                            : 'text-slate-700 hover:text-slate-500 hover:bg-slate-700/10'
+                                        }`}
+                                    >
+                                        {project.included ? <CheckCircle size={16} /> : <Circle size={16} />}
+                                    </button>
+                                    <button 
+                                        onClick={(e) => deleteProject(e, project)}
+                                        className="p-1.5 hover:bg-rose-400/10 rounded-lg text-slate-500 hover:text-rose-400"
+                                        title="Delete workspace"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
                                 </div>
                             </div>
-                            
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button 
-                                    onClick={(e) => handleCheck(e, project.path)}
-                                    className="p-1.5 hover:bg-white/10 rounded-lg text-slate-500 hover:text-emerald-400"
-                                    title="Validate Health"
-                                >
-                                    <RefreshCw size={14} className={checking === project.path ? 'animate-spin' : ''} />
-                                </button>
-                                <button 
-                                    onClick={(e) => startEditing(e, project)}
-                                    className="p-1.5 hover:bg-white/10 rounded-lg text-slate-500 hover:text-sky-400"
-                                    title="Update file path"
-                                >
-                                    <Pencil size={14} />
-                                </button>
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); onToggle(project.id); }} 
-                                    className={`p-1.5 rounded-lg transition-all ${
-                                        project.included 
-                                        ? 'text-indigo-400 bg-indigo-400/10' 
-                                        : 'text-slate-700 hover:text-slate-500 hover:bg-slate-700/10'
-                                    }`}
-                                >
-                                    {project.included ? <CheckCircle size={16} /> : <Circle size={16} />}
-                                </button>
-                                <button 
-                                    onClick={(e) => deleteProject(e, project)}
-                                    className="p-1.5 hover:bg-rose-400/10 rounded-lg text-slate-500 hover:text-rose-400"
-                                    title="Delete workspace"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
+                            <div>
+                                <p className={`break-words text-sm font-bold leading-5 ${selectedProject?.id === project.id ? 'text-white' : 'text-slate-300'}`}>
+                                    {project.name}
+                                </p>
+                                <div className="flex items-center gap-1.5 mt-1">
+                                    {health[project.path] === 'healthy' ? (
+                                        <span className="flex items-center gap-1 text-[9px] font-black text-emerald-500 uppercase tracking-widest">
+                                            <CheckCircle2 size={10} /> Valid
+                                        </span>
+                                    ) : health[project.path] === 'error' ? (
+                                        <span className="flex items-center gap-1 text-[9px] font-black text-rose-500 uppercase tracking-widest">
+                                            <AlertCircle size={10} /> Error
+                                        </span>
+                                    ) : (
+                                        <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Indexed</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         {editingPath === project.path ? (

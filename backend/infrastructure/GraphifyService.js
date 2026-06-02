@@ -4,7 +4,7 @@ const os = require('os');
 const { execFile } = require('child_process');
 const logger = require('./Logger');
 
-const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 120000);
+const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 300000);
 const DEFAULT_OLLAMA_MODEL = process.env.YODAMAN_GRAPHIFY_OLLAMA_MODEL || 'qwen3:5b';
 const CLOUD_MODEL_KEYS = [
     'OPENAI_API_KEY',
