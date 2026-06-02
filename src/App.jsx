@@ -9,7 +9,8 @@ import LogsModal from './components/LogsModal'
 import WelcomeModal from './components/WelcomeModal'
 import ManualWindow from './components/ManualWindow'
 import PluginsWindow from './components/PluginsWindow'
-import { MessageSquare, Search, LayoutDashboard, Book, Puzzle, Settings, Terminal } from 'lucide-react'
+import GraphStudio from './components/GraphStudio'
+import { MessageSquare, Search, LayoutDashboard, Book, Puzzle, Settings, Terminal, GitBranch } from 'lucide-react'
 
 import { api } from './api/api'
 
@@ -140,6 +141,13 @@ export default function App() {
                 Search
               </button>
               <button 
+                onClick={() => setActiveTab('graph')}
+                className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'graph' ? 'bg-white/[0.03] text-cyan-300 border-cyan-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
+              >
+                <GitBranch size={14} />
+                Graph
+              </button>
+              <button 
                 onClick={() => setActiveTab('dashboard')}
                 className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'dashboard' ? 'bg-white/[0.03] text-indigo-400 border-indigo-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
               >
@@ -184,6 +192,7 @@ export default function App() {
           <div className="flex-1 overflow-hidden bg-white/[0.01] border-t border-white/5">
             {activeTab === 'chat' && <ChatWindow selectedProject={selectedProject} />}
             {activeTab === 'search' && <SearchWindow selectedProject={selectedProject} />}
+            {activeTab === 'graph' && <GraphStudio selectedProject={selectedProject} />}
             {activeTab === 'dashboard' && <Dashboard />}
             {activeTab === 'manual' && <ManualWindow />}
             {activeTab === 'plugins' && <PluginsWindow selectedProject={selectedProject} />}
