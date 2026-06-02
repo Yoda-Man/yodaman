@@ -4,10 +4,40 @@ const path = require('path');
 const router = require('../../backend/interfaces/RestController');
 const agentEngine = require('../../backend/core/AgentReasoningEngine');
 const auditLog = require('../../backend/infrastructure/AuditLog');
+const contextEngine = require('../../backend/infrastructure/ContextEngine');
 const graphifyService = require('../../backend/infrastructure/GraphifyService');
+const watcherService = require('../../backend/infrastructure/FileSystemWatcher');
 const logger = require('../../backend/infrastructure/Logger');
 
 describe('RestController Integration', () => {
+    let testConfigDir;
+    let previousConfigPath;
+
+    beforeAll(() => {
+        previousConfigPath = process.env.YODAMAN_CONFIG_PATH;
+        testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-rest-config-'));
+        process.env.YODAMAN_CONFIG_PATH = path.join(testConfigDir, 'config.json');
+        fs.writeFileSync(process.env.YODAMAN_CONFIG_PATH, JSON.stringify({
+            watchedDirectories: [],
+            removedDirectories: []
+        }, null, 2));
+        router.loadConfig();
+    });
+
+    afterAll(() => {
+        if (previousConfigPath === undefined) {
+            delete process.env.YODAMAN_CONFIG_PATH;
+        } else {
+            process.env.YODAMAN_CONFIG_PATH = previousConfigPath;
+        }
+        router.loadConfig();
+        fs.rmSync(testConfigDir, { recursive: true, force: true });
+    });
+
+    function configPath() {
+        return router.getConfigPath();
+    }
+
     function routeHandler(method, routePath) {
         const layer = router.stack.find((item) => item.route?.path === routePath && item.route?.methods[method]);
         return layer.route.stack[0].handle;
@@ -164,6 +194,44 @@ describe('RestController Integration', () => {
         }));
     });
 
+    test('GET /projects does not promote ctx-only temp projects into saved workspaces', async () => {
+        const originalExecuteJson = contextEngine.executeJson;
+        const originalConfig = fs.existsSync(configPath()) ? fs.readFileSync(configPath(), 'utf8') : undefined;
+        const anchorPath = '/Users/developer/Documents/Anchor';
+        const tempWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-graph-studio-'));
+
+        try {
+            fs.writeFileSync(configPath(), JSON.stringify({
+                watchedDirectories: [anchorPath],
+                removedDirectories: []
+            }, null, 2));
+            router.loadConfig();
+            contextEngine.executeJson = jest.fn(async () => ({
+                projects: [
+                    { name: 'Anchor', path: anchorPath, id: anchorPath },
+                    { name: path.basename(tempWorkspace), path: tempWorkspace, id: tempWorkspace }
+                ]
+            }));
+
+            const response = await invoke('get', '/projects');
+            const savedConfig = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+
+            expect(response.statusCode).toBe(200);
+            expect(response.payload.map(project => project.path)).toContain(anchorPath);
+            expect(response.payload.map(project => project.path)).not.toContain(tempWorkspace);
+            expect(savedConfig.watchedDirectories).toEqual([anchorPath]);
+        } finally {
+            contextEngine.executeJson = originalExecuteJson;
+            if (originalConfig === undefined) {
+                fs.rmSync(configPath(), { force: true });
+            } else {
+                fs.writeFileSync(configPath(), originalConfig);
+            }
+            router.loadConfig();
+            fs.rmSync(tempWorkspace, { recursive: true, force: true });
+        }
+    });
+
     test('DELETE /plugins/:name refuses to remove mandatory Graphify plugin', async () => {
         const response = await invoke('delete', '/plugins/:name', {
             params: { name: 'graphify' }
@@ -213,12 +281,12 @@ describe('RestController Integration', () => {
         let originalConfig;
 
         beforeEach(() => {
-            workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-graph-studio-'));
+            workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-rest-graph-workspace-'));
             fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
-            originalConfig = fs.existsSync('config.json')
-                ? fs.readFileSync('config.json', 'utf8')
+            originalConfig = fs.existsSync(configPath())
+                ? fs.readFileSync(configPath(), 'utf8')
                 : undefined;
-            fs.writeFileSync('config.json', JSON.stringify({
+            fs.writeFileSync(configPath(), JSON.stringify({
                 watchedDirectories: [workspace],
                 removedDirectories: []
             }, null, 2));
@@ -227,11 +295,12 @@ describe('RestController Integration', () => {
 
         afterEach(() => {
             if (originalConfig === undefined) {
-                fs.rmSync('config.json', { force: true });
+                fs.rmSync(configPath(), { force: true });
             } else {
-                fs.writeFileSync('config.json', originalConfig);
+                fs.writeFileSync(configPath(), originalConfig);
             }
             router.loadConfig();
+            watcherService.removeWatcher?.(workspace);
             fs.rmSync(workspace, { recursive: true, force: true });
         });
 

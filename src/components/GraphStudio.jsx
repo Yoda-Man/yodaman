@@ -180,6 +180,7 @@ export default function GraphStudio({ selectedProject }) {
   const artifactModeLabel = mode === 'mindmap' ? 'mind map' : 'canvas visualization'
   const hasAnyFullArtifact = Boolean(status?.artifacts?.mindmap?.exists || status?.artifacts?.visualizer?.exists)
   const currentBuild = buildStatus || status?.build
+  const buildInProgress = currentBuild?.state === 'queued' || currentBuild?.state === 'running'
   const skippedReason = status?.artifacts?.[mode]?.skippedReason || currentBuild?.message
   const buildStateLabel = currentBuild?.state ? currentBuild.state.replace(/^\w/, value => value.toUpperCase()) : ''
   const buildMetricText = currentBuild?.nodeCount || currentBuild?.edgeCount
@@ -229,7 +230,7 @@ export default function GraphStudio({ selectedProject }) {
             <div className="flex items-center gap-2 text-xs text-slate-400"><Loader2 size={14} className="animate-spin" /> Loading</div>
           ) : (
             <div className="space-y-2 text-xs">
-              <div className={graphReady ? 'text-emerald-300' : 'text-amber-300'}>{graphReady ? 'Graph ready' : 'Needs build'}</div>
+              <div className={graphReady ? 'text-emerald-300' : buildInProgress ? 'text-cyan-300' : 'text-amber-300'}>{graphReady ? 'Graph ready' : buildInProgress ? 'Graph build in progress' : 'Needs build'}</div>
               {currentBuild?.state ? <div className={currentBuild.state === 'failed' ? 'text-rose-300' : currentBuild.state === 'partial' ? 'text-amber-300' : 'text-cyan-300'}>Build {buildStateLabel}</div> : null}
               {status?.stale ? <div className="text-rose-300">Graph stale</div> : null}
               {graphReady && !hasAnyFullArtifact ? <div className="text-amber-300">Full HTML viz unavailable</div> : null}
@@ -268,6 +269,14 @@ export default function GraphStudio({ selectedProject }) {
               sandbox="allow-scripts allow-same-origin"
               className="h-full w-full border-0 bg-slate-950"
             />
+          ) : buildInProgress ? (
+            <div className="flex h-full items-center justify-center p-8 text-center">
+              <div>
+                <Loader2 className="mx-auto mb-4 animate-spin text-cyan-300" size={44} />
+                <h2 className="text-2xl font-black text-white">Graph build in progress</h2>
+                <p className="mt-2 text-sm text-slate-400">YodaMan is generating the Graphify visualization for this workspace.</p>
+              </div>
+            </div>
           ) : !graphReady ? (
             <div className="flex h-full items-center justify-center p-8 text-center">
               <div>

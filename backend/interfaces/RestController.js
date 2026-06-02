@@ -22,7 +22,7 @@ const queueService = require('../core/QueueService');
 const agentEngine = require('../core/AgentReasoningEngine');
 
 const router = express.Router();
-const CONFIG_PATH = path.join(__dirname, '../../config.json');
+const DEFAULT_CONFIG_PATH = path.join(__dirname, '../../config.json');
 const PLUGINS_DIR = path.resolve(__dirname, '../../plugins');
 const ALLOWED_MODES = new Set(['code', 'doc']);
 
@@ -49,6 +49,10 @@ const upload = multer({ storage });
 
 let config = { watchedDirectories: [], removedDirectories: [] };
 const graphifyBuildJobs = new Map();
+
+function getConfigPath() {
+    return process.env.YODAMAN_CONFIG_PATH || DEFAULT_CONFIG_PATH;
+}
 
 function jsonError(res, status, message, code) {
     return res.status(status).json({ error: message, code });
@@ -228,27 +232,40 @@ router.post('/mode', (req, res) => {
 
 function loadConfig() {
     config = { watchedDirectories: [], removedDirectories: [] };
-    if (fs.existsSync(CONFIG_PATH)) {
+    const configPath = getConfigPath();
+    if (fs.existsSync(configPath)) {
         try {
-            config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+            config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         } catch (err) {
-            logger.error('config_load_failed', err, { path: CONFIG_PATH });
+            logger.error('config_load_failed', err, { path: configPath });
             config = { watchedDirectories: [], removedDirectories: [] };
         }
     }
     config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
     config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];
+    const originalWatchedCount = config.watchedDirectories.length;
+    config.watchedDirectories = config.watchedDirectories.filter(dir => !isGeneratedTempWorkspace(dir));
+    if (config.watchedDirectories.length !== originalWatchedCount && fs.existsSync(configPath)) {
+        saveConfig();
+    }
     return config;
 }
 
 loadConfig();
 
 function saveConfig() {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
 }
 
 function projectNameForPath(dirPath) {
     return path.basename(dirPath) || dirPath;
+}
+
+function isGeneratedTempWorkspace(dirPath) {
+    const resolved = path.resolve(String(dirPath || ''));
+    const relativeToTmp = path.relative(os.tmpdir(), resolved);
+    const insideTmp = relativeToTmp && !relativeToTmp.startsWith('..') && !path.isAbsolute(relativeToTmp);
+    return insideTmp && /^yodaman-(graph-studio|graphify-service|graph-doctor|docs|audit-test|test)-/.test(path.basename(resolved));
 }
 
 async function removeFromCtxIndex(dirPath) {
@@ -332,24 +349,11 @@ router.get('/projects', async (req, res) => {
             id: p.id || p.path
         })).filter(p => !config.removedDirectories.includes(p.path));
 
-        const cliPaths = cliProjects.map(p => p.path);
-        let hasNew = false;
-        
-        cliPaths.forEach(p => {
-            if (!config.watchedDirectories.includes(p)) {
-                config.watchedDirectories.push(p);
-                watcherService.setupWatcher(p);
-                hasNew = true;
-            }
-        });
+        const cliByPath = new Map(cliProjects.map(project => [project.path, project]));
 
-        if (hasNew) saveConfig();
-
-        const result = [...cliProjects];
-        config.watchedDirectories.forEach(dir => {
-            if (!cliPaths.includes(dir)) {
-                result.push({ name: path.basename(dir), path: dir, id: dir });
-            }
+        const result = config.watchedDirectories.map(dir => {
+            const cliProject = cliByPath.get(dir);
+            return cliProject || { name: path.basename(dir), path: dir, id: dir };
         });
 
         res.json(result);
@@ -1007,6 +1011,8 @@ router.delete('/audit', (req, res) => {
 });
 
 router.loadConfig = loadConfig;
+router.getConfigPath = getConfigPath;
+router.isGeneratedTempWorkspace = isGeneratedTempWorkspace;
 router.isPairingRequiredByDefault = isPairingRequiredByDefault;
 router.arePluginUploadsEnabled = arePluginUploadsEnabled;
 router.safePluginFilename = safePluginFilename;

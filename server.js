@@ -15,7 +15,7 @@ const graphifyService = require('./backend/infrastructure/GraphifyService');
 
 const app = express();
 const PORT = Number(process.env.YODAMAN_PORT || 3090);
-const CONFIG_PATH = path.join(__dirname, 'config.json');
+const CONFIG_PATH = process.env.YODAMAN_CONFIG_PATH || path.join(__dirname, 'config.json');
 
 app.use(cors());
 app.use(express.json());
@@ -84,15 +84,19 @@ async function initialize() {
         config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
         config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];
 
-        const activeCliPaths = cliPaths.filter(p => !config.removedDirectories.includes(p));
-        const allPaths = Array.from(new Set([...config.watchedDirectories, ...activeCliPaths]));
-        allPaths.forEach(p => watcherService.setupWatcher(p));
-        
-        if (allPaths.length > config.watchedDirectories.length) {
-            config.watchedDirectories = allPaths;
+        const activeCliPaths = new Set(cliPaths.filter(p => !config.removedDirectories.includes(p)));
+        const watchedDirectories = config.watchedDirectories.filter(p => !apiRoutes.isGeneratedTempWorkspace(p));
+        watchedDirectories.forEach(p => watcherService.setupWatcher(p));
+
+        if (watchedDirectories.length !== config.watchedDirectories.length) {
+            config.watchedDirectories = watchedDirectories;
             fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
         }
-        logger.info('startup_sync_completed', { projects: allPaths.length });
+        logger.info('startup_sync_completed', {
+            projects: watchedDirectories.length,
+            indexedMatches: watchedDirectories.filter(p => activeCliPaths.has(p)).length,
+            ignoredCtxOnlyProjects: Math.max(cliPaths.length - watchedDirectories.filter(p => activeCliPaths.has(p)).length, 0)
+        });
     } catch (err) {
         logger.error('startup_sync_failed', err);
     }
