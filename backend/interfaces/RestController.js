@@ -48,6 +48,16 @@ function jsonError(res, status, message, code) {
     return res.status(status).json({ error: message, code });
 }
 
+function setGraphifyArtifactHeaders(res) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self' data: blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://localhost:* http://127.0.0.1:*"
+    );
+}
+
 function validateString(value, name, { required = true, max = 4000 } = {}) {
     if (!required && (value === undefined || value === null || value === '')) return undefined;
     if (typeof value !== 'string' || value.trim() === '') {
@@ -125,13 +135,17 @@ router.post('/mode', (req, res) => {
     }
 });
 
-function loadLocalConfig() {
+function loadConfig() {
+    config = { watchedDirectories: [], removedDirectories: [] };
     if (fs.existsSync(CONFIG_PATH)) {
         config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
     }
     config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
     config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];
+    return config;
 }
+
+loadConfig();
 
 function saveConfig() {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
@@ -179,7 +193,7 @@ function resolveProjectPath(projectId) {
     const resolved = path.resolve(projectId);
     if (path.isAbsolute(resolved)) return resolved;
 
-    loadLocalConfig();
+    loadConfig();
     return config.watchedDirectories.find(dir => (
         dir === projectId ||
         path.basename(dir) === projectId
@@ -200,7 +214,7 @@ function buildGraphAugmentedQuestion(question, graphInsights) {
 
 function resolveRegisteredProjectPath(value) {
     const resolved = resolveUserPath(value);
-    loadLocalConfig();
+    loadConfig();
     if (!config.watchedDirectories.includes(resolved)) {
         const err = new Error(`Workspace is not registered: ${resolved}`);
         err.status = 404;
@@ -213,7 +227,7 @@ function resolveRegisteredProjectPath(value) {
 // --- Project Management ---
 
 router.get('/projects', async (req, res) => {
-    loadLocalConfig();
+    loadConfig();
     try {
         const cliData = await contextEngine.executeJson(['list']);
         const cliProjects = cliData.projects.map(p => ({
@@ -257,7 +271,7 @@ router.post('/projects', (req, res) => {
         return jsonError(res, err.status || 400, err.message, 'invalid_path');
     }
 
-    loadLocalConfig();
+    loadConfig();
     if (!config.watchedDirectories.includes(resolvedPath)) {
         config.watchedDirectories.push(resolvedPath);
         config.removedDirectories = config.removedDirectories.filter(p => p !== resolvedPath);
@@ -278,7 +292,7 @@ router.delete('/projects', async (req, res) => {
         return jsonError(res, err.status || 400, err.message, 'invalid_path');
     }
     
-    loadLocalConfig();
+    loadConfig();
     const wasWatched = config.watchedDirectories.includes(resolvedPath);
     config.watchedDirectories = config.watchedDirectories.filter(p => p !== resolvedPath);
     if (!config.removedDirectories.includes(resolvedPath)) {
@@ -302,7 +316,7 @@ router.put('/projects', (req, res) => {
         return jsonError(res, err.status || 400, err.message, 'invalid_path');
     }
 
-    loadLocalConfig();
+    loadConfig();
     if (!config.watchedDirectories.includes(resolvedPath)) {
         return jsonError(res, 404, 'Project path is not being watched', 'project_not_found');
     }
@@ -631,6 +645,39 @@ router.post('/graphify/build', async (req, res) => {
     }
 });
 
+router.get('/graphify/artifact', (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.query.path);
+        const type = validateString(req.query.type, 'type', { max: 100 });
+        const artifact = graphifyService.artifact(dirPath, type);
+        setGraphifyArtifactHeaders(res);
+        res.sendFile(artifact.artifactPath);
+    } catch (err) {
+        logger.error('graphify_artifact_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_artifact_failed');
+    }
+});
+
+router.get('/graphify/report', (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.query.path);
+        const report = graphifyService.readReport(dirPath, { maxChars: 120000 });
+        if (!report) {
+            return jsonError(res, 404, `Graphify report not found: ${graphifyService.reportPath(dirPath)}`, 'graphify_report_missing');
+        }
+        res.json({
+            path: dirPath,
+            report,
+            reportPath: graphifyService.reportPath(dirPath)
+        });
+    } catch (err) {
+        logger.error('graphify_report_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_report_failed');
+    }
+});
+
 router.post('/graphify/query', async (req, res) => {
     let dirPath;
     try {
@@ -747,7 +794,7 @@ router.post('/reindex', (req, res) => {
     let dirPath;
     try {
         dirPath = resolveUserPath(req.body?.path);
-        loadLocalConfig();
+        loadConfig();
         if (!config.watchedDirectories.includes(dirPath)) {
             const err = new Error(`Workspace is not registered: ${dirPath}`);
             err.status = 404;
@@ -773,5 +820,7 @@ router.delete('/audit', (req, res) => {
     auditLog.clear();
     res.json({ message: 'Audit logs cleared' });
 });
+
+router.loadConfig = loadConfig;
 
 module.exports = router;
