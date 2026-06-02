@@ -111,6 +111,18 @@ export default function ChatWindow({ selectedProject }) {
             }
         } catch (err) {
             console.error(err)
+            api.reportClientError({
+                message: err.message || 'Chat request failed',
+                stack: err.stack,
+                userAction: isAgentMode ? 'agent_task' : 'chat_ask',
+                component: 'ChatWindow',
+                severity: 'high',
+                context: {
+                    project: selectedProject?.path,
+                    mode,
+                    agentMode: isAgentMode
+                }
+            })
             setMessages(prev => [...prev, { 
                 role: 'error', 
                 content: err.message || 'YodaMan runtime is not available. Start the desktop app or run "yodaman" from Terminal, then try again.', 

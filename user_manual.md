@@ -71,7 +71,7 @@ Plugins are JavaScript modules that extend the agent with custom tools. A plugin
 - **Chat**: Ask questions using the selected workspace context.
 - **Search**: Run semantic search across indexed code and documentation, optionally scoped to the selected workspace.
 - **Dashboard**: View runtime status, database/index metrics, environment information, runtime diagnostics, task counts, pending approvals, plugin policy information, and mobile pairing.
-- **Logs**: Open recent runtime logs, reindex requests, index queue state, and `ctx index` output. Use Copy when sharing an error.
+- **Logs**: Open searchable runtime logs, reindex requests, index queue state, and `ctx index` output. Filter by text, level, severity, and user action, then use Copy when sharing an error.
 - **Manual**: Read the in-app version of this guide.
 - **Plugins**: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, delete non-mandatory plugin files, and manage Graphify graph status, rebuilds, and direct graph queries.
 

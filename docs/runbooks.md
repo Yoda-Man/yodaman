@@ -47,6 +47,18 @@ Use these endpoints:
 
 Every HTTP response includes `X-Request-Id`. Match that value with structured JSON runtime logs when investigating incidents.
 
+## Search Runtime Logs
+
+Use the in-app Logs modal for first response. It supports text search plus level, severity, and user-action filters. For API-level diagnostics:
+
+```bash
+curl "http://localhost:3090/api/logs?level=error&userAction=code_search&query=ctx"
+curl "http://localhost:3090/api/logs?level=error&userAction=agent_tool_call"
+curl "http://localhost:3090/api/logs?severity=critical"
+```
+
+Search, chat, agent tool, startup, unhandled HTTP, unhandled rejection, and uncaught exception failures should appear here with stack traces and request or task context.
+
 ## Rotate local logs
 
 YodaMan keeps append-only local state in:

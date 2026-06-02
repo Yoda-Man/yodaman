@@ -5,6 +5,7 @@ const router = require('../../backend/interfaces/RestController');
 const agentEngine = require('../../backend/core/AgentReasoningEngine');
 const auditLog = require('../../backend/infrastructure/AuditLog');
 const graphifyService = require('../../backend/infrastructure/GraphifyService');
+const logger = require('../../backend/infrastructure/Logger');
 
 describe('RestController Integration', () => {
     function routeHandler(method, routePath) {
@@ -66,6 +67,61 @@ describe('RestController Integration', () => {
         expect(response.statusCode).toBe(200);
         expect(response.payload.message).toBe('Audit logs cleared');
         expect(auditLog.list()).toHaveLength(0);
+    });
+
+    test('GET /logs returns filtered live diagnostic errors', async () => {
+        logger.clear();
+        logger.info('startup_completed', { userAction: 'startup' });
+        logger.error('search_failed', new Error('ctx unavailable'), {
+            userAction: 'code_search',
+            severity: 'high'
+        });
+
+        const response = await invoke('get', '/logs', {
+            query: {
+                level: 'error',
+                userAction: 'code_search',
+                query: 'ctx unavailable',
+                severity: 'high'
+            }
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.payload.logs).toHaveLength(1);
+        expect(response.payload.logs[0]).toEqual(expect.objectContaining({
+            level: 'error',
+            message: 'search_failed',
+            userAction: 'code_search'
+        }));
+    });
+
+    test('POST /logs/client-error transmits frontend failures to live logs', async () => {
+        logger.clear();
+
+        const response = await invoke('post', '/logs/client-error', {
+            body: {
+                message: 'Search failed in UI',
+                stack: 'Error: Search failed in UI\n    at SearchWindow',
+                userAction: 'code_search',
+                component: 'SearchWindow',
+                severity: 'high',
+                context: { query: 'menu', project: 'Anchor' }
+            }
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.payload).toEqual({ ok: true });
+        expect(logger.list(10, { message: 'client_error', userAction: 'code_search' })[0]).toEqual(expect.objectContaining({
+            level: 'error',
+            message: 'client_error',
+            component: 'SearchWindow',
+            severity: 'high',
+            context: { query: 'menu', project: 'Anchor' },
+            error: expect.objectContaining({
+                message: 'Search failed in UI',
+                stack: expect.stringContaining('SearchWindow')
+            })
+        }));
     });
 
     test('POST /mode validates query mode values', async () => {

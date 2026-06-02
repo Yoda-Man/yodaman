@@ -154,7 +154,9 @@ npm run release:smoke
 
 ## Operations
 
-Health and support endpoints are available at `/api/status`, `/api/check?path=...`, `/api/desktop/diagnostics`, `/api/policy`, and `/api/audit`. Runtime logs are emitted as structured JSON with request IDs, and responses include `X-Request-Id` for support correlation.
+Health and support endpoints are available at `/api/status`, `/api/check?path=...`, `/api/desktop/diagnostics`, `/api/policy`, `/api/audit`, and `/api/logs`. Runtime logs are emitted as structured JSON with request IDs, severity, user action, error type, and stack traces for support correlation.
+
+`/api/logs` accepts `level`, `severity`, `query`, `userAction`, `message`, `since`, `until`, and `limit` filters. Use these filters or the Logs modal to isolate search failures, agent tool errors, chat failures, frontend client errors, and startup/runtime exceptions.
 
 Operational runbooks live in [docs/runbooks.md](docs/runbooks.md). Configuration details live in [docs/configuration.md](docs/configuration.md), and the ecosystem overview is in [docs/ecosystem-architecture.md](docs/ecosystem-architecture.md).
 Support ownership, escalation, and pre-handover checks live in [docs/support-handover.md](docs/support-handover.md).

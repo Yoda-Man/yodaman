@@ -512,7 +512,13 @@ router.post('/ask', async (req, res) => {
                 answer,
                 type: 'query'
             }).catch(err => {
-                logger.warn('graphify_save_answer_failed', { requestId: req.id, path: projectPath, error: err.message });
+                logger.warn('graphify_save_answer_failed', {
+                    requestId: req.id,
+                    path: projectPath,
+                    userAction: 'chat_ask',
+                    severity: 'medium',
+                    error: err.message
+                });
             });
         }
         
@@ -522,7 +528,14 @@ router.post('/ask', async (req, res) => {
         
         res.json({ answer });
     } catch (err) {
-        logger.error('ask_failed', err, { requestId: req.id, projectId });
+        logger.error('ask_failed', err, {
+            requestId: req.id,
+            projectId,
+            projectPath,
+            mode,
+            userAction: 'chat_ask',
+            severity: 'high'
+        });
         res.status(500).json({ error: err.message, requestId: req.id });
     }
 });
@@ -690,11 +703,57 @@ router.get('/audit', (req, res) => {
 });
 
 router.get('/logs', (req, res) => {
-    const { limit = 200 } = req.query;
+    const {
+        limit = 200,
+        level,
+        severity,
+        query,
+        userAction,
+        message,
+        since,
+        until
+    } = req.query;
     res.json({
-        logs: logger.list(limit),
+        logs: logger.list(limit, {
+            level,
+            severity,
+            query,
+            userAction,
+            message,
+            since,
+            until
+        }),
         queue: queueService.getStatus()
     });
+});
+
+router.post('/logs/client-error', (req, res) => {
+    let message;
+    let userAction;
+    let component;
+    let severity;
+    try {
+        message = validateString(req.body?.message, 'message', { max: 4000 });
+        userAction = validateString(req.body?.userAction, 'userAction', { required: false, max: 100 }) || 'client';
+        component = validateString(req.body?.component, 'component', { required: false, max: 100 });
+        severity = validateString(req.body?.severity, 'severity', { required: false, max: 20 }) || 'medium';
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_request');
+    }
+
+    const error = new Error(message);
+    if (typeof req.body?.stack === 'string') {
+        error.stack = req.body.stack.slice(0, 12000);
+    }
+
+    logger.error('client_error', error, {
+        requestId: req.id,
+        userAction,
+        component,
+        severity,
+        context: typeof req.body?.context === 'object' && req.body.context ? req.body.context : undefined
+    });
+    res.json({ ok: true });
 });
 
 router.get('/desktop/diagnostics', (req, res) => {

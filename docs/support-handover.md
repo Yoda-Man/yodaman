@@ -58,11 +58,18 @@ Expected results:
 | Runtime unreachable | `GET /api/desktop/diagnostics` or desktop recovery screen. | Restart managed runtime or run `npm start`. |
 | Non-local client receives 401 | Pairing token missing or expired. | Create a new pairing link with `POST /api/pairing`. |
 | Workspace missing | `GET /api/projects` and local `config.json`. | Re-add the workspace from Settings. |
-| Search stale | `/api/logs` queue state. | Run Sync Repository or `POST /api/reindex`. |
+| Search stale or failing | Logs modal or `/api/logs?userAction=code_search`. | Check query errors and queue state, then run Sync Repository or `POST /api/reindex`. |
 | Graph visualization unavailable | `GET /api/graphify/status?path=...`. | Use Map Preview/Report, then rebuild graph. Large graphs can be `partial`. |
 | Orphaned graph nodes | `yodaman doctor --graph`. | Run Sync Repository or `POST /api/reindex` for the affected workspace. |
 | Plugin upload fails | Secure default is disabled. | Enable `YODAMAN_ALLOW_PLUGIN_UPLOADS=true` only for trusted local upload, then restart securely. |
 | Agent command fails | Secure default is disabled. | Prefer file/search/Graphify tools. Enable `YODAMAN_ALLOW_AGENT_COMMANDS=true` only for trusted local support sessions. |
+
+## Diagnostic Log Queries
+
+- `GET /api/logs?level=error&userAction=code_search`: Search failures with query and workspace context.
+- `GET /api/logs?level=error&userAction=agent_tool_call`: Agent tool failures with task id, tool name, and project path.
+- `GET /api/logs?level=error&userAction=chat_ask`: Chat and Graphify-augmented ask failures.
+- `GET /api/logs?severity=critical`: Unhandled HTTP/runtime errors.
 
 ## Escalation Triggers
 

@@ -42,6 +42,17 @@ if (fs.existsSync(DIST_PATH)) {
 // --- API Routes ---
 app.use('/api', apiRoutes);
 
+app.use((err, req, res, next) => {
+    logger.error('http_unhandled_error', err, {
+        requestId: req.id,
+        method: req.method,
+        path: req.originalUrl,
+        userAction: 'http_request',
+        severity: 'critical'
+    });
+    res.status(500).json({ error: err.message, requestId: req.id, code: 'http_unhandled_error' });
+});
+
 // --- SPA Catch-all ---
 app.get('*', (req, res) => {
     const indexPath = path.join(DIST_PATH, 'index.html');
@@ -107,3 +118,17 @@ function gracefulShutdown() {
 
 process.on('SIGINT', gracefulShutdown);
 process.on('SIGTERM', gracefulShutdown);
+process.on('unhandledRejection', (reason) => {
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    logger.error('runtime_unhandled_rejection', err, {
+        userAction: 'runtime',
+        severity: 'critical'
+    });
+});
+process.on('uncaughtException', (err) => {
+    logger.error('runtime_uncaught_exception', err, {
+        userAction: 'runtime',
+        severity: 'critical'
+    });
+    process.exit(1);
+});

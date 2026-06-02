@@ -8,8 +8,20 @@ jest.mock('../../backend/infrastructure/ToolBox', () => ({
     callTool: jest.fn()
 }));
 
+jest.mock('../../backend/infrastructure/Logger', () => ({
+    error: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn()
+}));
+
+jest.mock('../../backend/infrastructure/GraphifyService', () => ({
+    query: jest.fn(async () => ''),
+    readReport: jest.fn(() => '')
+}));
+
 const contextEngine = require('../../backend/infrastructure/ContextEngine');
 const toolBox = require('../../backend/infrastructure/ToolBox');
+const logger = require('../../backend/infrastructure/Logger');
 const agentEngine = require('../../backend/core/AgentReasoningEngine');
 
 const waitFor = async (predicate) => {
@@ -28,6 +40,7 @@ describe('AgentReasoningEngine', () => {
         contextEngine.execute.mockReset();
         toolBox.getFileContent.mockReset();
         toolBox.callTool.mockReset();
+        logger.error.mockReset();
         agentEngine.maxIterations = 10;
     });
 
@@ -166,6 +179,30 @@ describe('AgentReasoningEngine', () => {
             taskId: 'task-5'
         });
         expect(agentEngine.tasks.get('task-5').error).toMatch(/Unexpected end of JSON input/);
+    });
+
+    test('should write agent tool failures to live logs with task context', async () => {
+        const failure = new Error('Agent shell commands are disabled');
+        contextEngine.execute
+            .mockResolvedValueOnce({
+                output: '<tool_call>{"name":"executeCommand","parameters":{"command":"npm test","cwd":"/tmp/project"}}</tool_call>'
+            })
+            .mockResolvedValueOnce({
+                output: 'I could not run the command.'
+            });
+        toolBox.callTool.mockRejectedValueOnce(failure);
+
+        const result = await agentEngine.executeTask('run tests', 'task-log-1', undefined, {
+            projectId: '/tmp/project'
+        });
+
+        expect(result).toBe('I could not run the command.');
+        expect(logger.error).toHaveBeenCalledWith('agent_tool_failed', failure, expect.objectContaining({
+            taskId: 'task-log-1',
+            projectId: '/tmp/project',
+            tool: 'executeCommand',
+            userAction: 'agent_tool_call'
+        }));
     });
 
     test('should stop after maxIterations without a final answer', async () => {

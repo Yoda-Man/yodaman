@@ -7,23 +7,40 @@ export default function SearchWindow({ selectedProject }) {
     const [results, setResults] = useState([])
     const [isSearching, setIsSearching] = useState(false)
     const [stats, setStats] = useState(null)
+    const [error, setError] = useState('')
 
     const handleSearch = async (e) => {
         if (e) e.preventDefault()
         if (!query.trim() || isSearching) return
 
         setIsSearching(true)
+        setError('')
         try {
-            const data = await api.search(query, selectedProject?.name)
+            const data = await api.search(query, selectedProject?.path || selectedProject?.name)
             
             if (data.isText) {
                 setResults([])
+                setStats(null)
             } else {
                 setResults(Array.isArray(data) ? data : (data.results || []))
-                setStats({ count: data.length, time: '240ms' })
+                setStats({ count: Array.isArray(data) ? data.length : (data.results || []).length, time: '240ms' })
             }
         } catch (err) {
             console.error('Search failed:', err)
+            setResults([])
+            setStats(null)
+            setError(err.message || 'Search failed')
+            api.reportClientError({
+                message: err.message || 'Search failed',
+                stack: err.stack,
+                userAction: 'code_search',
+                component: 'SearchWindow',
+                severity: 'high',
+                context: {
+                    query,
+                    project: selectedProject?.path || selectedProject?.name
+                }
+            })
         } finally {
             setIsSearching(false)
         }
@@ -67,6 +84,11 @@ export default function SearchWindow({ selectedProject }) {
                             {isSearching ? 'Scanning' : 'Search'}
                         </button>
                     </form>
+                    {error && (
+                        <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                            {error}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -75,8 +97,8 @@ export default function SearchWindow({ selectedProject }) {
                 <div className="max-w-4xl mx-auto space-y-6">
                     {!isSearching && results.length === 0 && query && (
                         <div className="py-20 text-center">
-                            <p className="text-slate-500 font-medium">No matches found for your query.</p>
-                            <p className="text-[10px] text-slate-600 uppercase tracking-widest mt-2 font-black">Try broader keywords</p>
+                            <p className="text-slate-500 font-medium">{error ? 'Search could not complete.' : 'No matches found for your query.'}</p>
+                            <p className="text-[10px] text-slate-600 uppercase tracking-widest mt-2 font-black">{error ? 'Open logs for diagnostics' : 'Try broader keywords'}</p>
                         </div>
                     )}
 

@@ -73,7 +73,7 @@ const featureGroups = [
         items: [
             'Task history and audit logs persist locally in SQLite when available.',
             'YodaMan falls back to JSON files on Node runtimes without SQLite support.',
-            'Clients can open runtime logs, inspect index queue state, and clear task history or audit logs.'
+            'Clients can search runtime logs by text, severity, level, and user action, inspect index queue state, and clear task history or audit logs.'
         ]
     },
     {
@@ -91,7 +91,7 @@ const featureGroups = [
         items: [
             'Check runtime status, start the runtime, ask, search, and reindex from the command palette.',
             'Add a workspace by browsing for a folder, pasting an absolute path, or registering the current VS Code workspace.',
-            'Open runtime logs to inspect request, reindex, and indexing output.',
+            'Open searchable runtime logs to inspect request, reindex, agent, search, and indexing output.',
             'Run agent tasks, inspect streamed events, open proposed writes as diffs, and approve or reject changes.',
             'Use the YodaMan activity bar sidebar for workspace state, task details, and clear-history actions.'
         ]

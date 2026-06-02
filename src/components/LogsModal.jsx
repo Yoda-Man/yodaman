@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Clipboard, RefreshCw, X, Terminal } from 'lucide-react'
+import { Clipboard, RefreshCw, X, Terminal, Search } from 'lucide-react'
 import { api } from '../api/api'
 
 function formatLog(entry) {
@@ -15,11 +15,17 @@ export default function LogsModal({ onClose }) {
     const [payload, setPayload] = useState({ logs: [], queue: null })
     const [loading, setLoading] = useState(true)
     const [copied, setCopied] = useState(false)
+    const [filters, setFilters] = useState({
+        query: '',
+        level: '',
+        severity: '',
+        userAction: ''
+    })
 
     const loadLogs = async () => {
         setLoading(true)
         try {
-            setPayload(await api.getLogs(300))
+            setPayload(await api.getLogs(300, filters))
         } catch (err) {
             setPayload({
                 logs: [{
@@ -79,6 +85,53 @@ export default function LogsModal({ onClose }) {
                 </div>
 
                 <div className="p-6 overflow-y-auto custom-scrollbar">
+                    <div className="mb-5 grid grid-cols-1 lg:grid-cols-[1fr_150px_150px_180px] gap-3">
+                        <label className="relative">
+                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                            <input
+                                value={filters.query}
+                                onChange={(e) => setFilters(prev => ({ ...prev, query: e.target.value }))}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') loadLogs()
+                                }}
+                                placeholder="Search logs, stack traces, requests..."
+                                className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pl-10 pr-3 text-sm text-slate-200 outline-none focus:border-cyan-500/40"
+                            />
+                        </label>
+                        <select
+                            value={filters.level}
+                            onChange={(e) => setFilters(prev => ({ ...prev, level: e.target.value }))}
+                            className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-slate-200 outline-none focus:border-cyan-500/40"
+                        >
+                            <option value="">All levels</option>
+                            <option value="error">Errors</option>
+                            <option value="warn">Warnings</option>
+                            <option value="info">Info</option>
+                        </select>
+                        <select
+                            value={filters.severity}
+                            onChange={(e) => setFilters(prev => ({ ...prev, severity: e.target.value }))}
+                            className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-slate-200 outline-none focus:border-cyan-500/40"
+                        >
+                            <option value="">All severity</option>
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                        <select
+                            value={filters.userAction}
+                            onChange={(e) => setFilters(prev => ({ ...prev, userAction: e.target.value }))}
+                            className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-slate-200 outline-none focus:border-cyan-500/40"
+                        >
+                            <option value="">All actions</option>
+                            <option value="code_search">Code search</option>
+                            <option value="agent_tool_call">Agent tool call</option>
+                            <option value="chat_ask">Chat ask</option>
+                            <option value="startup">Startup</option>
+                        </select>
+                    </div>
+
                     {payload.queue && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
                             <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
@@ -95,6 +148,13 @@ export default function LogsModal({ onClose }) {
                             </div>
                         </div>
                     )}
+
+                    <div className="mb-3 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        <span>{payload.logs?.length || 0} matching log entries</span>
+                        <button onClick={loadLogs} className="text-cyan-300 hover:text-cyan-200">
+                            Apply Filters
+                        </button>
+                    </div>
 
                     <pre className="min-h-[360px] whitespace-pre-wrap rounded-2xl border border-white/5 bg-black/40 p-5 text-[11px] leading-6 text-slate-300 font-mono">
                         {text || (loading ? 'Loading logs...' : 'No logs captured yet.')}

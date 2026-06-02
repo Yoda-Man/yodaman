@@ -175,6 +175,31 @@ Audit entries are retained in `audit-log.json` and appended to `audit-log.jsonl`
 ### `GET /desktop/diagnostics`
 Returns desktop/runtime diagnostics for control surfaces.
 
+### `GET /logs`
+Returns recent structured runtime logs plus index queue state.
+
+Optional query filters:
+
+- `limit`: Maximum entries to return.
+- `level`: `error`, `warn`, or `info`.
+- `severity`: `critical`, `high`, `medium`, or `low`.
+- `query`: Case-insensitive search across message, metadata, and stack traces.
+- `userAction`: Source workflow such as `code_search`, `agent_tool_call`, `chat_ask`, or `startup`.
+- `message`: Exact log message key.
+- `since` / `until`: ISO timestamps for time-window filtering.
+
+### `POST /logs/client-error`
+Records a frontend-side failure in the same live log stream. Use this for UI catches that would otherwise only appear in the browser console.
+
+Body fields:
+
+- `message`: Error message.
+- `stack`: Optional client stack trace.
+- `userAction`: Workflow such as `code_search`, `chat_ask`, or `agent_task`.
+- `component`: UI component or client surface.
+- `severity`: `critical`, `high`, `medium`, or `low`.
+- `context`: Small structured object with query, project, mode, or other reproduction context.
+
 **Response:**
 ```json
 {

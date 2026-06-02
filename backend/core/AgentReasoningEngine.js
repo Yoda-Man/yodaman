@@ -2,7 +2,16 @@ const contextEngine = require('../infrastructure/ContextEngine');
 const toolBox = require('../infrastructure/ToolBox');
 const taskStore = require('../infrastructure/TaskStore');
 const graphifyService = require('../infrastructure/GraphifyService');
+const logger = require('../infrastructure/Logger');
 const defaultCodingSkill = require('./DefaultCodingSkill');
+
+function safeToolName(rawToolCall) {
+    try {
+        return JSON.parse(rawToolCall).name;
+    } catch {
+        return undefined;
+    }
+}
 
 /**
  * AgentReasoningEngine (Core Layer)
@@ -278,7 +287,13 @@ ${defaultCodingSkill}
                     this.recordTaskEvent(taskId, endEvent);
                     if (onStep) onStep(endEvent);
                 } catch (err) {
-                    console.error(`[Agent] Tool Execution Error: ${err.message}`);
+                    logger.error('agent_tool_failed', err, {
+                        taskId,
+                        projectId: metadata.projectId,
+                        tool: toolCallMatch ? safeToolName(toolCallMatch[1]) : undefined,
+                        userAction: 'agent_tool_call',
+                        severity: 'high'
+                    });
                     conversation += `\n\nSystem (Error): ${err.message}`;
                     const event = { type: 'error', taskId, message: err.message };
                     this.recordTaskEvent(taskId, event);
