@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Puzzle, Upload, Trash2, CheckCircle, Plus, Terminal, Zap, FileCode, GitBranch } from 'lucide-react';
+import { Puzzle, Upload, Trash2, CheckCircle, Plus, Terminal, Zap, FileCode } from 'lucide-react';
 import { api } from '../api/api';
 
 export default function PluginsWindow() {
@@ -77,24 +77,6 @@ export default function PluginsWindow() {
                         </label>
                     </div>
                 </header>
-
-                <section className="mb-10 rounded-2xl border border-cyan-500/15 bg-cyan-500/[0.04] p-5">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div className="flex items-start gap-4">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-500/20 bg-cyan-500/10">
-                                <GitBranch size={22} className="text-cyan-300" />
-                            </div>
-                            <div>
-                                <h2 className="text-lg font-bold text-white">Graphify is now in Graph Studio</h2>
-                                <p className="mt-1 text-sm text-slate-500">Use the Graph tab for visual exploration, report reading, graph queries, and impact analysis.</p>
-                            </div>
-                        </div>
-                        <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-300">
-                            Required Graph Layer
-                        </div>
-                    </div>
-                </section>
-
 
                 {status && (
                     <div className={`mb-8 p-4 rounded-2xl border flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${
@@ -194,7 +176,7 @@ export default function PluginsWindow() {
                                 You can build your own plugins using standard JavaScript. Every plugin you upload is instantly learned by the Yoda-Agent reasoning engine.
                             </p>
                             <div className="flex gap-4">
-                                <a href="#" className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-purple-400 hover:text-purple-300 transition-colors">
+                                <a href="/manual.html#plugins" className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-purple-400 hover:text-purple-300 transition-colors">
                                     <FileCode size={14} /> View Documentation
                                 </a>
                             </div>
