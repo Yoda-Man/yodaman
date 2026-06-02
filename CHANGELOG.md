@@ -2,6 +2,15 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.2.2] - 2026-06-02
+
+### Added
+- Graph Studio production hardening for async Graphify builds, persisted build status, artifact health, and large-graph fallbacks.
+- `yodaman doctor --graph` for local Graphify graph health checks across configured workspaces.
+
+### Changed
+- Bumped the core app, visible app chrome, manuals, docs, and VS Code extension package version to `0.2.2`.
+
 ## [0.2.1] - 2026-05-26
 
 ### Added

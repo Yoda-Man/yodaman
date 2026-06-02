@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.2.1
+## 0.2.2
 
-- Align extension package version with the YodaMan `0.2.1` release.
+- Align extension package version with the YodaMan `0.2.2` release.
 - Document the refreshed workspace management, runtime recovery, and client manual flows.
 - Add workspace registration commands with folder browsing, path paste, and current-workspace options.
 - Add runtime log viewing for request, index queue, and ctx indexing output.

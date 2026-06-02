@@ -93,7 +93,7 @@ Forces documentation preprocessing and documentation search.
 
 ## Graphify
 
-Graphify is a required knowledge graph layer in YodaMan 0.2.1. The runtime fails startup when the `graphify` CLI cannot be found. Graphify endpoints require a registered workspace path.
+Graphify is a required knowledge graph layer in YodaMan 0.2.2. The runtime fails startup when the `graphify` CLI cannot be found. Graphify endpoints require a registered workspace path.
 
 ### `GET /graphify/status`
 Returns graph availability, artifact health, stale status, and the last persisted build summary. Large graphs can return `build.state: "partial"` when `graph.json` and the report exist but full HTML artifacts were skipped.
