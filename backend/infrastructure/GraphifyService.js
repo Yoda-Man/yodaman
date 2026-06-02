@@ -96,6 +96,17 @@ function artifactMissingError(currentArtifactPath) {
 }
 
 function safeFilePath(filePath, baseDir) {
+    let baseStat;
+    try {
+        baseStat = fs.lstatSync(baseDir);
+    } catch (err) {
+        return '';
+    }
+
+    if (baseStat.isSymbolicLink() || !baseStat.isDirectory()) {
+        return '';
+    }
+
     let stat;
     try {
         stat = fs.lstatSync(filePath);
