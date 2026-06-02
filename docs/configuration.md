@@ -27,7 +27,8 @@ Use absolute paths. The API validates submitted paths and normalizes them before
 | `YODAMAN_REQUIRE_PAIRING_TOKEN` | `false` | When `true`, non-local clients must send `X-YodaMan-Token` from the pairing flow. |
 | `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `false` | Allows plugins that declare unrestricted permissions. Keep disabled for normal use. |
 | `YODAMAN_GRAPHIFY_BIN` | `graphify` | Graphify executable path. Use this when `graphifyy` installs into a user Python bin directory outside `PATH`. |
-| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `120000` | Timeout for Graphify build, query, explain, and path subprocesses. |
+| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Timeout for Graphify build, query, explain, and path subprocesses. |
+| `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | `25000` | Default Graphify HTML visualization node limit passed as `GRAPHIFY_VIZ_NODE_LIMIT`. Lower it for slower machines or raise it when large mind maps are acceptable. |
 | `YODAMAN_GRAPHIFY_FULL_EXTRACT` | `false` | When `true`, use Graphify full semantic extraction through Ollama instead of the no-LLM update path. |
 | `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | `qwen3:5b` | Local Ollama model passed to Graphify when full extraction is enabled. |
 | `VITE_YODAMAN_API_BASE` | `/api` | Frontend API base path. Use this when the UI talks through a proxy or alternate host. |

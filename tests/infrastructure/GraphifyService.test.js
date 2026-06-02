@@ -64,4 +64,18 @@ describe('GraphifyService build status', () => {
         expect(status.artifacts.mindmap.skippedReason).toContain('visualization');
         expect(status.artifacts.visualizer.skippedReason).toContain('visualization');
     });
+
+    test('graphifyEnvironment sets a larger default HTML visualization limit', () => {
+        const env = graphifyService.graphifyEnvironment();
+
+        expect(env.GRAPHIFY_VIZ_NODE_LIMIT).toBe('25000');
+    });
+
+    test('needsArtifactRegeneration detects unchanged builds with missing visual output', () => {
+        expect(graphifyService.needsArtifactRegeneration({
+            output: '[graphify watch] No code-graph topology changes detected; outputs left untouched.',
+            missingArtifacts: ['mindmap'],
+            graphExists: true
+        })).toBe(true);
+    });
 });

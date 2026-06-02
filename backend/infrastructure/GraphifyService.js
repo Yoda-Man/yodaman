@@ -6,6 +6,7 @@ const logger = require('./Logger');
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 300000);
 const DEFAULT_OLLAMA_MODEL = process.env.YODAMAN_GRAPHIFY_OLLAMA_MODEL || 'qwen3:5b';
+const DEFAULT_VIZ_NODE_LIMIT = process.env.YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT || '25000';
 const CLOUD_MODEL_KEYS = [
     'OPENAI_API_KEY',
     'ANTHROPIC_API_KEY',
@@ -43,10 +44,7 @@ function getGraphifyBin() {
 }
 
 function runGraphify(args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
-    const env = { ...process.env };
-    CLOUD_MODEL_KEYS.forEach(key => {
-        delete env[key];
-    });
+    const env = graphifyEnvironment();
 
     return new Promise((resolve, reject) => {
         execFile(getGraphifyBin(), args, {
@@ -68,6 +66,18 @@ function runGraphify(args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
             });
         });
     });
+}
+
+function graphifyEnvironment() {
+    const env = { ...process.env };
+    CLOUD_MODEL_KEYS.forEach(key => {
+        delete env[key];
+    });
+    if (!env.GRAPHIFY_VIZ_NODE_LIMIT) {
+        env.GRAPHIFY_VIZ_NODE_LIMIT = DEFAULT_VIZ_NODE_LIMIT;
+    }
+
+    return env;
 }
 
 function graphPath(projectPath) {
@@ -193,6 +203,12 @@ function parseBuildOutput(output = '') {
     return { nodeCount, edgeCount, skippedReason };
 }
 
+function needsArtifactRegeneration({ output = '', missingArtifacts = [], graphExists = false } = {}) {
+    return graphExists
+        && missingArtifacts.length > 0
+        && /outputs left untouched/i.test(output);
+}
+
 function artifactMetadata(projectPath, type, buildStatus = {}) {
     const currentArtifactPath = artifactPath(projectPath, type);
     const exists = Boolean(safeFilePath(currentArtifactPath, graphifyOutPath(projectPath)));
@@ -243,6 +259,8 @@ module.exports = {
     buildStatusPath,
     artifactPath,
     artifactTypes: () => Object.keys(ARTIFACTS),
+    graphifyEnvironment,
+    needsArtifactRegeneration,
     hasGraph,
     getGraphifyBin,
 
@@ -282,10 +300,20 @@ module.exports = {
         });
         try {
             const result = await runGraphify(args);
-            const output = result.stdout || result.stderr;
+            let output = result.stdout || result.stderr;
             const parsed = parseBuildOutput(output);
-            const artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [type, artifactMetadata(projectPath, type)]));
-            const missingArtifacts = Object.entries(artifacts).filter(([, artifact]) => !artifact.exists).map(([type]) => type);
+            let artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [type, artifactMetadata(projectPath, type)]));
+            let missingArtifacts = Object.entries(artifacts).filter(([, artifact]) => !artifact.exists).map(([type]) => type);
+            if (needsArtifactRegeneration({
+                output,
+                missingArtifacts,
+                graphExists: fs.existsSync(graphPath(projectPath))
+            })) {
+                const regenResult = await runGraphify(['cluster-only', projectPath]);
+                output = `${output}\n${regenResult.stdout || regenResult.stderr}`.trim();
+                artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [type, artifactMetadata(projectPath, type)]));
+                missingArtifacts = Object.entries(artifacts).filter(([, artifact]) => !artifact.exists).map(([type]) => type);
+            }
             const skippedArtifacts = {};
             if (parsed.skippedReason) {
                 missingArtifacts.forEach(type => {
