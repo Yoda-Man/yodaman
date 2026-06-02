@@ -95,11 +95,37 @@ function artifactMissingError(currentArtifactPath) {
     return err;
 }
 
+function safeFilePath(filePath, baseDir) {
+    let stat;
+    try {
+        stat = fs.lstatSync(filePath);
+    } catch (err) {
+        return '';
+    }
+
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+        return '';
+    }
+
+    try {
+        const realBaseDir = fs.realpathSync(baseDir);
+        const realFilePath = fs.realpathSync(filePath);
+        const relativeFilePath = path.relative(realBaseDir, realFilePath);
+        if (relativeFilePath.startsWith('..') || path.isAbsolute(relativeFilePath)) {
+            return '';
+        }
+        return filePath;
+    } catch (err) {
+        return '';
+    }
+}
+
 function existingReportPath(projectPath) {
+    const outDir = graphifyOutPath(projectPath);
     const found = REPORT_FILENAMES
-        .map(filename => path.join(graphifyOutPath(projectPath), filename))
-        .find(candidate => fs.existsSync(candidate));
-    return found || path.join(graphifyOutPath(projectPath), REPORT_FILENAMES[0]);
+        .map(filename => path.join(outDir, filename))
+        .find(candidate => safeFilePath(candidate, outDir));
+    return found || path.join(outDir, REPORT_FILENAMES[0]);
 }
 
 function reportPath(projectPath) {
@@ -225,21 +251,7 @@ module.exports = {
 
     artifact(projectPath, type) {
         const currentArtifactPath = artifactPath(projectPath, type);
-        let stat;
-        try {
-            stat = fs.lstatSync(currentArtifactPath);
-        } catch (err) {
-            throw artifactMissingError(currentArtifactPath);
-        }
-
-        if (stat.isSymbolicLink() || !stat.isFile()) {
-            throw artifactMissingError(currentArtifactPath);
-        }
-
-        const outDir = fs.realpathSync(graphifyOutPath(projectPath));
-        const realArtifactPath = fs.realpathSync(currentArtifactPath);
-        const relativeArtifactPath = path.relative(outDir, realArtifactPath);
-        if (relativeArtifactPath.startsWith('..') || path.isAbsolute(relativeArtifactPath)) {
+        if (!safeFilePath(currentArtifactPath, graphifyOutPath(projectPath))) {
             throw artifactMissingError(currentArtifactPath);
         }
 
@@ -252,7 +264,7 @@ module.exports = {
 
     readReport(projectPath, { maxChars = 8000 } = {}) {
         const currentReportPath = reportPath(projectPath);
-        if (!fs.existsSync(currentReportPath)) return '';
+        if (!safeFilePath(currentReportPath, graphifyOutPath(projectPath))) return '';
         return truncate(fs.readFileSync(currentReportPath, 'utf8'), maxChars);
     },
 

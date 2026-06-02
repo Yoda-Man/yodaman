@@ -220,5 +220,44 @@ describe('RestController Integration', () => {
                 reportPath: path.join(workspace, 'graphify-out', 'graph_report.md')
             });
         });
+
+        test('GET /graphify/report rejects symlinked reports', async () => {
+            const externalFile = path.join(os.tmpdir(), `yodaman-graph-report-${Date.now()}.md`);
+            const reportPath = path.join(workspace, 'graphify-out', 'graph_report.md');
+            fs.writeFileSync(externalFile, '# Outside report');
+
+            try {
+                fs.symlinkSync(externalFile, reportPath);
+            } catch (err) {
+                fs.rmSync(externalFile, { force: true });
+                return;
+            }
+
+            try {
+                const response = await invoke('get', '/graphify/report', {
+                    query: { path: workspace }
+                });
+
+                expect(response.statusCode).toBe(404);
+                expect(response.payload).toEqual(expect.objectContaining({
+                    code: 'graphify_report_missing'
+                }));
+            } finally {
+                fs.rmSync(externalFile, { force: true });
+            }
+        });
+
+        test('GET /graphify/report rejects non-file reports', async () => {
+            fs.mkdirSync(path.join(workspace, 'graphify-out', 'graph_report.md'));
+
+            const response = await invoke('get', '/graphify/report', {
+                query: { path: workspace }
+            });
+
+            expect(response.statusCode).toBe(404);
+            expect(response.payload).toEqual(expect.objectContaining({
+                code: 'graphify_report_missing'
+            }));
+        });
     });
 });
