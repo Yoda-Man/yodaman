@@ -49,6 +49,8 @@ npm run desktop:dist
 
 The initial builder configuration targets unpacked app directories for macOS, Windows, and Linux. Installer formats can be added after the desktop runtime flow is validated.
 
+The current Electron Builder configuration uses `asar: false` intentionally. The managed Node sidecar starts `server.js` directly, and support can inspect packaged runtime files during local diagnostics. If public distribution requires tamper resistance, change this only after validating sidecar startup from an ASAR-packaged app.
+
 ## Runtime Behavior
 
 - If a YodaMan runtime is already available on port `3090`, the desktop app reuses it.

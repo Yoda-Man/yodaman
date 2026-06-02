@@ -63,7 +63,12 @@ async function initialize() {
         
         let config = { watchedDirectories: [], removedDirectories: [] };
         if (fs.existsSync(CONFIG_PATH)) {
-            config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+            try {
+                config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+            } catch (err) {
+                logger.error('config_load_failed', err, { path: CONFIG_PATH });
+                config = { watchedDirectories: [], removedDirectories: [] };
+            }
         }
         config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
         config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];

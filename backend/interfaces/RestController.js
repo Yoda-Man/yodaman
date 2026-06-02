@@ -31,7 +31,11 @@ const storage = multer.diskStorage({
         cb(null, PLUGINS_DIR);
     },
     filename: (req, file, cb) => {
-        cb(null, file.originalname);
+        try {
+            cb(null, safePluginFilename(file.originalname));
+        } catch (err) {
+            cb(err);
+        }
     }
 });
 const upload = multer({ storage });
@@ -171,9 +175,35 @@ function isLocalRequest(req) {
     return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 }
 
+function isPairingRequiredByDefault() {
+    return process.env.YODAMAN_REQUIRE_PAIRING_TOKEN !== 'false';
+}
+
+function arePluginUploadsEnabled() {
+    return process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS === 'true';
+}
+
+function safePluginFilename(originalName) {
+    const filename = path.basename(validateString(originalName, 'plugin filename', { max: 200 }));
+    if (filename !== originalName || filename.includes('..')) {
+        throw new Error('Invalid plugin filename');
+    }
+    if (!/^[a-zA-Z0-9._-]+\.js$/.test(filename)) {
+        throw new Error('Plugin upload must be a JavaScript file with a safe filename');
+    }
+    return filename;
+}
+
+function requirePluginUploadsEnabled(req, res, next) {
+    if (!arePluginUploadsEnabled()) {
+        return jsonError(res, 403, 'Plugin uploads are disabled. Set YODAMAN_ALLOW_PLUGIN_UPLOADS=true only for trusted local support sessions.', 'plugin_uploads_disabled');
+    }
+    return next();
+}
+
 router.use((req, res, next) => {
     if (req.path.startsWith('/pairing')) return next();
-    if (process.env.YODAMAN_REQUIRE_PAIRING_TOKEN !== 'true') return next();
+    if (!isPairingRequiredByDefault()) return next();
     if (isLocalRequest(req)) return next();
 
     const token = req.get('X-YodaMan-Token');
@@ -199,7 +229,12 @@ router.post('/mode', (req, res) => {
 function loadConfig() {
     config = { watchedDirectories: [], removedDirectories: [] };
     if (fs.existsSync(CONFIG_PATH)) {
-        config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+        try {
+            config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+        } catch (err) {
+            logger.error('config_load_failed', err, { path: CONFIG_PATH });
+            config = { watchedDirectories: [], removedDirectories: [] };
+        }
     }
     config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
     config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];
@@ -592,18 +627,21 @@ const plugins = Array.from(toolBox.plugins.values()).map(p => ({
     res.json(plugins);
 });
 
-router.post('/plugins', upload.single('plugin'), (req, res) => {
+router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (req, res) => {
     if (!req.file) return res.status(400).send('No file uploaded');
 
     try {
-        const pluginPath = path.join(PLUGINS_DIR, req.file.originalname);
+        const pluginFilename = safePluginFilename(req.file.originalname);
+        const pluginPath = path.join(PLUGINS_DIR, pluginFilename);
         delete require.cache[require.resolve(pluginPath)];
         const plugin = require(pluginPath);
         toolBox.validatePlugin(plugin, { requireExplicitPermissions: true });
         toolBox.loadPlugins();
-        res.json({ message: 'Plugin uploaded and loaded', name: req.file.originalname });
+        res.json({ message: 'Plugin uploaded and loaded', name: pluginFilename });
     } catch (err) {
-        fs.unlinkSync(path.join(PLUGINS_DIR, req.file.originalname));
+        if (req.file?.path && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
         res.status(400).json({ error: err.message });
     }
 });
@@ -690,7 +728,7 @@ router.get('/graphify/status', (req, res) => {
         return jsonError(res, err.status || 400, err.message, err.code || 'invalid_path');
     }
 
-    res.json(graphifyService.freshness(dirPath));
+    res.json(graphifyService.freshness(dirPath, { scanSources: false }));
 });
 
 router.post('/graphify/build', (req, res) => {
@@ -725,7 +763,7 @@ router.get('/graphify/build/status', (req, res) => {
             path: dirPath,
             job: publicBuildJob(job),
             build: graphifyService.readBuildStatus(dirPath),
-            graph: graphifyService.freshness(dirPath)
+            graph: graphifyService.freshness(dirPath, { scanSources: false })
         });
     } catch (err) {
         logger.error('graphify_build_status_request_failed', err, { requestId: req.id, path: dirPath });
@@ -910,5 +948,8 @@ router.delete('/audit', (req, res) => {
 });
 
 router.loadConfig = loadConfig;
+router.isPairingRequiredByDefault = isPairingRequiredByDefault;
+router.arePluginUploadsEnabled = arePluginUploadsEnabled;
+router.safePluginFilename = safePluginFilename;
 
 module.exports = router;

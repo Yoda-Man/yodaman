@@ -84,6 +84,24 @@ describe('ToolBox', () => {
         await expect(toolBox.executeCommand({
             command: 'sudo rm -rf /',
             cwd: tempDir
-        })).rejects.toThrow('Command blocked by policy');
+        })).rejects.toThrow(/Agent shell commands are disabled|Command blocked by policy/);
+    });
+
+    test('executeCommand should be disabled by default', async () => {
+        const original = process.env.YODAMAN_ALLOW_AGENT_COMMANDS;
+        delete process.env.YODAMAN_ALLOW_AGENT_COMMANDS;
+
+        try {
+            await expect(toolBox.executeCommand({
+                command: 'echo hello',
+                cwd: tempDir
+            })).rejects.toThrow('Agent shell commands are disabled');
+        } finally {
+            if (original === undefined) {
+                delete process.env.YODAMAN_ALLOW_AGENT_COMMANDS;
+            } else {
+                process.env.YODAMAN_ALLOW_AGENT_COMMANDS = original;
+            }
+        }
     });
 });

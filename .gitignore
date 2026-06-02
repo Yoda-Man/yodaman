@@ -7,6 +7,7 @@ extensions/*/node_modules/
 dist/
 release/
 coverage/
+config.json
 audit-log.json
 task-history.json
 audit-log.jsonl

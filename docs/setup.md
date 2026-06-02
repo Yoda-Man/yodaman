@@ -41,7 +41,7 @@ The backend runtime listens on `http://localhost:3090`. The development web UI l
 
 ## Configuration
 
-YodaMan stores its configuration in `config.json` at the root of the project.
+YodaMan stores local workspace configuration in `config.json` at the root of the project. Releases ship `config.example.json`; copy it to `config.json` or use the app Settings screen to create local workspace configuration.
 
 ```json
 {
@@ -86,6 +86,13 @@ Allow intentionally trusted unrestricted plugins:
 
 ```bash
 YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true npm start
+```
+
+Enable plugin uploads or agent shell commands only during trusted local support sessions:
+
+```bash
+YODAMAN_ALLOW_PLUGIN_UPLOADS=true npm start
+YODAMAN_ALLOW_AGENT_COMMANDS=true npm start
 ```
 
 Change the backend port:

@@ -87,6 +87,8 @@ Add or update watched project directories in `config.json`:
 }
 ```
 
+Released packages include `config.example.json`; local `config.json` is intentionally ignored so support machines do not inherit developer-specific absolute paths.
+
 ## Run
 
 Start the local runtime and web UI:
@@ -110,8 +112,11 @@ Useful environment variables:
 | `YODAMAN_PORT` | `3090` | Backend runtime port. |
 | `VITE_YODAMAN_API_BASE` | `/api` | Frontend API base path for alternate hosts or proxies. |
 | `VITE_YODAMAN_FETCH_TIMEOUT_MS` | `30000` | Browser request timeout. |
-| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `false` | Requires `X-YodaMan-Token` for non-local API clients when set to `true`. |
+| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `true` | Requires `X-YodaMan-Token` for non-local API clients by default. Set to `false` only for trusted local-only development. |
 | `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `false` | Allows explicitly trusted unrestricted plugins. |
+| `YODAMAN_ALLOW_PLUGIN_UPLOADS` | `false` | Enables plugin uploads only for trusted local support sessions. |
+| `YODAMAN_ALLOW_AGENT_COMMANDS` | `false` | Enables agent shell command execution only for trusted local support sessions. |
+| `YODAMAN_WATCH_DEBOUNCE_MS` | `1500` | Debounce window for filesystem-triggered reindex queueing. |
 | `YODAMAN_GRAPHIFY_BIN` | `graphify` | Graphify CLI binary used to build and query workspace knowledge graphs. |
 | `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Timeout for Graphify build and query subprocesses. |
 | `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | `25000` | Graphify HTML visualization node limit passed to Graphify subprocesses. |
@@ -152,6 +157,7 @@ npm run release:smoke
 Health and support endpoints are available at `/api/status`, `/api/check?path=...`, `/api/desktop/diagnostics`, `/api/policy`, and `/api/audit`. Runtime logs are emitted as structured JSON with request IDs, and responses include `X-Request-Id` for support correlation.
 
 Operational runbooks live in [docs/runbooks.md](docs/runbooks.md). Configuration details live in [docs/configuration.md](docs/configuration.md), and the ecosystem overview is in [docs/ecosystem-architecture.md](docs/ecosystem-architecture.md).
+Support ownership, escalation, and pre-handover checks live in [docs/support-handover.md](docs/support-handover.md).
 
 ## Clients
 

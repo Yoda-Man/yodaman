@@ -119,6 +119,39 @@ describe('RestController Integration', () => {
         }));
     });
 
+    test('security defaults require remote pairing tokens', () => {
+        const original = process.env.YODAMAN_REQUIRE_PAIRING_TOKEN;
+        delete process.env.YODAMAN_REQUIRE_PAIRING_TOKEN;
+
+        try {
+            expect(router.isPairingRequiredByDefault()).toBe(true);
+        } finally {
+            if (original === undefined) {
+                delete process.env.YODAMAN_REQUIRE_PAIRING_TOKEN;
+            } else {
+                process.env.YODAMAN_REQUIRE_PAIRING_TOKEN = original;
+            }
+        }
+    });
+
+    test('plugin uploads are disabled by default and filenames are restricted', () => {
+        const original = process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS;
+        delete process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS;
+
+        try {
+            expect(router.arePluginUploadsEnabled()).toBe(false);
+            expect(() => router.safePluginFilename('../evil.js')).toThrow('Invalid plugin filename');
+            expect(() => router.safePluginFilename('evil.txt')).toThrow('Plugin upload must be a JavaScript file');
+            expect(router.safePluginFilename('good-plugin.js')).toBe('good-plugin.js');
+        } finally {
+            if (original === undefined) {
+                delete process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS;
+            } else {
+                process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS = original;
+            }
+        }
+    });
+
     describe('Graphify artifact routes', () => {
         let workspace;
         let originalConfig;

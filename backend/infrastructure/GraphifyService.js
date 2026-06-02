@@ -538,15 +538,15 @@ module.exports = {
         return { output, message: result.stdout || result.stderr };
     },
 
-    freshness(projectPath) {
+    freshness(projectPath, { scanSources = true } = {}) {
         const currentStatus = this.status(projectPath);
-        const sourceMtime = latestSourceMtime(projectPath);
+        const sourceMtime = scanSources ? latestSourceMtime(projectPath) : 0;
         const graphMtime = currentStatus.graphUpdatedAt ? new Date(currentStatus.graphUpdatedAt).getTime() : 0;
         const sourceUpdatedAt = sourceMtime ? new Date(sourceMtime).toISOString() : undefined;
         return {
             ...currentStatus,
             latestSourceUpdatedAt: sourceUpdatedAt,
-            stale: !currentStatus.graphExists || (sourceMtime > graphMtime)
+            stale: !currentStatus.graphExists || (scanSources && sourceMtime > graphMtime)
         };
     },
 

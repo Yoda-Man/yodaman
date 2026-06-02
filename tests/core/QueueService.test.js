@@ -26,6 +26,26 @@ describe('QueueService', () => {
         expect(spawn).toHaveBeenCalledWith('ctx', ['index', '/path/1']);
     });
 
+    test('uses the configured ContextEngine binary for indexing', () => {
+        const contextEngine = require('../../backend/infrastructure/ContextEngine');
+        const originalBinary = contextEngine.binary;
+        contextEngine.binary = 'ctx-custom';
+        const mockProc = {
+            stdout: { on: jest.fn() },
+            stderr: { on: jest.fn() },
+            on: jest.fn(),
+            kill: jest.fn()
+        };
+        spawn.mockReturnValue(mockProc);
+
+        try {
+            queueService.addToQueue('/path/custom');
+            expect(spawn).toHaveBeenCalledWith('ctx-custom', ['index', '/path/custom']);
+        } finally {
+            contextEngine.binary = originalBinary;
+        }
+    });
+
     test('should not add duplicate items to queue', () => {
         queueService.isProcessing = true; // Pretend we are busy
         queueService.addToQueue('/path/1');

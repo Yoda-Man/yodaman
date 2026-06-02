@@ -2,6 +2,8 @@
 
 These runbooks are for local support and handover of a YodaMan runtime.
 
+Use `docs/support-handover.md` for ownership, severity, escalation, and pre-handover verification.
+
 ## Start the runtime
 
 1. Confirm Node.js 18 or newer is available.

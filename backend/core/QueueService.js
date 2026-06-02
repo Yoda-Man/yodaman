@@ -48,7 +48,7 @@ class QueueService {
             // Let's ensure ContextEngine has spawn or just use execute for simplicity if we don't need real-time logs.
             // Wait, original used spawn for streaming logs.
             const { spawn } = require('child_process');
-            this.activeProcess = spawn('ctx', ['index', targetDir]);
+            this.activeProcess = spawn(contextEngine.binary, ['index', targetDir]);
             let stderr = '';
 
             this.activeProcess.stdout.on('data', (data) => {

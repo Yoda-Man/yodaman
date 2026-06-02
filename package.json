@@ -14,8 +14,11 @@
     "server.js",
     "start.js",
     "public",
+    "docs/*.md",
+    "!docs/audit*.md",
+    "!docs/ecosystem-roadmap.md",
     "README.md",
-    "config.json"
+    "config.example.json"
   ],
   "main": "server.js",
   "scripts": {

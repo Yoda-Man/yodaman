@@ -64,7 +64,7 @@ const featureGroups = [
         items: [
             'Upload JavaScript plugins from the Plugins tab or place them in the plugins directory.',
             'Plugins expose a name, description, parameters, permissions, and an async execute function.',
-            'Plugins without explicit permissions are treated as unrestricted and are blocked unless deliberately allowed.'
+            'Plugin uploads, unrestricted plugins, and agent shell commands are disabled by default and should only be enabled for trusted local support sessions.'
         ]
     },
     {

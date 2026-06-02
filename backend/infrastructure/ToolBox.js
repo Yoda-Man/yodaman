@@ -171,6 +171,9 @@ class ToolBox {
     async executeCommand({ command, cwd }) {
         const workingDirectory = this.resolveAllowedPath(cwd || process.cwd());
         this.assertCommandAllowed(command);
+        if (process.env.YODAMAN_ALLOW_AGENT_COMMANDS !== 'true') {
+            throw new Error('Agent shell commands are disabled. Set YODAMAN_ALLOW_AGENT_COMMANDS=true only for trusted local support sessions.');
+        }
 
         return new Promise((resolve) => {
             console.log(`[ToolBox] Running command: ${command} (cwd: ${workingDirectory})`);

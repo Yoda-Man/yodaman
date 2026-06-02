@@ -62,7 +62,7 @@ Task history and audit logs persist locally in SQLite when available. If Node SQ
 
 ### Plugins
 
-Plugins are JavaScript modules that extend the agent with custom tools. A plugin should export a `name`, `description`, `parameters`, `permissions`, and an async `execute` function. Plugins without explicit permissions are treated as unrestricted and are blocked unless `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true` is set for trusted code.
+Plugins are JavaScript modules that extend the agent with custom tools. A plugin should export a `name`, `description`, `parameters`, `permissions`, and an async `execute` function. Plugin uploads, unrestricted plugins, and agent shell commands are disabled by default. Enable `YODAMAN_ALLOW_PLUGIN_UPLOADS`, `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS`, or `YODAMAN_ALLOW_AGENT_COMMANDS` only during trusted local support sessions.
 
 ## 3. Web UI
 

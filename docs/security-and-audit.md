@@ -99,12 +99,12 @@ The runtime exposes:
 POST /api/pairing
 ```
 
-This returns a runtime URL, a temporary token, and a `yodaman://pair` deep link. The mobile app can use this payload to connect to the machine running YodaMan. The current token system is a pairing foundation; strict token enforcement for all remote requests should be enabled before publishing a public mobile client.
+This returns a runtime URL, a temporary token, and a `yodaman://pair` deep link. The mobile app can use this payload to connect to the machine running YodaMan. Token enforcement is enabled for non-local requests by default.
 
-Set this environment variable before starting the runtime to require pairing tokens for non-local requests:
+Set this only for trusted local-only development when you need to disable non-local token enforcement:
 
 ```bash
-YODAMAN_REQUIRE_PAIRING_TOKEN=true npm run server
+YODAMAN_REQUIRE_PAIRING_TOKEN=false npm run server
 ```
 
 Localhost requests remain allowed so the desktop app and local web UI continue to work.

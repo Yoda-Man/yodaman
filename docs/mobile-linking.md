@@ -37,10 +37,10 @@ Paste the `deepLink` into the mobile Runtime URL field and tap Use Pairing Link,
 
 ## Token Enforcement
 
-To require pairing tokens for non-local clients, start the runtime with:
+Pairing tokens are required for non-local clients by default. To disable that requirement for trusted local-only development, start the runtime with:
 
 ```bash
-YODAMAN_REQUIRE_PAIRING_TOKEN=true npm run server
+YODAMAN_REQUIRE_PAIRING_TOKEN=false npm run server
 ```
 
 Localhost clients still work without a token. Remote clients must send:
@@ -57,4 +57,3 @@ Before publishing broadly, use one of these stronger approaches:
 - mTLS or signed pairing tokens
 - HTTPS-only tunnel
 - short-lived pairing QR code with explicit device approval
-

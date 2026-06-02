@@ -78,4 +78,13 @@ describe('GraphifyService build status', () => {
             graphExists: true
         })).toBe(true);
     });
+
+    test('freshness can skip expensive source tree scans for status endpoints', () => {
+        fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [], links: [] }));
+        const status = graphifyService.freshness(workspace, { scanSources: false });
+
+        expect(status.graphExists).toBe(true);
+        expect(status.latestSourceUpdatedAt).toBeUndefined();
+        expect(status.stale).toBe(false);
+    });
 });

@@ -16,6 +16,7 @@ const requiredFiles = [
     'backend/interfaces/RestController.js',
     'backend/infrastructure/TaskStore.js',
     'backend/infrastructure/Database.js',
+    'docs/support-handover.md',
     'extensions/vscode-yodaman/package.json',
     'extensions/vscode-yodaman/README.md',
     'apps/mobile/README.md',
@@ -61,7 +62,7 @@ function main() {
 
     const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
     const files = new Set(pkg.files || []);
-    ['bin', 'dist', 'backend', 'shared', 'server.js', 'start.js', 'public', 'README.md', 'config.json'].forEach((entry) => {
+    ['bin', 'dist', 'backend', 'shared', 'server.js', 'start.js', 'public', 'docs/*.md', 'README.md', 'config.example.json'].forEach((entry) => {
         if (!files.has(entry)) {
             throw new Error(`package.json files is missing ${entry}`);
         }
