@@ -144,6 +144,9 @@ export default function GraphStudio({ selectedProject }) {
   })
   const positionById = Object.fromEntries(positionedNodes.map(node => [node.id, node]))
   const graphReady = Boolean(status?.graphExists)
+  const activeArtifactExists = Boolean(status?.artifacts?.[mode]?.exists)
+  const artifactModeLabel = mode === 'mindmap' ? 'mind map' : 'canvas visualization'
+  const hasAnyFullArtifact = Boolean(status?.artifacts?.mindmap?.exists || status?.artifacts?.visualizer?.exists)
 
   if (!selectedProject) {
     return (
@@ -190,6 +193,7 @@ export default function GraphStudio({ selectedProject }) {
             <div className="space-y-2 text-xs">
               <div className={graphReady ? 'text-emerald-300' : 'text-amber-300'}>{graphReady ? 'Graph ready' : 'Needs build'}</div>
               {status?.stale ? <div className="text-rose-300">Graph stale</div> : null}
+              {graphReady && !hasAnyFullArtifact ? <div className="text-amber-300">Full HTML viz unavailable</div> : null}
               <div className="text-slate-500">{graphMap ? `${graphMap.totalNodes} nodes / ${graphMap.totalLinks} links` : 'No map loaded'}</div>
             </div>
           )}
@@ -210,7 +214,7 @@ export default function GraphStudio({ selectedProject }) {
 
       <main className="relative min-w-0 overflow-hidden">
         {(mode === 'mindmap' || mode === 'visualizer') ? (
-          graphReady ? (
+          graphReady && activeArtifactExists ? (
             <iframe
               key={`${mode}-${selectedProject.path}`}
               title={`Graphify ${mode}`}
@@ -218,12 +222,30 @@ export default function GraphStudio({ selectedProject }) {
               sandbox="allow-scripts allow-same-origin"
               className="h-full w-full border-0 bg-slate-950"
             />
-          ) : (
+          ) : !graphReady ? (
             <div className="flex h-full items-center justify-center p-8 text-center">
               <div>
                 <AlertTriangle className="mx-auto mb-4 text-amber-300" size={44} />
                 <h2 className="text-2xl font-black text-white">Build the graph to begin</h2>
                 <p className="mt-2 text-sm text-slate-400">Graphify has not generated a visualization for this workspace yet.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center p-8 text-center">
+              <div className="max-w-xl">
+                <AlertTriangle className="mx-auto mb-4 text-amber-300" size={44} />
+                <h2 className="text-2xl font-black text-white">Full {artifactModeLabel} unavailable</h2>
+                <p className="mt-2 text-sm leading-7 text-slate-400">
+                  The Graphify graph was built, but this workspace is too large for the generated HTML visualization. Use Map Preview for a compact architecture view or Report for the full markdown summary.
+                </p>
+                <div className="mt-6 flex justify-center gap-3">
+                  <button onClick={() => setMode('preview')} className="rounded-xl bg-cyan-500 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-950 hover:bg-cyan-300">
+                    Map Preview
+                  </button>
+                  <button onClick={() => setMode('report')} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-200 hover:bg-white/10">
+                    Report
+                  </button>
+                </div>
               </div>
             </div>
           )
