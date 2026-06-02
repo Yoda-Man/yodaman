@@ -50,7 +50,7 @@ npm start</code></pre>
             </div>
             <div class="card">
                 <h3>Knowledge graph</h3>
-                <p>Graphify builds required workspace graphs for graph-aware answers, impact analysis, freshness warnings, and architecture maps, using Ollama local execution only.</p>
+                <p>Graphify builds required workspace graphs for graph-aware answers, impact analysis, freshness warnings, architecture maps, and CLI health checks with <code>yodaman doctor --graph</code>.</p>
             </div>
             <div class="card">
                 <h3>Human-approved writes</h3>
@@ -80,6 +80,7 @@ npm start</code></pre>
             <li><strong>Logs</strong>: Open recent runtime logs, reindex requests, index queue state, and <code>ctx index</code> output. Use Copy when sharing an error.</li>
             <li><strong>Manual</strong>: Read the in-app guide.</li>
             <li><strong>Plugins</strong>: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, delete non-mandatory plugin files, and manage Graphify graph status, rebuilds, direct graph queries, impact analysis, and architecture maps.</li>
+            <li><strong>Graph doctor</strong>: Run <code>yodaman doctor --graph</code> to check active graphs, persisted freshness, orphaned nodes, and the most dependency-heavy file.</li>
         </ul>
 
         <h2>4. Desktop app</h2>
@@ -115,6 +116,7 @@ npm start</code></pre>
         <ul>
             <li><strong>Context Expert not found</strong>: Install <code>@contextexpert/cli</code> and confirm <code>ctx --version</code> works.</li>
             <li><strong>Graphify not found</strong>: Install <code>graphifyy</code>, confirm <code>graphify --help</code> works, or set <code>YODAMAN_GRAPHIFY_BIN</code>.</li>
+            <li><strong>Graph health warnings</strong>: Run <code>yodaman doctor --graph</code>, then sync the affected workspace if orphaned nodes or missing graphs are reported.</li>
             <li><strong>Runtime unreachable</strong>: Check port <code>3090</code>, restart the managed runtime, or run <code>yodaman</code> from Terminal.</li>
             <li><strong>Moved repository</strong>: Open Settings, edit the workspace path, save, then sync.</li>
             <li><strong>Search results are stale</strong>: Reindex the selected workspace.</li>

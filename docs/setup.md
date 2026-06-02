@@ -56,6 +56,12 @@ YodaMan stores its configuration in `config.json` at the root of the project.
 
 YodaMan 0.2.1 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
 
+Check Graphify graph health across configured workspaces:
+
+```bash
+yodaman doctor --graph
+```
+
 Runtime state files such as `audit-log.json`, `audit-log.jsonl`, `task-history.json`, and `task-history.jsonl` are local machine artifacts and are ignored by git.
 
 ## Verification
@@ -104,6 +110,12 @@ Tune Graphify subprocess timeouts:
 
 ```bash
 YODAMAN_GRAPHIFY_TIMEOUT_MS=180000 npm start
+```
+
+Tune Graphify HTML visualization size:
+
+```bash
+YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT=25000 npm start
 ```
 
 Enable Graphify full semantic extraction through Ollama only:

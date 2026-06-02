@@ -41,3 +41,13 @@ Use absolute paths. The API validates submitted paths and normalizes them before
 - Graphify is mandatory. The runtime fails startup when the Graphify CLI cannot be found.
 - Graphify is local-only in YodaMan. Cloud model provider keys are stripped from Graphify subprocesses, and full extraction forces `--backend ollama`.
 - Plugin permissions are visible through `GET /api/policy`; review them before enabling third-party plugins.
+
+## CLI health checks
+
+Run a local Graphify health summary from the project root or installed package:
+
+```bash
+yodaman doctor --graph
+```
+
+The command reads `config.json`, checks each workspace's `graphify-out/graph.json`, reports active graph count, persisted freshness, orphaned nodes, and the most dependency-heavy source file.

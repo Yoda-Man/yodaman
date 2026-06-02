@@ -60,6 +60,12 @@ Runtime dependencies include Express for the local API, React and Vite for the w
 
 Graphify is wired into YodaMan as a required knowledge layer. Reindexing a workspace updates both the Context Expert index and the Graphify graph, then adds the project graph to Graphify's global graph. Chat and agent answers receive graph report context plus question-specific graph traversal output; stale graphs rebuild before answer context is gathered. The Graph tab opens Graph Studio, a dedicated project-scoped surface for interactive Graphify visualizations, graph reports, graph queries, and impact analysis. Runtime clients can also call `/api/graphify/status`, `/api/graphify/build`, `/api/graphify/artifact`, `/api/graphify/report`, `/api/graphify/query`, `/api/graphify/explain`, `/api/graphify/path`, `/api/graphify/affected`, `/api/graphify/map`, and `/api/graphify/tree`.
 
+Use the CLI graph doctor for a quick local health check across configured workspaces:
+
+```bash
+yodaman doctor --graph
+```
+
 Yoda-Agent also loads a default coding skill inspired by the Karpathy-style guidance for AI coding agents: surface assumptions, keep changes small, avoid speculative abstractions, make surgical edits, and verify work with targeted checks.
 
 ## Setup
@@ -107,7 +113,8 @@ Useful environment variables:
 | `YODAMAN_REQUIRE_PAIRING_TOKEN` | `false` | Requires `X-YodaMan-Token` for non-local API clients when set to `true`. |
 | `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `false` | Allows explicitly trusted unrestricted plugins. |
 | `YODAMAN_GRAPHIFY_BIN` | `graphify` | Graphify CLI binary used to build and query workspace knowledge graphs. |
-| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `120000` | Timeout for Graphify build and query subprocesses. |
+| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Timeout for Graphify build and query subprocesses. |
+| `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | `25000` | Graphify HTML visualization node limit passed to Graphify subprocesses. |
 | `YODAMAN_GRAPHIFY_FULL_EXTRACT` | `false` | Use Graphify full semantic extraction through Ollama only. |
 | `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | `qwen3:5b` | Ollama model passed to Graphify when full extraction is enabled. |
 
@@ -127,6 +134,7 @@ npm run build        # Build the React app
 npm test             # Run Jest tests
 npm run desktop      # Build and launch the Electron app
 npm run desktop:pack # Create an unpacked desktop build
+yodaman doctor --graph # Check Graphify graph health
 ```
 
 The npm CLI entrypoint is `yodaman` after installation from the package.

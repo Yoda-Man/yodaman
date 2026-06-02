@@ -40,6 +40,14 @@ Graphify is mandatory in 0.2.1 and runs local-only through Ollama for semantic e
 
 The Graph tab opens Graph Studio, a project-scoped visual workspace for Graphify outputs. Graph Studio embeds the generated mind-map and Vis.js canvas artifacts, shows graph freshness, renders the markdown report, and keeps graph query plus impact analysis actions close to the visualization.
 
+Run a local Graphify health check from the command line:
+
+```bash
+yodaman doctor --graph
+```
+
+The graph doctor reports active workspace graphs, persisted freshness, orphaned nodes, and the most dependency-heavy file. If orphaned nodes appear, run `Sync Repository` in the app or `POST /api/reindex` for that workspace.
+
 ### Default coding skill
 
 Yoda-Agent loads a default coding skill for implementation work. It emphasizes explicit assumptions, simple solutions, surgical edits, matching existing style, and verifying changes with targeted tests or builds.
@@ -137,6 +145,7 @@ Use your desktop LAN address when pairing from a phone, for example `http://192.
 
 - **Context Expert not found**: Install `@contextexpert/cli` and confirm `ctx --version` works.
 - **Graphify not found**: Install `graphifyy`, confirm `graphify --help` works, or set `YODAMAN_GRAPHIFY_BIN` to the executable path.
+- **Graph health looks wrong**: Run `yodaman doctor --graph`, then sync the affected workspace if the command reports orphaned nodes or missing graphs.
 - **Runtime unreachable**: Check port `3090`, then use `Restart Managed Runtime` or run `yodaman` from Terminal.
 - **Moved repository**: Open Settings, edit the workspace path, save, then sync the repository.
 - **Search results are stale**: Select the workspace and run `Sync Repository`.

@@ -44,8 +44,9 @@ const featureGroups = [
             'Graphify is required in version 0.2.1 and uses Ollama local execution only for semantic extraction.',
             'Graphify builds knowledge graphs for code, docs, diagrams, and architecture.',
             'Sync Repository updates the Context Expert index and the Graphify graph together.',
+            'Run yodaman doctor --graph to check active graphs, freshness, orphaned nodes, and the most dependency-heavy file.',
             'Chat and agent answers include graph report context plus question-specific graph traversal.',
-            'The Plugins tab shows graph status, freshness warnings, manual graph rebuilds, direct graph queries, impact analysis, and an architecture map.'
+            'The Graph tab opens Graph Studio for visualizations, report reading, graph queries, impact analysis, and architecture maps.'
         ]
     },
     {
@@ -161,6 +162,7 @@ export default function ManualWindow() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <CommandBlock title="Install and run" code={`npm install -g @contextexpert/cli\npython3 -m pip install graphifyy\nnpm install\nsh setup.sh\nnpm start`} />
                         <CommandBlock title="Develop and verify" code={`npm run client\nnpm test\nnpm run build\nnpm run release:smoke`} />
+                        <CommandBlock title="Graphify health" code={`yodaman doctor --graph`} />
                         <CommandBlock title="Desktop builds" code={`npm run desktop\nnpm run desktop:pack\nnpm run desktop:dist`} />
                         <CommandBlock title="VS Code extension" code={`cd extensions/vscode-yodaman\nnpm install\nnpm run lint\nnpm run package`} />
                     </div>
@@ -172,6 +174,7 @@ export default function ManualWindow() {
                         <Trouble title="Runtime unreachable" text="Confirm port 3090 is free, then use YodaMan > Restart Managed Runtime or run yodaman from Terminal." />
                         <Trouble title="Context Expert missing" text="Install @contextexpert/cli and verify ctx --version works in your shell." />
                         <Trouble title="Graphify missing" text="Install graphifyy, verify graphify --help works, or set YODAMAN_GRAPHIFY_BIN to the executable path." />
+                        <Trouble title="Graph health warnings" text="Run yodaman doctor --graph, then sync the affected workspace if orphaned nodes or missing graphs are reported." />
                         <Trouble title="Moved repository" text="Open Settings, edit the workspace path, save, then run Sync Repository." />
                         <Trouble title="Search looks stale" text="Select the workspace and run Sync Repository to queue a fresh index." />
                         <Trouble title="Plugin blocked" text="Add explicit plugin permissions or set YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true only for trusted plugins." />
