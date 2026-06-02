@@ -105,6 +105,21 @@ Builds or updates the workspace graph.
 
 **Body:** `{ "path": "/absolute/path/to/project" }`
 
+### `GET /graphify/artifact`
+
+Serves a generated Graphify HTML artifact for a registered workspace. Query parameters:
+
+- `path`: absolute registered workspace path.
+- `type`: `mindmap` for `graph.html` or `visualizer` for `graph_visualizer.html`.
+
+The route only serves known Graphify artifacts from the workspace's `graphify-out/` directory.
+
+### `GET /graphify/report`
+
+Returns the Graphify markdown report for a registered workspace.
+
+**Query Params:** `path`
+
 ### `POST /graphify/query`
 Runs a natural-language graph traversal query.
 
