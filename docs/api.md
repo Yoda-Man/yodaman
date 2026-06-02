@@ -96,14 +96,19 @@ Forces documentation preprocessing and documentation search.
 Graphify is a required knowledge graph layer in YodaMan 0.2.1. The runtime fails startup when the `graphify` CLI cannot be found. Graphify endpoints require a registered workspace path.
 
 ### `GET /graphify/status`
-Returns graph availability and artifact paths.
+Returns graph availability, artifact health, stale status, and the last persisted build summary. Large graphs can return `build.state: "partial"` when `graph.json` and the report exist but full HTML artifacts were skipped.
 
 **Query Params:** `path`
 
 ### `POST /graphify/build`
-Builds or updates the workspace graph.
+Queues a workspace graph build and returns immediately with a build job id.
 
 **Body:** `{ "path": "/absolute/path/to/project" }`
+
+### `GET /graphify/build/status`
+Returns the in-memory build job state, the last persisted build summary, and graph freshness.
+
+**Query Params:** `path`, `jobId` (optional)
 
 ### `GET /graphify/artifact`
 

@@ -133,9 +133,15 @@ export const api = {
 
     async buildGraphify(path) {
         return request(`${API_BASE}/graphify/build`, {
-            ...jsonOptions('POST', { path }),
-            timeoutMs: 300000
+            ...jsonOptions('POST', { path })
         });
+    },
+
+    async getGraphifyBuildStatus(path, jobId) {
+        const url = new URL(`${API_BASE}/graphify/build/status`, window.location.origin);
+        url.searchParams.append('path', path);
+        if (jobId) url.searchParams.append('jobId', jobId);
+        return request(url);
     },
 
     graphifyArtifactUrl(path, type) {

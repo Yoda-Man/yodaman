@@ -182,6 +182,11 @@ function createYodaManClient(runtimeUrl, options = {}) {
                 body: JSON.stringify({ path })
             });
         },
+        graphifyBuildStatus(path, jobId) {
+            const params = new URLSearchParams({ path });
+            if (jobId) params.set('jobId', jobId);
+            return request(`/api/graphify/build/status?${params.toString()}`);
+        },
         graphifyArtifact(path, type) {
             const params = new URLSearchParams({ path, type });
             return request(`/api/graphify/artifact?${params.toString()}`);

@@ -33,6 +33,7 @@ Use these endpoints:
 | `GET /api/check?path=/absolute/workspace` | Workspace health check through `ctx`. |
 | `GET /api/desktop/diagnostics` | Process, host, memory, task, and plugin diagnostics. |
 | `GET /api/graphify/status?path=/absolute/workspace` | Graphify graph artifact status. |
+| `GET /api/graphify/build/status?path=/absolute/workspace` | Graphify build job and persisted build status. |
 | `GET /api/policy` | Current workspace roots, blocked commands, and plugin permissions. |
 | `GET /api/audit?limit=100` | Recent tool/audit activity. |
 
@@ -64,7 +65,9 @@ To archive logs, stop the runtime, move the files to a dated backup directory, t
 2. Confirm the workspace path is registered with `GET /api/projects`.
 3. Run `GET /api/graphify/status?path=/absolute/workspace`.
 4. Run `POST /api/graphify/build` for the workspace.
-5. If semantic extraction fails, confirm Ollama is running and the model named by `YODAMAN_GRAPHIFY_OLLAMA_MODEL` is available locally.
+5. Poll `GET /api/graphify/build/status?path=/absolute/workspace` until the state is `succeeded`, `partial`, or `failed`.
+6. Treat `partial` as a valid large-graph outcome when `graph.json` and the report exist but `graph.html` or `graph_visualizer.html` were skipped by Graphify.
+7. If semantic extraction fails, confirm Ollama is running and the model named by `YODAMAN_GRAPHIFY_OLLAMA_MODEL` is available locally.
 
 ## Handle out-of-disk errors
 

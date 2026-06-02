@@ -19,6 +19,7 @@ const ARTIFACTS = {
     visualizer: 'graph_visualizer.html'
 };
 const REPORT_FILENAMES = ['graph_report.md', 'GRAPH_REPORT.md'];
+const BUILD_STATUS_FILENAME = 'yodaman-build-status.json';
 let resolvedGraphifyBin = null;
 
 function findUserGraphifyBins() {
@@ -143,6 +144,10 @@ function reportPath(projectPath) {
     return existingReportPath(projectPath);
 }
 
+function buildStatusPath(projectPath) {
+    return path.join(graphifyOutPath(projectPath), BUILD_STATUS_FILENAME);
+}
+
 function hasGraph(projectPath) {
     return fs.existsSync(graphPath(projectPath));
 }
@@ -179,9 +184,63 @@ function truncate(text, max = 6000) {
     return `${text.slice(0, max)}\n[Graphify output truncated to ${max} characters]`;
 }
 
+function parseBuildOutput(output = '') {
+    const rebuiltMatch = output.match(/Rebuilt:\s*([\d,]+)\s+nodes,\s*([\d,]+)\s+edges/i);
+    const skippedVizMatch = output.match(/Skipped graph\.html:\s*(.+)/i);
+    const nodeCount = rebuiltMatch ? Number(rebuiltMatch[1].replace(/,/g, '')) : undefined;
+    const edgeCount = rebuiltMatch ? Number(rebuiltMatch[2].replace(/,/g, '')) : undefined;
+    const skippedReason = skippedVizMatch ? skippedVizMatch[1].trim() : undefined;
+    return { nodeCount, edgeCount, skippedReason };
+}
+
+function artifactMetadata(projectPath, type, buildStatus = {}) {
+    const currentArtifactPath = artifactPath(projectPath, type);
+    const exists = Boolean(safeFilePath(currentArtifactPath, graphifyOutPath(projectPath)));
+    const stat = exists ? fs.statSync(currentArtifactPath) : null;
+    const skippedReason = buildStatus.skippedArtifacts?.[type];
+    return {
+        path: currentArtifactPath,
+        exists,
+        updatedAt: stat?.mtime?.toISOString(),
+        skippedReason
+    };
+}
+
+function summarizeBuildStatus(projectPath, buildStatus) {
+    const currentGraphPath = graphPath(projectPath);
+    const graphExists = fs.existsSync(currentGraphPath);
+    const artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [
+        type,
+        artifactMetadata(projectPath, type, buildStatus)
+    ]));
+    const hasAnyArtifact = Object.values(artifacts).some(artifact => artifact.exists);
+    const skippedArtifacts = { ...(buildStatus.skippedArtifacts || {}) };
+
+    if (graphExists && !hasAnyArtifact && buildStatus.state !== 'running' && buildStatus.state !== 'failed') {
+        const reason = buildStatus.message?.includes('too large')
+            ? buildStatus.message
+            : 'Full HTML visualization unavailable for this graph. Use Map Preview or Report.';
+        const message = buildStatus.message?.includes('too large')
+            ? buildStatus.message
+            : 'Graph built, but full HTML visualization is unavailable.';
+        Object.keys(ARTIFACTS).forEach(type => {
+            if (!skippedArtifacts[type]) skippedArtifacts[type] = reason;
+        });
+        return {
+            ...buildStatus,
+            state: 'partial',
+            message,
+            skippedArtifacts
+        };
+    }
+
+    return buildStatus;
+}
+
 module.exports = {
     graphPath,
     reportPath,
+    buildStatusPath,
     artifactPath,
     artifactTypes: () => Object.keys(ARTIFACTS),
     hasGraph,
@@ -215,19 +274,88 @@ module.exports = {
             : ['update', projectPath, '--force'];
 
         logger.info('graphify_build_started', { path: projectPath, update });
-        const result = await runGraphify(args);
-        logger.info('graphify_build_completed', {
-            path: projectPath,
-            graphPath: graphPath(projectPath),
-            output: truncate(result.stdout || result.stderr, 1200)
+        const startedAt = new Date();
+        this.writeBuildStatus(projectPath, {
+            state: 'running',
+            message: 'Graphify build running',
+            startedAt: startedAt.toISOString()
         });
-        this.addToGlobal(projectPath).catch(err => {
-            logger.warn('graphify_global_add_failed', { path: projectPath, error: err.message });
-        });
-        return {
-            graphPath: graphPath(projectPath),
-            output: result.stdout || result.stderr
+        try {
+            const result = await runGraphify(args);
+            const output = result.stdout || result.stderr;
+            const parsed = parseBuildOutput(output);
+            const artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [type, artifactMetadata(projectPath, type)]));
+            const missingArtifacts = Object.entries(artifacts).filter(([, artifact]) => !artifact.exists).map(([type]) => type);
+            const skippedArtifacts = {};
+            if (parsed.skippedReason) {
+                missingArtifacts.forEach(type => {
+                    skippedArtifacts[type] = parsed.skippedReason;
+                });
+            }
+            const state = missingArtifacts.length > 0 && fs.existsSync(graphPath(projectPath)) ? 'partial' : 'succeeded';
+            const completedAt = new Date();
+            const buildStatus = this.writeBuildStatus(projectPath, {
+                state,
+                message: state === 'partial'
+                    ? 'Graphify graph built with skipped visualizations'
+                    : 'Graphify graph built successfully',
+                startedAt: startedAt.toISOString(),
+                completedAt: completedAt.toISOString(),
+                durationMs: completedAt.getTime() - startedAt.getTime(),
+                output: truncate(output, 4000),
+                skippedArtifacts,
+                nodeCount: parsed.nodeCount,
+                edgeCount: parsed.edgeCount
+            });
+            logger.info('graphify_build_completed', {
+                path: projectPath,
+                graphPath: graphPath(projectPath),
+                state,
+                output: truncate(output, 1200)
+            });
+            this.addToGlobal(projectPath).catch(err => {
+                logger.warn('graphify_global_add_failed', { path: projectPath, error: err.message });
+            });
+            return {
+                graphPath: graphPath(projectPath),
+                output,
+                build: buildStatus
+            };
+        } catch (err) {
+            const completedAt = new Date();
+            this.writeBuildStatus(projectPath, {
+                state: 'failed',
+                message: err.message,
+                startedAt: startedAt.toISOString(),
+                completedAt: completedAt.toISOString(),
+                durationMs: completedAt.getTime() - startedAt.getTime()
+            });
+            throw err;
+        }
+    },
+
+    readBuildStatus(projectPath) {
+        const currentBuildStatusPath = buildStatusPath(projectPath);
+        if (!safeFilePath(currentBuildStatusPath, graphifyOutPath(projectPath))) {
+            return { state: 'idle' };
+        }
+        try {
+            return JSON.parse(fs.readFileSync(currentBuildStatusPath, 'utf8'));
+        } catch (err) {
+            return { state: 'idle', message: 'Build status could not be read' };
+        }
+    },
+
+    writeBuildStatus(projectPath, status) {
+        const outDir = graphifyOutPath(projectPath);
+        fs.mkdirSync(outDir, { recursive: true });
+        const nextStatus = {
+            state: status.state || 'idle',
+            updatedAt: new Date().toISOString(),
+            ...status
         };
+        fs.writeFileSync(buildStatusPath(projectPath), JSON.stringify(nextStatus, null, 2));
+        return nextStatus;
     },
 
     status(projectPath) {
@@ -237,6 +365,11 @@ module.exports = {
         const reportExists = fs.existsSync(currentReportPath);
         const graphStat = graphExists ? fs.statSync(currentGraphPath) : null;
         const reportStat = reportExists ? fs.statSync(currentReportPath) : null;
+        const build = summarizeBuildStatus(projectPath, this.readBuildStatus(projectPath));
+        const artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [
+            type,
+            artifactMetadata(projectPath, type, build)
+        ]));
 
         return {
             available: Boolean(getGraphifyBin()),
@@ -247,16 +380,8 @@ module.exports = {
             reportExists,
             graphUpdatedAt: graphStat?.mtime?.toISOString(),
             reportUpdatedAt: reportStat?.mtime?.toISOString(),
-            artifacts: Object.fromEntries(Object.keys(ARTIFACTS).map(type => {
-                const currentArtifactPath = artifactPath(projectPath, type);
-                const exists = fs.existsSync(currentArtifactPath);
-                const stat = exists ? fs.statSync(currentArtifactPath) : null;
-                return [type, {
-                    path: currentArtifactPath,
-                    exists,
-                    updatedAt: stat?.mtime?.toISOString()
-                }];
-            }))
+            artifacts,
+            build
         };
     },
 

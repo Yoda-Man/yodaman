@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 
 // Infrastructure Layer
 const contextEngine = require('../infrastructure/ContextEngine');
@@ -43,6 +44,7 @@ const upload = multer({ storage });
  */
 
 let config = { watchedDirectories: [], removedDirectories: [] };
+const graphifyBuildJobs = new Map();
 
 function jsonError(res, status, message, code) {
     return res.status(status).json({ error: message, code });
@@ -56,6 +58,65 @@ function setGraphifyArtifactHeaders(res) {
         'Content-Security-Policy',
         "default-src 'self' data: blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://localhost:* http://127.0.0.1:*"
     );
+}
+
+function publicBuildJob(job) {
+    if (!job) return null;
+    return {
+        id: job.id,
+        path: job.path,
+        state: job.state,
+        message: job.message,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
+        durationMs: job.durationMs,
+        error: job.error
+    };
+}
+
+function latestBuildJobForPath(dirPath) {
+    return Array.from(graphifyBuildJobs.values())
+        .filter(job => job.path === dirPath)
+        .sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')))[0] || null;
+}
+
+function startGraphifyBuildJob(dirPath) {
+    const runningJob = Array.from(graphifyBuildJobs.values())
+        .find(job => job.path === dirPath && (job.state === 'queued' || job.state === 'running'));
+    if (runningJob) return runningJob;
+
+    const job = {
+        id: crypto.randomUUID(),
+        path: dirPath,
+        state: 'queued',
+        message: 'Graphify build queued',
+        startedAt: new Date().toISOString()
+    };
+    graphifyBuildJobs.set(job.id, job);
+
+    Promise.resolve().then(async () => {
+        const startedAt = new Date();
+        job.state = 'running';
+        job.message = 'Graphify build running';
+        job.startedAt = startedAt.toISOString();
+        try {
+            const result = await graphifyService.build(dirPath, { update: true });
+            const buildState = result.build?.state === 'partial' ? 'partial' : 'succeeded';
+            job.state = buildState;
+            job.message = result.build?.message || 'Graphify build completed';
+            job.completedAt = new Date().toISOString();
+            job.durationMs = new Date(job.completedAt).getTime() - startedAt.getTime();
+        } catch (err) {
+            job.state = 'failed';
+            job.message = err.message;
+            job.error = err.message;
+            job.completedAt = new Date().toISOString();
+            job.durationMs = new Date(job.completedAt).getTime() - startedAt.getTime();
+            logger.error('graphify_build_job_failed', err, { path: dirPath, jobId: job.id });
+        }
+    });
+
+    return job;
 }
 
 function validateString(value, name, { required = true, max = 4000 } = {}) {
@@ -632,16 +693,43 @@ router.get('/graphify/status', (req, res) => {
     res.json(graphifyService.freshness(dirPath));
 });
 
-router.post('/graphify/build', async (req, res) => {
+router.post('/graphify/build', (req, res) => {
     let dirPath;
     try {
         dirPath = resolveRegisteredProjectPath(req.body?.path);
         validateIndexableDirectory(dirPath);
-        const result = await graphifyService.build(dirPath, { update: true });
-        res.json({ message: 'Graphify knowledge graph updated', ...result });
+        const job = startGraphifyBuildJob(dirPath);
+        res.status(202).json({
+            message: job.state === 'queued' ? 'Graphify build queued' : 'Graphify build already running',
+            path: dirPath,
+            jobId: job.id,
+            job: publicBuildJob(job),
+            build: graphifyService.readBuildStatus(dirPath)
+        });
     } catch (err) {
         logger.error('graphify_build_request_failed', err, { requestId: req.id, path: dirPath });
         jsonError(res, err.status || 500, err.message, err.code || 'graphify_build_failed');
+    }
+});
+
+router.get('/graphify/build/status', (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.query.path);
+        const jobId = validateString(req.query.jobId, 'jobId', { required: false, max: 100 });
+        const job = jobId ? graphifyBuildJobs.get(jobId) : latestBuildJobForPath(dirPath);
+        if (jobId && (!job || job.path !== dirPath)) {
+            return jsonError(res, 404, `Graphify build job not found: ${jobId}`, 'graphify_build_job_missing');
+        }
+        res.json({
+            path: dirPath,
+            job: publicBuildJob(job),
+            build: graphifyService.readBuildStatus(dirPath),
+            graph: graphifyService.freshness(dirPath)
+        });
+    } catch (err) {
+        logger.error('graphify_build_status_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_build_status_failed');
     }
 });
 

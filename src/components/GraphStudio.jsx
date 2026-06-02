@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, FileText, GitBranch, Loader2, Play, RefreshCw, Search, Zap } from 'lucide-react'
 import { api } from '../api/api'
 
@@ -8,6 +8,15 @@ const MODES = [
   { id: 'report', label: 'Report' },
   { id: 'preview', label: 'Map Preview' }
 ]
+
+const TERMINAL_BUILD_STATES = new Set(['succeeded', 'partial', 'failed'])
+const POLL_INTERVAL_MS = 2000
+const MAX_BUILD_POLLS = 180
+
+function preferredBuildStatus(job, build) {
+  if (build && TERMINAL_BUILD_STATES.has(build.state)) return build
+  return job || build || null
+}
 
 function markdownToBlocks(markdown) {
   return String(markdown || '')
@@ -23,8 +32,10 @@ function markdownToBlocks(markdown) {
 }
 
 export default function GraphStudio({ selectedProject }) {
+  const buildPollRef = useRef(0)
   const [mode, setMode] = useState('mindmap')
   const [status, setStatus] = useState(null)
+  const [buildStatus, setBuildStatus] = useState(null)
   const [graphMap, setGraphMap] = useState(null)
   const [report, setReport] = useState('')
   const [query, setQuery] = useState('')
@@ -41,6 +52,7 @@ export default function GraphStudio({ selectedProject }) {
   }, [selectedProject?.path, mode])
 
   useEffect(() => {
+    buildPollRef.current += 1
     loadGraphStudio()
   }, [selectedProject?.path])
 
@@ -56,6 +68,7 @@ export default function GraphStudio({ selectedProject }) {
     setImpactResult('')
     if (!selectedProject?.path) {
       setStatus(null)
+      setBuildStatus(null)
       setGraphMap(null)
       setReport('')
       return
@@ -67,6 +80,7 @@ export default function GraphStudio({ selectedProject }) {
         api.mapGraphify(selectedProject.path, 90).catch(() => null)
       ])
       setStatus(nextStatus)
+      setBuildStatus(nextStatus?.build || null)
       setGraphMap(nextMap)
       setReport('')
     } catch (err) {
@@ -78,10 +92,28 @@ export default function GraphStudio({ selectedProject }) {
 
   async function buildGraph() {
     if (!selectedProject?.path || busy) return
+    const projectPath = selectedProject.path
+    const pollId = buildPollRef.current + 1
+    buildPollRef.current = pollId
     setBusy(true)
     setError('')
     try {
-      await api.buildGraphify(selectedProject.path)
+      const queued = await api.buildGraphify(projectPath)
+      setBuildStatus(preferredBuildStatus(queued.job, queued.build) || { state: 'queued', message: queued.message })
+
+      for (let attempt = 0; attempt < MAX_BUILD_POLLS; attempt += 1) {
+        if (buildPollRef.current !== pollId) return
+        const next = await api.getGraphifyBuildStatus(projectPath, queued.jobId)
+        if (buildPollRef.current !== pollId) return
+        setBuildStatus(preferredBuildStatus(next.job, next.build))
+
+        if ((next.job && TERMINAL_BUILD_STATES.has(next.job.state)) || (next.build && TERMINAL_BUILD_STATES.has(next.build.state))) {
+          break
+        }
+
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
+      }
+
       await loadGraphStudio()
     } catch (err) {
       setError(err.message)
@@ -147,6 +179,12 @@ export default function GraphStudio({ selectedProject }) {
   const activeArtifactExists = Boolean(status?.artifacts?.[mode]?.exists)
   const artifactModeLabel = mode === 'mindmap' ? 'mind map' : 'canvas visualization'
   const hasAnyFullArtifact = Boolean(status?.artifacts?.mindmap?.exists || status?.artifacts?.visualizer?.exists)
+  const currentBuild = buildStatus || status?.build
+  const skippedReason = status?.artifacts?.[mode]?.skippedReason || currentBuild?.message
+  const buildStateLabel = currentBuild?.state ? currentBuild.state.replace(/^\w/, value => value.toUpperCase()) : ''
+  const buildMetricText = currentBuild?.nodeCount || currentBuild?.edgeCount
+    ? `${currentBuild?.nodeCount || 0} nodes / ${currentBuild?.edgeCount || 0} edges`
+    : ''
 
   if (!selectedProject) {
     return (
@@ -192,9 +230,17 @@ export default function GraphStudio({ selectedProject }) {
           ) : (
             <div className="space-y-2 text-xs">
               <div className={graphReady ? 'text-emerald-300' : 'text-amber-300'}>{graphReady ? 'Graph ready' : 'Needs build'}</div>
+              {currentBuild?.state ? <div className={currentBuild.state === 'failed' ? 'text-rose-300' : currentBuild.state === 'partial' ? 'text-amber-300' : 'text-cyan-300'}>Build {buildStateLabel}</div> : null}
               {status?.stale ? <div className="text-rose-300">Graph stale</div> : null}
               {graphReady && !hasAnyFullArtifact ? <div className="text-amber-300">Full HTML viz unavailable</div> : null}
-              <div className="text-slate-500">{graphMap ? `${graphMap.totalNodes} nodes / ${graphMap.totalLinks} links` : 'No map loaded'}</div>
+              <div className="text-slate-500">{buildMetricText || (graphMap ? `${graphMap.totalNodes} nodes / ${graphMap.totalLinks} links` : 'No map loaded')}</div>
+              {currentBuild?.message ? <div className="leading-5 text-slate-400">{currentBuild.message}</div> : null}
+              {currentBuild?.output ? (
+                <details className="rounded-lg border border-white/10 bg-black/20 p-2">
+                  <summary className="cursor-pointer text-[10px] font-black uppercase tracking-widest text-slate-500">Build Log</summary>
+                  <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap text-[10px] leading-4 text-slate-400 custom-scrollbar">{currentBuild.output}</pre>
+                </details>
+              ) : null}
             </div>
           )}
         </div>
@@ -236,7 +282,7 @@ export default function GraphStudio({ selectedProject }) {
                 <AlertTriangle className="mx-auto mb-4 text-amber-300" size={44} />
                 <h2 className="text-2xl font-black text-white">Full {artifactModeLabel} unavailable</h2>
                 <p className="mt-2 text-sm leading-7 text-slate-400">
-                  The Graphify graph was built, but this workspace is too large for the generated HTML visualization. Use Map Preview for a compact architecture view or Report for the full markdown summary.
+                  {skippedReason || 'The Graphify graph was built, but the generated HTML visualization is unavailable.'} Use Map Preview for a compact architecture view or Report for the full markdown summary.
                 </p>
                 <div className="mt-6 flex justify-center gap-3">
                   <button onClick={() => setMode('preview')} className="rounded-xl bg-cyan-500 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-950 hover:bg-cyan-300">

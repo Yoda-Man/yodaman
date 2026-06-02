@@ -4,6 +4,7 @@ const path = require('path');
 const router = require('../../backend/interfaces/RestController');
 const agentEngine = require('../../backend/core/AgentReasoningEngine');
 const auditLog = require('../../backend/infrastructure/AuditLog');
+const graphifyService = require('../../backend/infrastructure/GraphifyService');
 
 describe('RestController Integration', () => {
     function routeHandler(method, routePath) {
@@ -325,6 +326,39 @@ describe('RestController Integration', () => {
             expect(response.payload).toEqual(expect.objectContaining({
                 code: 'graphify_report_missing'
             }));
+        });
+
+        test('POST /graphify/build queues a build and exposes job status', async () => {
+            const originalBuild = graphifyService.build;
+            graphifyService.build = jest.fn(async () => ({ graphPath: path.join(workspace, 'graphify-out', 'graph.json'), output: 'ok' }));
+
+            try {
+                const queued = await invoke('post', '/graphify/build', {
+                    body: { path: workspace }
+                });
+
+                expect(queued.statusCode).toBe(202);
+                expect(queued.payload).toEqual(expect.objectContaining({
+                    message: 'Graphify build queued',
+                    jobId: expect.any(String),
+                    path: workspace
+                }));
+
+                await new Promise(resolve => setImmediate(resolve));
+
+                const status = await invoke('get', '/graphify/build/status', {
+                    query: { path: workspace, jobId: queued.payload.jobId }
+                });
+
+                expect(status.statusCode).toBe(200);
+                expect(status.payload.job).toEqual(expect.objectContaining({
+                    id: queued.payload.jobId,
+                    state: 'succeeded'
+                }));
+                expect(graphifyService.build).toHaveBeenCalledWith(workspace, { update: true });
+            } finally {
+                graphifyService.build = originalBuild;
+            }
         });
     });
 });
