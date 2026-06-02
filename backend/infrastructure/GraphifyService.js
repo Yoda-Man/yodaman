@@ -7,6 +7,7 @@ const logger = require('./Logger');
 const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 300000);
 const DEFAULT_OLLAMA_MODEL = process.env.YODAMAN_GRAPHIFY_OLLAMA_MODEL || 'qwen3:5b';
 const DEFAULT_VIZ_NODE_LIMIT = process.env.YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT || '25000';
+const STALE_RUNNING_BUILD_MS = Number(process.env.YODAMAN_GRAPHIFY_RUNNING_STALE_MS || 30 * 60 * 1000);
 const CLOUD_MODEL_KEYS = [
     'OPENAI_API_KEY',
     'ANTHROPIC_API_KEY',
@@ -222,7 +223,14 @@ function artifactMetadata(projectPath, type, buildStatus = {}) {
     };
 }
 
-function summarizeBuildStatus(projectPath, buildStatus) {
+function isStaleRunningBuild(buildStatus, now = new Date()) {
+    if (buildStatus.state !== 'running') return false;
+    const timestamp = Date.parse(buildStatus.updatedAt || buildStatus.startedAt || '');
+    if (!Number.isFinite(timestamp)) return false;
+    return now.getTime() - timestamp > STALE_RUNNING_BUILD_MS;
+}
+
+function summarizeBuildStatus(projectPath, buildStatus, { now = new Date() } = {}) {
     const currentGraphPath = graphPath(projectPath);
     const graphExists = fs.existsSync(currentGraphPath);
     const artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [
@@ -231,6 +239,37 @@ function summarizeBuildStatus(projectPath, buildStatus) {
     ]));
     const hasAnyArtifact = Object.values(artifacts).some(artifact => artifact.exists);
     const skippedArtifacts = { ...(buildStatus.skippedArtifacts || {}) };
+
+    if (isStaleRunningBuild(buildStatus, now)) {
+        if (graphExists && hasAnyArtifact) {
+            return {
+                ...buildStatus,
+                state: 'succeeded',
+                message: 'Previous Graphify build status was stale; using last generated graph visualization.',
+                staleRunning: true
+            };
+        }
+
+        if (graphExists) {
+            Object.keys(ARTIFACTS).forEach(type => {
+                if (!skippedArtifacts[type]) skippedArtifacts[type] = 'Previous Graphify build status was stale and full HTML visualization is unavailable.';
+            });
+            return {
+                ...buildStatus,
+                state: 'partial',
+                message: 'Previous Graphify build status was stale; graph exists but full HTML visualization is unavailable.',
+                skippedArtifacts,
+                staleRunning: true
+            };
+        }
+
+        return {
+            ...buildStatus,
+            state: 'idle',
+            message: 'Previous Graphify build status was stale and no generated graph was found.',
+            staleRunning: true
+        };
+    }
 
     if (graphExists && !hasAnyArtifact && buildStatus.state !== 'running' && buildStatus.state !== 'failed') {
         const reason = buildStatus.message?.includes('too large')
@@ -386,14 +425,14 @@ module.exports = {
         return nextStatus;
     },
 
-    status(projectPath) {
+    status(projectPath, options = {}) {
         const currentGraphPath = graphPath(projectPath);
         const currentReportPath = reportPath(projectPath);
         const graphExists = fs.existsSync(currentGraphPath);
         const reportExists = fs.existsSync(currentReportPath);
         const graphStat = graphExists ? fs.statSync(currentGraphPath) : null;
         const reportStat = reportExists ? fs.statSync(currentReportPath) : null;
-        const build = summarizeBuildStatus(projectPath, this.readBuildStatus(projectPath));
+        const build = summarizeBuildStatus(projectPath, this.readBuildStatus(projectPath), options);
         const artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [
             type,
             artifactMetadata(projectPath, type, build)

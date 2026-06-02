@@ -65,6 +65,26 @@ describe('GraphifyService build status', () => {
         expect(status.artifacts.visualizer.skippedReason).toContain('visualization');
     });
 
+    test('status clears stale running builds when generated mind map output exists', () => {
+        fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [], links: [] }));
+        fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.html'), '<html><body>graph</body></html>');
+        graphifyService.writeBuildStatus(workspace, {
+            state: 'running',
+            message: 'Graphify build running',
+            startedAt: '2026-06-02T10:43:28.784Z',
+            updatedAt: '2026-06-02T10:43:28.785Z'
+        });
+
+        const status = graphifyService.status(workspace, {
+            now: new Date('2026-06-02T13:35:00.000Z')
+        });
+
+        expect(status.graphExists).toBe(true);
+        expect(status.artifacts.mindmap.exists).toBe(true);
+        expect(status.build.state).toBe('succeeded');
+        expect(status.build.message).toContain('stale');
+    });
+
     test('graphifyEnvironment sets a larger default HTML visualization limit', () => {
         const env = graphifyService.graphifyEnvironment();
 

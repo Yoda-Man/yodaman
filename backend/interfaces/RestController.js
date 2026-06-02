@@ -60,7 +60,7 @@ function setGraphifyArtifactHeaders(res) {
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader(
         'Content-Security-Policy',
-        "default-src 'self' data: blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://localhost:* http://127.0.0.1:*"
+        "default-src 'self' data: blob: https://unpkg.com; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; connect-src 'self' http://localhost:* http://127.0.0.1:* https://unpkg.com"
     );
 }
 

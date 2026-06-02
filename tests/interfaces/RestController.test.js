@@ -246,6 +246,7 @@ describe('RestController Integration', () => {
             expect(response.statusCode).toBe(200);
             expect(response.filePath).toBe(artifactPath);
             expect(response.headers['Content-Security-Policy']).toContain("'unsafe-inline'");
+            expect(response.headers['Content-Security-Policy']).toContain('https://unpkg.com');
         });
 
         test('GET /graphify/artifact rejects unknown artifact types', async () => {
