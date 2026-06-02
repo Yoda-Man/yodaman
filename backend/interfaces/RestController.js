@@ -61,6 +61,7 @@ function jsonError(res, status, message, code) {
 function setGraphifyArtifactHeaders(res) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader(
         'Content-Security-Policy',

@@ -57,6 +57,9 @@ describe('RestController Integration', () => {
             setHeader: jest.fn(function setHeader(name, value) {
                 this.headers[name] = value;
             }),
+            removeHeader: jest.fn(function removeHeader(name) {
+                delete this.headers[name];
+            }),
             status: jest.fn(function status(code) {
                 this.statusCode = code;
                 return this;
@@ -316,6 +319,19 @@ describe('RestController Integration', () => {
             expect(response.filePath).toBe(artifactPath);
             expect(response.headers['Content-Security-Policy']).toContain("'unsafe-inline'");
             expect(response.headers['Content-Security-Policy']).toContain('https://unpkg.com');
+        });
+
+        test('GET /graphify/artifact allows same-origin embedding in Graph Studio', async () => {
+            const artifactPath = path.join(workspace, 'graphify-out', 'graph.html');
+            fs.writeFileSync(artifactPath, '<html><body>graph</body></html>');
+
+            const response = await invoke('get', '/graphify/artifact', {
+                query: { path: workspace, type: 'mindmap' }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(response.headers['X-Frame-Options']).toBe('SAMEORIGIN');
+            expect(response.headers['X-Frame-Options']).not.toBe('DENY');
         });
 
         test('GET /graphify/artifact rejects unknown artifact types', async () => {
