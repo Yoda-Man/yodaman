@@ -19,6 +19,8 @@ export interface YodaManClient {
   audit(limit?: number): Promise<unknown[]>;
   graphifyStatus(path: string): Promise<unknown>;
   graphifyBuild(path: string): Promise<unknown>;
+  graphifyArtifact(path: string, type: string): Promise<unknown>;
+  graphifyReport(path: string): Promise<{ path: string; report: string; reportPath: string }>;
   graphifyQuery(path: string, query: string): Promise<unknown>;
   graphifyExplain(path: string, node: string): Promise<unknown>;
   graphifyPath(path: string, source: string, target: string): Promise<unknown>;

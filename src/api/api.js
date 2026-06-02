@@ -135,6 +135,17 @@ export const api = {
         return request(`${API_BASE}/graphify/build`, jsonOptions('POST', { path }));
     },
 
+    graphifyArtifactUrl(path, type) {
+        const url = new URL(`${API_BASE}/graphify/artifact`, window.location.origin);
+        url.searchParams.append('path', path);
+        url.searchParams.append('type', type);
+        return url.toString();
+    },
+
+    async getGraphifyReport(path) {
+        return request(`${API_BASE}/graphify/report?path=${encodeURIComponent(path)}`);
+    },
+
     async queryGraphify(path, query) {
         return request(`${API_BASE}/graphify/query`, jsonOptions('POST', { path, query }));
     },

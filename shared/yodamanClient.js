@@ -182,6 +182,13 @@ function createYodaManClient(runtimeUrl, options = {}) {
                 body: JSON.stringify({ path })
             });
         },
+        graphifyArtifact(path, type) {
+            const params = new URLSearchParams({ path, type });
+            return request(`/api/graphify/artifact?${params.toString()}`);
+        },
+        graphifyReport(path) {
+            return request(`/api/graphify/report?path=${encodeURIComponent(path)}`);
+        },
         graphifyQuery(path, query) {
             return request('/api/graphify/query', {
                 method: 'POST',
