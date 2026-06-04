@@ -1,6 +1,6 @@
 # YodaMan User Manual
 
-Version: 0.2.1
+Version: 0.2.2
 
 YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, mandatory Graphify knowledge graph, plugin system, and local runtime API.
 
@@ -32,11 +32,21 @@ The Express runtime is the shared contract for every client. It serves the React
 
 ### Workspaces
 
-Workspaces are absolute local folder paths. Add them by pasting a path, browsing with a native folder picker in desktop clients, using the sidebar plus button, or using the desktop menu item `Add Project Folder`. In version 0.2.1 you can edit a workspace path when a project moves, delete stale workspaces, validate workspace health, refresh the workspace list, and run `Sync Repository` to reindex the active workspace and update its Graphify graph.
+Workspaces are absolute local folder paths. Add them by pasting a path, browsing with a native folder picker in desktop clients, using the sidebar plus button, or using the desktop menu item `Add Project Folder`. In version 0.2.2 you can edit a workspace path when a project moves, delete stale workspaces, validate workspace health, refresh the workspace list, and run `Sync Repository` to reindex the active workspace and update its Graphify graph.
 
 ### Graphify knowledge graph
 
-Graphify is mandatory in 0.2.1 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered. The Plugins tab includes Graphify status, graph freshness warnings, manual graph rebuilds, direct graph queries, impact analysis, and an architecture map.
+Graphify is mandatory in 0.2.2 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
+
+The Graph tab opens Graph Studio, a project-scoped visual workspace for Graphify outputs. Graph Studio embeds the generated mind-map and Vis.js canvas artifacts, shows graph freshness, renders the markdown report, and keeps graph query plus impact analysis actions close to the visualization.
+
+Run a local Graphify health check from the command line:
+
+```bash
+yodaman doctor --graph
+```
+
+The graph doctor reports active workspace graphs, persisted freshness, orphaned nodes, and the most dependency-heavy file. If orphaned nodes appear, run `Sync Repository` in the app or `POST /api/reindex` for that workspace.
 
 ### Default coding skill
 
@@ -52,7 +62,7 @@ Task history and audit logs persist locally in SQLite when available. If Node SQ
 
 ### Plugins
 
-Plugins are JavaScript modules that extend the agent with custom tools. A plugin should export a `name`, `description`, `parameters`, `permissions`, and an async `execute` function. Plugins without explicit permissions are treated as unrestricted and are blocked unless `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true` is set for trusted code.
+Plugins are JavaScript modules that extend the agent with custom tools. A plugin should export a `name`, `description`, `parameters`, `permissions`, and an async `execute` function. Plugin uploads, unrestricted plugins, and agent shell commands are disabled by default. Enable `YODAMAN_ALLOW_PLUGIN_UPLOADS`, `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS`, or `YODAMAN_ALLOW_AGENT_COMMANDS` only during trusted local support sessions.
 
 ## 3. Web UI
 
@@ -61,7 +71,7 @@ Plugins are JavaScript modules that extend the agent with custom tools. A plugin
 - **Chat**: Ask questions using the selected workspace context.
 - **Search**: Run semantic search across indexed code and documentation, optionally scoped to the selected workspace.
 - **Dashboard**: View runtime status, database/index metrics, environment information, runtime diagnostics, task counts, pending approvals, plugin policy information, and mobile pairing.
-- **Logs**: Open recent runtime logs, reindex requests, index queue state, and `ctx index` output. Use Copy when sharing an error.
+- **Logs**: Open searchable runtime logs, reindex requests, index queue state, and `ctx index` output. Filter by text, level, severity, and user action, then use Copy when sharing an error.
 - **Manual**: Read the in-app version of this guide.
 - **Plugins**: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, delete non-mandatory plugin files, and manage Graphify graph status, rebuilds, and direct graph queries.
 
@@ -135,6 +145,7 @@ Use your desktop LAN address when pairing from a phone, for example `http://192.
 
 - **Context Expert not found**: Install `@contextexpert/cli` and confirm `ctx --version` works.
 - **Graphify not found**: Install `graphifyy`, confirm `graphify --help` works, or set `YODAMAN_GRAPHIFY_BIN` to the executable path.
+- **Graph health looks wrong**: Run `yodaman doctor --graph`, then sync the affected workspace if the command reports orphaned nodes or missing graphs.
 - **Runtime unreachable**: Check port `3090`, then use `Restart Managed Runtime` or run `yodaman` from Terminal.
 - **Moved repository**: Open Settings, edit the workspace path, save, then sync the repository.
 - **Search results are stale**: Select the workspace and run `Sync Repository`.

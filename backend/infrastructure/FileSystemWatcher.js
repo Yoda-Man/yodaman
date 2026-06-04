@@ -10,7 +10,16 @@ const queueService = require('../core/QueueService');
 class FileSystemWatcher {
     constructor() {
         this.watchers = new Map();
-        this.ignored = ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'];
+        this.debounceTimers = new Map();
+        this.ignored = [
+            '**/node_modules/**',
+            '**/.git/**',
+            '**/dist/**',
+            '**/build/**',
+            '**/release/**',
+            '**/graphify-out/**'
+        ];
+        this.debounceMs = Number(process.env.YODAMAN_WATCH_DEBOUNCE_MS || 1500);
     }
 
     /**
@@ -30,7 +39,11 @@ class FileSystemWatcher {
 
         watcher.on('all', (event, filePath) => {
             console.log(`[Watcher] Change detected: ${event} on ${filePath}`);
-            queueService.addToQueue(dirPath);
+            clearTimeout(this.debounceTimers.get(dirPath));
+            this.debounceTimers.set(dirPath, setTimeout(() => {
+                this.debounceTimers.delete(dirPath);
+                queueService.addToQueue(dirPath);
+            }, this.debounceMs));
         });
 
         this.watchers.set(dirPath, watcher);
@@ -43,6 +56,8 @@ class FileSystemWatcher {
     removeWatcher(dirPath) {
         const watcher = this.watchers.get(dirPath);
         if (watcher) {
+            clearTimeout(this.debounceTimers.get(dirPath));
+            this.debounceTimers.delete(dirPath);
             watcher.close();
             this.watchers.delete(dirPath);
             console.log(`[Watcher] Removed for: ${dirPath}`);
@@ -54,8 +69,10 @@ class FileSystemWatcher {
      */
     closeAll() {
         for (const [path, watcher] of this.watchers) {
+            clearTimeout(this.debounceTimers.get(path));
             watcher.close();
         }
+        this.debounceTimers.clear();
         this.watchers.clear();
         console.log('[Watcher] All watchers closed.');
     }

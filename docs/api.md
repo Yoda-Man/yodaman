@@ -93,17 +93,37 @@ Forces documentation preprocessing and documentation search.
 
 ## Graphify
 
-Graphify is a required knowledge graph layer in YodaMan 0.2.1. The runtime fails startup when the `graphify` CLI cannot be found. Graphify endpoints require a registered workspace path.
+Graphify is a required knowledge graph layer in YodaMan 0.2.2. The runtime fails startup when the `graphify` CLI cannot be found. Graphify endpoints require a registered workspace path.
 
 ### `GET /graphify/status`
-Returns graph availability and artifact paths.
+Returns graph availability, artifact health, stale status, and the last persisted build summary. Large graphs can return `build.state: "partial"` when `graph.json` and the report exist but full HTML artifacts were skipped.
 
 **Query Params:** `path`
 
 ### `POST /graphify/build`
-Builds or updates the workspace graph.
+Queues a workspace graph build and returns immediately with a build job id.
 
 **Body:** `{ "path": "/absolute/path/to/project" }`
+
+### `GET /graphify/build/status`
+Returns the in-memory build job state, the last persisted build summary, and graph freshness.
+
+**Query Params:** `path`, `jobId` (optional)
+
+### `GET /graphify/artifact`
+
+Serves a generated Graphify HTML artifact for a registered workspace. Query parameters:
+
+- `path`: absolute registered workspace path.
+- `type`: `mindmap` for `graph.html` or `visualizer` for `graph_visualizer.html`.
+
+The route only serves known Graphify artifacts from the workspace's `graphify-out/` directory.
+
+### `GET /graphify/report`
+
+Returns the Graphify markdown report for a registered workspace.
+
+**Query Params:** `path`
 
 ### `POST /graphify/query`
 Runs a natural-language graph traversal query.
@@ -154,6 +174,31 @@ Audit entries are retained in `audit-log.json` and appended to `audit-log.jsonl`
 
 ### `GET /desktop/diagnostics`
 Returns desktop/runtime diagnostics for control surfaces.
+
+### `GET /logs`
+Returns recent structured runtime logs plus index queue state.
+
+Optional query filters:
+
+- `limit`: Maximum entries to return.
+- `level`: `error`, `warn`, or `info`.
+- `severity`: `critical`, `high`, `medium`, or `low`.
+- `query`: Case-insensitive search across message, metadata, and stack traces.
+- `userAction`: Source workflow such as `code_search`, `agent_tool_call`, `chat_ask`, or `startup`.
+- `message`: Exact log message key.
+- `since` / `until`: ISO timestamps for time-window filtering.
+
+### `POST /logs/client-error`
+Records a frontend-side failure in the same live log stream. Use this for UI catches that would otherwise only appear in the browser console.
+
+Body fields:
+
+- `message`: Error message.
+- `stack`: Optional client stack trace.
+- `userAction`: Workflow such as `code_search`, `chat_ask`, or `agent_task`.
+- `component`: UI component or client surface.
+- `severity`: `critical`, `high`, `medium`, or `low`.
+- `context`: Small structured object with query, project, mode, or other reproduction context.
 
 **Response:**
 ```json

@@ -53,6 +53,21 @@ function jsonOptions(method, body) {
 }
 
 export const api = {
+    async reportClientError({ message, stack, userAction, component, severity = 'medium', context }) {
+        try {
+            return await request(`${API_BASE}/logs/client-error`, jsonOptions('POST', {
+                message,
+                stack,
+                userAction,
+                component,
+                severity,
+                context
+            }));
+        } catch {
+            return null;
+        }
+    },
+
     async getProjects() {
         return request(`${API_BASE}/projects`);
     },
@@ -132,7 +147,27 @@ export const api = {
     },
 
     async buildGraphify(path) {
-        return request(`${API_BASE}/graphify/build`, jsonOptions('POST', { path }));
+        return request(`${API_BASE}/graphify/build`, {
+            ...jsonOptions('POST', { path })
+        });
+    },
+
+    async getGraphifyBuildStatus(path, jobId) {
+        const url = new URL(`${API_BASE}/graphify/build/status`, window.location.origin);
+        url.searchParams.append('path', path);
+        if (jobId) url.searchParams.append('jobId', jobId);
+        return request(url);
+    },
+
+    graphifyArtifactUrl(path, type) {
+        const url = new URL(`${API_BASE}/graphify/artifact`, window.location.origin);
+        url.searchParams.append('path', path);
+        url.searchParams.append('type', type);
+        return url.toString();
+    },
+
+    async getGraphifyReport(path) {
+        return request(`${API_BASE}/graphify/report?path=${encodeURIComponent(path)}`);
     },
 
     async queryGraphify(path, query) {
@@ -155,8 +190,13 @@ export const api = {
         return request(`${API_BASE}/graphify/map?path=${encodeURIComponent(path)}&limit=${encodeURIComponent(limit)}`);
     },
 
-    async getLogs(limit = 200) {
-        return request(`${API_BASE}/logs?limit=${encodeURIComponent(limit)}`);
+    async getLogs(limit = 200, filters = {}) {
+        const url = new URL(`${API_BASE}/logs`, window.location.origin);
+        url.searchParams.append('limit', limit);
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value) url.searchParams.append(key, value);
+        });
+        return request(url);
     },
 
     async createPairing(runtimeUrl) {
@@ -168,11 +208,19 @@ export const api = {
     },
 
     async agentTask(task, projectId, onStep) {
-        const response = await fetch(`${API_BASE}/agent/task`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ task, projectId })
-        });
+        let response;
+        try {
+            response = await fetch(`${API_BASE}/agent/task`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task, projectId })
+            });
+        } catch (err) {
+            if (err instanceof TypeError) {
+                throw new Error('YodaMan runtime is not available. Start the desktop app or run "yodaman" from Terminal, then try again.');
+            }
+            throw err;
+        }
 
 
         if (!response.ok) {

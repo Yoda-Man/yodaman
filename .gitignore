@@ -7,6 +7,7 @@ extensions/*/node_modules/
 dist/
 release/
 coverage/
+config.json
 audit-log.json
 task-history.json
 audit-log.jsonl
@@ -44,9 +45,10 @@ apps/mobile/.eas/
 # OS/editor
 .DS_Store
 .vscode/
+.superpowers/
 
 # Website
-website/
+website/downloads/
 
 # Roadmaps/docs
 docs/ecosystem-roadmap.md
@@ -58,3 +60,6 @@ yodaman.db
 yodaman.db-journal
 yodaman.db-wal
 yodaman.db-shm
+
+# Graphify generated workspace artifacts
+graphify-out/

@@ -1,6 +1,6 @@
 {
   "name": "yodaman",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Web GUI for Context Expert (ctx)",
   "author": "YodaMan",
   "bin": {
@@ -14,13 +14,17 @@
     "server.js",
     "start.js",
     "public",
+    "docs/*.md",
+    "!docs/audit*.md",
+    "!docs/ecosystem-roadmap.md",
     "README.md",
-    "config.json"
+    "config.example.json"
   ],
   "main": "server.js",
   "scripts": {
     "start": "node start.js",
-    "server": "nodemon server.js",
+    "server": "node server.js",
+    "server:watch": "nodemon server.js",
     "client": "vite",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "build": "vite build",

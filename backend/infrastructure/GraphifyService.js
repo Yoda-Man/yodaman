@@ -4,8 +4,10 @@ const os = require('os');
 const { execFile } = require('child_process');
 const logger = require('./Logger');
 
-const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 120000);
+const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 300000);
 const DEFAULT_OLLAMA_MODEL = process.env.YODAMAN_GRAPHIFY_OLLAMA_MODEL || 'qwen3:5b';
+const DEFAULT_VIZ_NODE_LIMIT = process.env.YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT || '25000';
+const STALE_RUNNING_BUILD_MS = Number(process.env.YODAMAN_GRAPHIFY_RUNNING_STALE_MS || 30 * 60 * 1000);
 const CLOUD_MODEL_KEYS = [
     'OPENAI_API_KEY',
     'ANTHROPIC_API_KEY',
@@ -14,6 +16,12 @@ const CLOUD_MODEL_KEYS = [
     'DEEPSEEK_API_KEY',
     'MOONSHOT_API_KEY'
 ];
+const ARTIFACTS = {
+    mindmap: 'graph.html',
+    visualizer: 'graph_visualizer.html'
+};
+const REPORT_FILENAMES = ['graph_report.md', 'GRAPH_REPORT.md'];
+const BUILD_STATUS_FILENAME = 'yodaman-build-status.json';
 let resolvedGraphifyBin = null;
 
 function findUserGraphifyBins() {
@@ -37,10 +45,7 @@ function getGraphifyBin() {
 }
 
 function runGraphify(args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
-    const env = { ...process.env };
-    CLOUD_MODEL_KEYS.forEach(key => {
-        delete env[key];
-    });
+    const env = graphifyEnvironment();
 
     return new Promise((resolve, reject) => {
         execFile(getGraphifyBin(), args, {
@@ -64,12 +69,94 @@ function runGraphify(args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
     });
 }
 
+function graphifyEnvironment() {
+    const env = { ...process.env };
+    CLOUD_MODEL_KEYS.forEach(key => {
+        delete env[key];
+    });
+    if (!env.GRAPHIFY_VIZ_NODE_LIMIT) {
+        env.GRAPHIFY_VIZ_NODE_LIMIT = DEFAULT_VIZ_NODE_LIMIT;
+    }
+
+    return env;
+}
+
 function graphPath(projectPath) {
     return path.join(projectPath, 'graphify-out', 'graph.json');
 }
 
+function graphifyOutPath(projectPath) {
+    return path.join(projectPath, 'graphify-out');
+}
+
+function artifactPath(projectPath, type) {
+    const filename = ARTIFACTS[type];
+    if (!filename) {
+        const err = new Error(`Unknown Graphify artifact type: ${type}`);
+        err.status = 400;
+        err.code = 'invalid_graphify_artifact';
+        throw err;
+    }
+    return path.join(graphifyOutPath(projectPath), filename);
+}
+
+function artifactMissingError(currentArtifactPath) {
+    const err = new Error(`Graphify artifact not found: ${currentArtifactPath}`);
+    err.status = 404;
+    err.code = 'graphify_artifact_missing';
+    return err;
+}
+
+function safeFilePath(filePath, baseDir) {
+    let baseStat;
+    try {
+        baseStat = fs.lstatSync(baseDir);
+    } catch (err) {
+        return '';
+    }
+
+    if (baseStat.isSymbolicLink() || !baseStat.isDirectory()) {
+        return '';
+    }
+
+    let stat;
+    try {
+        stat = fs.lstatSync(filePath);
+    } catch (err) {
+        return '';
+    }
+
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+        return '';
+    }
+
+    try {
+        const realBaseDir = fs.realpathSync(baseDir);
+        const realFilePath = fs.realpathSync(filePath);
+        const relativeFilePath = path.relative(realBaseDir, realFilePath);
+        if (relativeFilePath.startsWith('..') || path.isAbsolute(relativeFilePath)) {
+            return '';
+        }
+        return filePath;
+    } catch (err) {
+        return '';
+    }
+}
+
+function existingReportPath(projectPath) {
+    const outDir = graphifyOutPath(projectPath);
+    const found = REPORT_FILENAMES
+        .map(filename => path.join(outDir, filename))
+        .find(candidate => safeFilePath(candidate, outDir));
+    return found || path.join(outDir, REPORT_FILENAMES[0]);
+}
+
 function reportPath(projectPath) {
-    return path.join(projectPath, 'graphify-out', 'GRAPH_REPORT.md');
+    return existingReportPath(projectPath);
+}
+
+function buildStatusPath(projectPath) {
+    return path.join(graphifyOutPath(projectPath), BUILD_STATUS_FILENAME);
 }
 
 function hasGraph(projectPath) {
@@ -108,9 +195,226 @@ function truncate(text, max = 6000) {
     return `${text.slice(0, max)}\n[Graphify output truncated to ${max} characters]`;
 }
 
+function parseBuildOutput(output = '') {
+    const rebuiltMatch = output.match(/Rebuilt:\s*([\d,]+)\s+nodes,\s*([\d,]+)\s+edges/i);
+    const skippedVizMatch = output.match(/Skipped graph\.html:\s*(.+)/i);
+    const nodeCount = rebuiltMatch ? Number(rebuiltMatch[1].replace(/,/g, '')) : undefined;
+    const edgeCount = rebuiltMatch ? Number(rebuiltMatch[2].replace(/,/g, '')) : undefined;
+    const skippedReason = skippedVizMatch ? skippedVizMatch[1].trim() : undefined;
+    return { nodeCount, edgeCount, skippedReason };
+}
+
+function needsArtifactRegeneration({ output = '', missingArtifacts = [], graphExists = false } = {}) {
+    return graphExists
+        && missingArtifacts.length > 0
+        && /outputs left untouched/i.test(output);
+}
+
+function artifactMetadata(projectPath, type, buildStatus = {}) {
+    const currentArtifactPath = artifactPath(projectPath, type);
+    const exists = Boolean(safeFilePath(currentArtifactPath, graphifyOutPath(projectPath)));
+    const stat = exists ? fs.statSync(currentArtifactPath) : null;
+    const skippedReason = buildStatus.skippedArtifacts?.[type];
+    return {
+        path: currentArtifactPath,
+        exists,
+        updatedAt: stat?.mtime?.toISOString(),
+        skippedReason
+    };
+}
+
+function isStaleRunningBuild(buildStatus, now = new Date()) {
+    if (buildStatus.state !== 'running') return false;
+    const timestamp = Date.parse(buildStatus.updatedAt || buildStatus.startedAt || '');
+    if (!Number.isFinite(timestamp)) return false;
+    return now.getTime() - timestamp > STALE_RUNNING_BUILD_MS;
+}
+
+function summarizeBuildStatus(projectPath, buildStatus, { now = new Date() } = {}) {
+    const currentGraphPath = graphPath(projectPath);
+    const graphExists = fs.existsSync(currentGraphPath);
+    const artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [
+        type,
+        artifactMetadata(projectPath, type, buildStatus)
+    ]));
+    const hasAnyArtifact = Object.values(artifacts).some(artifact => artifact.exists);
+    const skippedArtifacts = { ...(buildStatus.skippedArtifacts || {}) };
+
+    if (isStaleRunningBuild(buildStatus, now)) {
+        if (graphExists && hasAnyArtifact) {
+            return {
+                ...buildStatus,
+                state: 'succeeded',
+                message: 'Previous Graphify build status was stale; using last generated graph visualization.',
+                staleRunning: true
+            };
+        }
+
+        if (graphExists) {
+            Object.keys(ARTIFACTS).forEach(type => {
+                if (!skippedArtifacts[type]) skippedArtifacts[type] = 'Previous Graphify build status was stale and full HTML visualization is unavailable.';
+            });
+            return {
+                ...buildStatus,
+                state: 'partial',
+                message: 'Previous Graphify build status was stale; graph exists but full HTML visualization is unavailable.',
+                skippedArtifacts,
+                staleRunning: true
+            };
+        }
+
+        return {
+            ...buildStatus,
+            state: 'idle',
+            message: 'Previous Graphify build status was stale and no generated graph was found.',
+            staleRunning: true
+        };
+    }
+
+    if (graphExists && !hasAnyArtifact && buildStatus.state !== 'running' && buildStatus.state !== 'failed') {
+        const reason = buildStatus.message?.includes('too large')
+            ? buildStatus.message
+            : 'Full HTML visualization unavailable for this graph. Use Map Preview or Report.';
+        const message = buildStatus.message?.includes('too large')
+            ? buildStatus.message
+            : 'Graph built, but full HTML visualization is unavailable.';
+        Object.keys(ARTIFACTS).forEach(type => {
+            if (!skippedArtifacts[type]) skippedArtifacts[type] = reason;
+        });
+        return {
+            ...buildStatus,
+            state: 'partial',
+            message,
+            skippedArtifacts
+        };
+    }
+
+    return buildStatus;
+}
+
+function extractJsonArray(html, variableName) {
+    const marker = `const ${variableName} = `;
+    const start = html.indexOf(marker);
+    if (start === -1) return null;
+    const arrayStart = html.indexOf('[', start + marker.length);
+    if (arrayStart === -1) return null;
+
+    let depth = 0;
+    let inString = false;
+    let quote = '';
+    let escaped = false;
+    for (let index = arrayStart; index < html.length; index += 1) {
+        const char = html[index];
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+            } else if (char === '\\') {
+                escaped = true;
+            } else if (char === quote) {
+                inString = false;
+            }
+            continue;
+        }
+        if (char === '"' || char === "'") {
+            inString = true;
+            quote = char;
+            continue;
+        }
+        if (char === '[') depth += 1;
+        if (char === ']') {
+            depth -= 1;
+            if (depth === 0) {
+                return {
+                    json: html.slice(arrayStart, index + 1),
+                    start: arrayStart,
+                    end: index + 1
+                };
+            }
+        }
+    }
+    return null;
+}
+
+function sourceLabelForCommunity(nodes) {
+    const counts = new Map();
+    nodes.forEach(node => {
+        const source = node.source_file || node.sourceFile || '';
+        if (!source) return;
+        const basename = path.basename(source);
+        const dir = path.basename(path.dirname(source));
+        const label = basename && basename !== '.' ? basename : dir;
+        if (!label) return;
+        counts.set(label, (counts.get(label) || 0) + 1);
+    });
+
+    const [label] = Array.from(counts.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || [];
+    return label ? `${label} cluster` : '';
+}
+
+function enhanceArtifactHtml(html) {
+    if (!html || !html.includes('Community ')) return html;
+
+    const nodesBlock = extractJsonArray(html, 'RAW_NODES');
+    const legendBlock = extractJsonArray(html, 'LEGEND');
+    if (!nodesBlock || !legendBlock) return html;
+
+    let nodes;
+    let legend;
+    try {
+        nodes = JSON.parse(nodesBlock.json);
+        legend = JSON.parse(legendBlock.json);
+    } catch {
+        return html;
+    }
+
+    const nodesByCommunity = new Map();
+    nodes.forEach(node => {
+        const community = node.community;
+        if (community === undefined || community === null) return;
+        const key = String(community);
+        if (!nodesByCommunity.has(key)) nodesByCommunity.set(key, []);
+        nodesByCommunity.get(key).push(node);
+    });
+
+    const labelsByCommunity = new Map();
+    legend.forEach(item => {
+        const current = String(item.label || '');
+        if (!/^Community\s+\d+$/i.test(current)) return;
+        const label = sourceLabelForCommunity(nodesByCommunity.get(String(item.cid)) || []);
+        if (label) {
+            item.label = label;
+            labelsByCommunity.set(String(item.cid), label);
+        }
+    });
+
+    if (labelsByCommunity.size === 0) return html;
+
+    nodes.forEach(node => {
+        const label = labelsByCommunity.get(String(node.community));
+        if (label && /^Community\s+\d+$/i.test(String(node.community_name || ''))) {
+            node.community_name = label;
+        }
+    });
+
+    let nextHtml = html;
+    nextHtml = `${nextHtml.slice(0, legendBlock.start)}${JSON.stringify(legend)}${nextHtml.slice(legendBlock.end)}`;
+    const adjustedNodesBlock = extractJsonArray(nextHtml, 'RAW_NODES');
+    if (adjustedNodesBlock) {
+        nextHtml = `${nextHtml.slice(0, adjustedNodesBlock.start)}${JSON.stringify(nodes)}${nextHtml.slice(adjustedNodesBlock.end)}`;
+    }
+    return nextHtml;
+}
+
 module.exports = {
     graphPath,
     reportPath,
+    buildStatusPath,
+    artifactPath,
+    artifactTypes: () => Object.keys(ARTIFACTS),
+    graphifyEnvironment,
+    needsArtifactRegeneration,
+    enhanceArtifactHtml,
     hasGraph,
     getGraphifyBin,
 
@@ -142,28 +446,112 @@ module.exports = {
             : ['update', projectPath, '--force'];
 
         logger.info('graphify_build_started', { path: projectPath, update });
-        const result = await runGraphify(args);
-        logger.info('graphify_build_completed', {
-            path: projectPath,
-            graphPath: graphPath(projectPath),
-            output: truncate(result.stdout || result.stderr, 1200)
+        const startedAt = new Date();
+        this.writeBuildStatus(projectPath, {
+            state: 'running',
+            message: 'Graphify build running',
+            startedAt: startedAt.toISOString()
         });
-        this.addToGlobal(projectPath).catch(err => {
-            logger.warn('graphify_global_add_failed', { path: projectPath, error: err.message });
-        });
-        return {
-            graphPath: graphPath(projectPath),
-            output: result.stdout || result.stderr
-        };
+        try {
+            const result = await runGraphify(args);
+            let output = result.stdout || result.stderr;
+            const parsed = parseBuildOutput(output);
+            let artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [type, artifactMetadata(projectPath, type)]));
+            let missingArtifacts = Object.entries(artifacts).filter(([, artifact]) => !artifact.exists).map(([type]) => type);
+            if (needsArtifactRegeneration({
+                output,
+                missingArtifacts,
+                graphExists: fs.existsSync(graphPath(projectPath))
+            })) {
+                const regenResult = await runGraphify(['cluster-only', projectPath]);
+                output = `${output}\n${regenResult.stdout || regenResult.stderr}`.trim();
+                artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [type, artifactMetadata(projectPath, type)]));
+                missingArtifacts = Object.entries(artifacts).filter(([, artifact]) => !artifact.exists).map(([type]) => type);
+            }
+            const skippedArtifacts = {};
+            if (parsed.skippedReason) {
+                missingArtifacts.forEach(type => {
+                    skippedArtifacts[type] = parsed.skippedReason;
+                });
+            }
+            const state = missingArtifacts.length > 0 && fs.existsSync(graphPath(projectPath)) ? 'partial' : 'succeeded';
+            const completedAt = new Date();
+            const buildStatus = this.writeBuildStatus(projectPath, {
+                state,
+                message: state === 'partial'
+                    ? 'Graphify graph built with skipped visualizations'
+                    : 'Graphify graph built successfully',
+                startedAt: startedAt.toISOString(),
+                completedAt: completedAt.toISOString(),
+                durationMs: completedAt.getTime() - startedAt.getTime(),
+                output: truncate(output, 4000),
+                skippedArtifacts,
+                nodeCount: parsed.nodeCount,
+                edgeCount: parsed.edgeCount
+            });
+            logger.info('graphify_build_completed', {
+                path: projectPath,
+                graphPath: graphPath(projectPath),
+                state,
+                output: truncate(output, 1200)
+            });
+            this.addToGlobal(projectPath).catch(err => {
+                logger.warn('graphify_global_add_failed', { path: projectPath, error: err.message });
+            });
+            return {
+                graphPath: graphPath(projectPath),
+                output,
+                build: buildStatus
+            };
+        } catch (err) {
+            const completedAt = new Date();
+            this.writeBuildStatus(projectPath, {
+                state: 'failed',
+                message: err.message,
+                startedAt: startedAt.toISOString(),
+                completedAt: completedAt.toISOString(),
+                durationMs: completedAt.getTime() - startedAt.getTime()
+            });
+            throw err;
+        }
     },
 
-    status(projectPath) {
+    readBuildStatus(projectPath) {
+        const currentBuildStatusPath = buildStatusPath(projectPath);
+        if (!safeFilePath(currentBuildStatusPath, graphifyOutPath(projectPath))) {
+            return { state: 'idle' };
+        }
+        try {
+            return JSON.parse(fs.readFileSync(currentBuildStatusPath, 'utf8'));
+        } catch (err) {
+            return { state: 'idle', message: 'Build status could not be read' };
+        }
+    },
+
+    writeBuildStatus(projectPath, status) {
+        const outDir = graphifyOutPath(projectPath);
+        fs.mkdirSync(outDir, { recursive: true });
+        const nextStatus = {
+            state: status.state || 'idle',
+            updatedAt: new Date().toISOString(),
+            ...status
+        };
+        fs.writeFileSync(buildStatusPath(projectPath), JSON.stringify(nextStatus, null, 2));
+        return nextStatus;
+    },
+
+    status(projectPath, options = {}) {
         const currentGraphPath = graphPath(projectPath);
         const currentReportPath = reportPath(projectPath);
         const graphExists = fs.existsSync(currentGraphPath);
         const reportExists = fs.existsSync(currentReportPath);
         const graphStat = graphExists ? fs.statSync(currentGraphPath) : null;
         const reportStat = reportExists ? fs.statSync(currentReportPath) : null;
+        const build = summarizeBuildStatus(projectPath, this.readBuildStatus(projectPath), options);
+        const artifacts = Object.fromEntries(Object.keys(ARTIFACTS).map(type => [
+            type,
+            artifactMetadata(projectPath, type, build)
+        ]));
 
         return {
             available: Boolean(getGraphifyBin()),
@@ -173,13 +561,33 @@ module.exports = {
             graphExists,
             reportExists,
             graphUpdatedAt: graphStat?.mtime?.toISOString(),
-            reportUpdatedAt: reportStat?.mtime?.toISOString()
+            reportUpdatedAt: reportStat?.mtime?.toISOString(),
+            artifacts,
+            build
         };
+    },
+
+    artifact(projectPath, type) {
+        const currentArtifactPath = artifactPath(projectPath, type);
+        if (!safeFilePath(currentArtifactPath, graphifyOutPath(projectPath))) {
+            throw artifactMissingError(currentArtifactPath);
+        }
+
+        return {
+            type,
+            artifactPath: currentArtifactPath,
+            filename: path.basename(currentArtifactPath)
+        };
+    },
+
+    readArtifact(projectPath, type) {
+        const artifact = this.artifact(projectPath, type);
+        return enhanceArtifactHtml(fs.readFileSync(artifact.artifactPath, 'utf8'));
     },
 
     readReport(projectPath, { maxChars = 8000 } = {}) {
         const currentReportPath = reportPath(projectPath);
-        if (!fs.existsSync(currentReportPath)) return '';
+        if (!safeFilePath(currentReportPath, graphifyOutPath(projectPath))) return '';
         return truncate(fs.readFileSync(currentReportPath, 'utf8'), maxChars);
     },
 
@@ -289,15 +697,15 @@ module.exports = {
         return { output, message: result.stdout || result.stderr };
     },
 
-    freshness(projectPath) {
+    freshness(projectPath, { scanSources = true } = {}) {
         const currentStatus = this.status(projectPath);
-        const sourceMtime = latestSourceMtime(projectPath);
+        const sourceMtime = scanSources ? latestSourceMtime(projectPath) : 0;
         const graphMtime = currentStatus.graphUpdatedAt ? new Date(currentStatus.graphUpdatedAt).getTime() : 0;
         const sourceUpdatedAt = sourceMtime ? new Date(sourceMtime).toISOString() : undefined;
         return {
             ...currentStatus,
             latestSourceUpdatedAt: sourceUpdatedAt,
-            stale: !currentStatus.graphExists || (sourceMtime > graphMtime)
+            stale: !currentStatus.graphExists || (scanSources && sourceMtime > graphMtime)
         };
     },
 

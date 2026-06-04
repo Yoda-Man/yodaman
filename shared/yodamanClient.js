@@ -182,6 +182,18 @@ function createYodaManClient(runtimeUrl, options = {}) {
                 body: JSON.stringify({ path })
             });
         },
+        graphifyBuildStatus(path, jobId) {
+            const params = new URLSearchParams({ path });
+            if (jobId) params.set('jobId', jobId);
+            return request(`/api/graphify/build/status?${params.toString()}`);
+        },
+        graphifyArtifact(path, type) {
+            const params = new URLSearchParams({ path, type });
+            return request(`/api/graphify/artifact?${params.toString()}`);
+        },
+        graphifyReport(path) {
+            return request(`/api/graphify/report?path=${encodeURIComponent(path)}`);
+        },
         graphifyQuery(path, query) {
             return request('/api/graphify/query', {
                 method: 'POST',

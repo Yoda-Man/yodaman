@@ -2,6 +2,8 @@
 
 These runbooks are for local support and handover of a YodaMan runtime.
 
+Use `docs/support-handover.md` for ownership, severity, escalation, and pre-handover verification.
+
 ## Start the runtime
 
 1. Confirm Node.js 18 or newer is available.
@@ -25,6 +27,12 @@ Then stop the matching Node process.
 
 ## Check health
 
+Use the CLI Graphify doctor for a fast workspace graph summary:
+
+```bash
+yodaman doctor --graph
+```
+
 Use these endpoints:
 
 | Endpoint | Purpose |
@@ -33,10 +41,23 @@ Use these endpoints:
 | `GET /api/check?path=/absolute/workspace` | Workspace health check through `ctx`. |
 | `GET /api/desktop/diagnostics` | Process, host, memory, task, and plugin diagnostics. |
 | `GET /api/graphify/status?path=/absolute/workspace` | Graphify graph artifact status. |
+| `GET /api/graphify/build/status?path=/absolute/workspace` | Graphify build job and persisted build status. |
 | `GET /api/policy` | Current workspace roots, blocked commands, and plugin permissions. |
 | `GET /api/audit?limit=100` | Recent tool/audit activity. |
 
 Every HTTP response includes `X-Request-Id`. Match that value with structured JSON runtime logs when investigating incidents.
+
+## Search Runtime Logs
+
+Use the in-app Logs modal for first response. It supports text search plus level, severity, and user-action filters. For API-level diagnostics:
+
+```bash
+curl "http://localhost:3090/api/logs?level=error&userAction=code_search&query=ctx"
+curl "http://localhost:3090/api/logs?level=error&userAction=agent_tool_call"
+curl "http://localhost:3090/api/logs?severity=critical"
+```
+
+Search, chat, agent tool, startup, unhandled HTTP, unhandled rejection, and uncaught exception failures should appear here with stack traces and request or task context.
 
 ## Rotate local logs
 
@@ -61,10 +82,14 @@ To archive logs, stop the runtime, move the files to a dated backup directory, t
 ## Recover from Graphify failures
 
 1. Run `graphify --help`, or check `YODAMAN_GRAPHIFY_BIN`.
-2. Confirm the workspace path is registered with `GET /api/projects`.
-3. Run `GET /api/graphify/status?path=/absolute/workspace`.
-4. Run `POST /api/graphify/build` for the workspace.
-5. If semantic extraction fails, confirm Ollama is running and the model named by `YODAMAN_GRAPHIFY_OLLAMA_MODEL` is available locally.
+2. Run `yodaman doctor --graph` to summarize active graphs, freshness, orphaned nodes, and the most complex file.
+3. Confirm the workspace path is registered with `GET /api/projects`.
+4. Run `GET /api/graphify/status?path=/absolute/workspace`.
+5. Run `POST /api/graphify/build` for the workspace.
+6. Poll `GET /api/graphify/build/status?path=/absolute/workspace` until the state is `succeeded`, `partial`, or `failed`.
+7. Treat `partial` as a valid large-graph outcome when `graph.json` and the report exist but `graph.html` or `graph_visualizer.html` were skipped by Graphify.
+8. If orphaned nodes are reported, run Sync Repository or `POST /api/reindex` for the workspace.
+9. If semantic extraction fails, confirm Ollama is running and the model named by `YODAMAN_GRAPHIFY_OLLAMA_MODEL` is available locally.
 
 ## Handle out-of-disk errors
 

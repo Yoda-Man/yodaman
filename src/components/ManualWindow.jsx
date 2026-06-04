@@ -41,11 +41,12 @@ const featureGroups = [
         icon: GitBranch,
         title: 'Graphify',
         items: [
-            'Graphify is required in version 0.2.1 and uses Ollama local execution only for semantic extraction.',
+            'Graphify is required in version 0.2.2 and uses Ollama local execution only for semantic extraction.',
             'Graphify builds knowledge graphs for code, docs, diagrams, and architecture.',
             'Sync Repository updates the Context Expert index and the Graphify graph together.',
+            'Run yodaman doctor --graph to check active graphs, freshness, orphaned nodes, and the most dependency-heavy file.',
             'Chat and agent answers include graph report context plus question-specific graph traversal.',
-            'The Plugins tab shows graph status, freshness warnings, manual graph rebuilds, direct graph queries, impact analysis, and an architecture map.'
+            'The Graph tab opens Graph Studio for visualizations, report reading, graph queries, impact analysis, and architecture maps.'
         ]
     },
     {
@@ -63,7 +64,7 @@ const featureGroups = [
         items: [
             'Upload JavaScript plugins from the Plugins tab or place them in the plugins directory.',
             'Plugins expose a name, description, parameters, permissions, and an async execute function.',
-            'Plugins without explicit permissions are treated as unrestricted and are blocked unless deliberately allowed.'
+            'Plugin uploads, unrestricted plugins, and agent shell commands are disabled by default and should only be enabled for trusted local support sessions.'
         ]
     },
     {
@@ -72,7 +73,7 @@ const featureGroups = [
         items: [
             'Task history and audit logs persist locally in SQLite when available.',
             'YodaMan falls back to JSON files on Node runtimes without SQLite support.',
-            'Clients can open runtime logs, inspect index queue state, and clear task history or audit logs.'
+            'Clients can search runtime logs by text, severity, level, and user action, inspect index queue state, and clear task history or audit logs.'
         ]
     },
     {
@@ -90,7 +91,7 @@ const featureGroups = [
         items: [
             'Check runtime status, start the runtime, ask, search, and reindex from the command palette.',
             'Add a workspace by browsing for a folder, pasting an absolute path, or registering the current VS Code workspace.',
-            'Open runtime logs to inspect request, reindex, and indexing output.',
+            'Open searchable runtime logs to inspect request, reindex, agent, search, and indexing output.',
             'Run agent tasks, inspect streamed events, open proposed writes as diffs, and approve or reject changes.',
             'Use the YodaMan activity bar sidebar for workspace state, task details, and clear-history actions.'
         ]
@@ -118,10 +119,10 @@ export default function ManualWindow() {
                         YodaMan Manual
                     </h1>
                     <p className="text-lg leading-relaxed text-slate-400 max-w-3xl">
-                        YodaMan 0.2.1 is a local-first workspace intelligence system for developers. It connects the web UI, desktop app, VS Code extension, mobile companion, CLI runtime, mandatory Graphify knowledge graphs, plugins, search, chat, and supervised agent workflows around one private local runtime.
+                        YodaMan 0.2.2 is a local-first workspace intelligence system for developers. It connects the web UI, desktop app, VS Code extension, mobile companion, CLI runtime, mandatory Graphify knowledge graphs, plugins, search, chat, and supervised agent workflows around one private local runtime.
                     </p>
                     <div className="mt-6 flex flex-wrap items-center gap-3">
-                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.2.1</span>
+                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.2.2</span>
                         <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-400">Local runtime</span>
                         <span className="px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest text-cyan-300">Graphify required</span>
                         <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-300">Human approved writes</span>
@@ -161,6 +162,7 @@ export default function ManualWindow() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <CommandBlock title="Install and run" code={`npm install -g @contextexpert/cli\npython3 -m pip install graphifyy\nnpm install\nsh setup.sh\nnpm start`} />
                         <CommandBlock title="Develop and verify" code={`npm run client\nnpm test\nnpm run build\nnpm run release:smoke`} />
+                        <CommandBlock title="Graphify health" code={`yodaman doctor --graph`} />
                         <CommandBlock title="Desktop builds" code={`npm run desktop\nnpm run desktop:pack\nnpm run desktop:dist`} />
                         <CommandBlock title="VS Code extension" code={`cd extensions/vscode-yodaman\nnpm install\nnpm run lint\nnpm run package`} />
                     </div>
@@ -172,6 +174,7 @@ export default function ManualWindow() {
                         <Trouble title="Runtime unreachable" text="Confirm port 3090 is free, then use YodaMan > Restart Managed Runtime or run yodaman from Terminal." />
                         <Trouble title="Context Expert missing" text="Install @contextexpert/cli and verify ctx --version works in your shell." />
                         <Trouble title="Graphify missing" text="Install graphifyy, verify graphify --help works, or set YODAMAN_GRAPHIFY_BIN to the executable path." />
+                        <Trouble title="Graph health warnings" text="Run yodaman doctor --graph, then sync the affected workspace if orphaned nodes or missing graphs are reported." />
                         <Trouble title="Moved repository" text="Open Settings, edit the workspace path, save, then run Sync Repository." />
                         <Trouble title="Search looks stale" text="Select the workspace and run Sync Repository to queue a fresh index." />
                         <Trouble title="Plugin blocked" text="Add explicit plugin permissions or set YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true only for trusted plugins." />

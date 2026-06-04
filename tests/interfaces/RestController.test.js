@@ -1,8 +1,43 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const router = require('../../backend/interfaces/RestController');
 const agentEngine = require('../../backend/core/AgentReasoningEngine');
 const auditLog = require('../../backend/infrastructure/AuditLog');
+const contextEngine = require('../../backend/infrastructure/ContextEngine');
+const graphifyService = require('../../backend/infrastructure/GraphifyService');
+const watcherService = require('../../backend/infrastructure/FileSystemWatcher');
+const logger = require('../../backend/infrastructure/Logger');
 
 describe('RestController Integration', () => {
+    let testConfigDir;
+    let previousConfigPath;
+
+    beforeAll(() => {
+        previousConfigPath = process.env.YODAMAN_CONFIG_PATH;
+        testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-rest-config-'));
+        process.env.YODAMAN_CONFIG_PATH = path.join(testConfigDir, 'config.json');
+        fs.writeFileSync(process.env.YODAMAN_CONFIG_PATH, JSON.stringify({
+            watchedDirectories: [],
+            removedDirectories: []
+        }, null, 2));
+        router.loadConfig();
+    });
+
+    afterAll(() => {
+        if (previousConfigPath === undefined) {
+            delete process.env.YODAMAN_CONFIG_PATH;
+        } else {
+            process.env.YODAMAN_CONFIG_PATH = previousConfigPath;
+        }
+        router.loadConfig();
+        fs.rmSync(testConfigDir, { recursive: true, force: true });
+    });
+
+    function configPath() {
+        return router.getConfigPath();
+    }
+
     function routeHandler(method, routePath) {
         const layer = router.stack.find((item) => item.route?.path === routePath && item.route?.methods[method]);
         return layer.route.stack[0].handle;
@@ -22,6 +57,9 @@ describe('RestController Integration', () => {
             setHeader: jest.fn(function setHeader(name, value) {
                 this.headers[name] = value;
             }),
+            removeHeader: jest.fn(function removeHeader(name) {
+                delete this.headers[name];
+            }),
             status: jest.fn(function status(code) {
                 this.statusCode = code;
                 return this;
@@ -32,6 +70,10 @@ describe('RestController Integration', () => {
             }),
             send: jest.fn(function send(payload) {
                 this.payload = payload;
+                return this;
+            }),
+            sendFile: jest.fn(function sendFile(filePath) {
+                this.filePath = filePath;
                 return this;
             })
         };
@@ -60,6 +102,61 @@ describe('RestController Integration', () => {
         expect(auditLog.list()).toHaveLength(0);
     });
 
+    test('GET /logs returns filtered live diagnostic errors', async () => {
+        logger.clear();
+        logger.info('startup_completed', { userAction: 'startup' });
+        logger.error('search_failed', new Error('ctx unavailable'), {
+            userAction: 'code_search',
+            severity: 'high'
+        });
+
+        const response = await invoke('get', '/logs', {
+            query: {
+                level: 'error',
+                userAction: 'code_search',
+                query: 'ctx unavailable',
+                severity: 'high'
+            }
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.payload.logs).toHaveLength(1);
+        expect(response.payload.logs[0]).toEqual(expect.objectContaining({
+            level: 'error',
+            message: 'search_failed',
+            userAction: 'code_search'
+        }));
+    });
+
+    test('POST /logs/client-error transmits frontend failures to live logs', async () => {
+        logger.clear();
+
+        const response = await invoke('post', '/logs/client-error', {
+            body: {
+                message: 'Search failed in UI',
+                stack: 'Error: Search failed in UI\n    at SearchWindow',
+                userAction: 'code_search',
+                component: 'SearchWindow',
+                severity: 'high',
+                context: { query: 'menu', project: 'Anchor' }
+            }
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.payload).toEqual({ ok: true });
+        expect(logger.list(10, { message: 'client_error', userAction: 'code_search' })[0]).toEqual(expect.objectContaining({
+            level: 'error',
+            message: 'client_error',
+            component: 'SearchWindow',
+            severity: 'high',
+            context: { query: 'menu', project: 'Anchor' },
+            error: expect.objectContaining({
+                message: 'Search failed in UI',
+                stack: expect.stringContaining('SearchWindow')
+            })
+        }));
+    });
+
     test('POST /mode validates query mode values', async () => {
         const ok = await invoke('post', '/mode', { body: { mode: 'doc' } });
         expect(ok.statusCode).toBe(200);
@@ -78,6 +175,73 @@ describe('RestController Integration', () => {
         expect(response.payload).toEqual(expect.objectContaining({
             code: 'invalid_request'
         }));
+    });
+
+    test('POST /ask returns a local fallback answer when ctx ask fails', async () => {
+        const originalExecute = contextEngine.execute;
+        const originalQuery = graphifyService.query;
+        const originalReadReport = graphifyService.readReport;
+        const originalSaveResult = graphifyService.saveResult;
+        const originalSearchCode = require('../../backend/infrastructure/ToolBox').searchCode;
+        const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-rest-chat-workspace-'));
+
+        try {
+            fs.writeFileSync(configPath(), JSON.stringify({
+                watchedDirectories: [workspace],
+                removedDirectories: []
+            }, null, 2));
+            router.loadConfig();
+            contextEngine.execute = jest.fn(async () => {
+                throw new Error('ctx ask unavailable');
+            });
+            graphifyService.query = jest.fn(async () => 'Graph node: publishMenu connects menu routes.');
+            graphifyService.readReport = jest.fn(() => [
+                'Architecture summary mentions menu publishing.',
+                '',
+                '## Community Hubs (Navigation)',
+                '- [[_COMMUNITY_Community 1|Community 1]]',
+                '- [[_COMMUNITY_Community 2|Community 2]]',
+                '',
+                '## Top Nodes',
+                '- MenuScreen()'
+            ].join('\n'));
+            graphifyService.saveResult = jest.fn(async () => ({ skipped: true }));
+            require('../../backend/infrastructure/ToolBox').searchCode = jest.fn(async () => [
+                {
+                    content: 'function publishMenu() {}',
+                    score: 0.9,
+                    metadata: { path: path.join(workspace, 'menu.js') }
+                }
+            ]);
+
+            const response = await invoke('post', '/ask', {
+                body: {
+                    question: 'menu',
+                    projectId: workspace,
+                    mode: 'code'
+                }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(contextEngine.execute).toHaveBeenCalledWith(
+                expect.arrayContaining(['ask', '--']),
+                expect.objectContaining({ timeoutMs: expect.any(Number) })
+            );
+            expect(response.payload.answer).toContain('YodaMan could not reach ctx ask');
+            expect(response.payload.answer).toContain('publishMenu');
+            expect(response.payload.answer).toContain('Graph node');
+            expect(response.payload.answer).toContain('Top Nodes');
+            expect(response.payload.answer).not.toContain('Community Hubs');
+            expect(response.payload.answer).not.toContain('_COMMUNITY_Community');
+        } finally {
+            contextEngine.execute = originalExecute;
+            graphifyService.query = originalQuery;
+            graphifyService.readReport = originalReadReport;
+            graphifyService.saveResult = originalSaveResult;
+            require('../../backend/infrastructure/ToolBox').searchCode = originalSearchCode;
+            router.loadConfig();
+            fs.rmSync(workspace, { recursive: true, force: true });
+        }
     });
 
     test('GET /sessions returns structured errors for missing project id', async () => {
@@ -100,6 +264,44 @@ describe('RestController Integration', () => {
         }));
     });
 
+    test('GET /projects does not promote ctx-only temp projects into saved workspaces', async () => {
+        const originalExecuteJson = contextEngine.executeJson;
+        const originalConfig = fs.existsSync(configPath()) ? fs.readFileSync(configPath(), 'utf8') : undefined;
+        const anchorPath = '/Users/developer/Documents/Anchor';
+        const tempWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-graph-studio-'));
+
+        try {
+            fs.writeFileSync(configPath(), JSON.stringify({
+                watchedDirectories: [anchorPath],
+                removedDirectories: []
+            }, null, 2));
+            router.loadConfig();
+            contextEngine.executeJson = jest.fn(async () => ({
+                projects: [
+                    { name: 'Anchor', path: anchorPath, id: anchorPath },
+                    { name: path.basename(tempWorkspace), path: tempWorkspace, id: tempWorkspace }
+                ]
+            }));
+
+            const response = await invoke('get', '/projects');
+            const savedConfig = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+
+            expect(response.statusCode).toBe(200);
+            expect(response.payload.map(project => project.path)).toContain(anchorPath);
+            expect(response.payload.map(project => project.path)).not.toContain(tempWorkspace);
+            expect(savedConfig.watchedDirectories).toEqual([anchorPath]);
+        } finally {
+            contextEngine.executeJson = originalExecuteJson;
+            if (originalConfig === undefined) {
+                fs.rmSync(configPath(), { force: true });
+            } else {
+                fs.writeFileSync(configPath(), originalConfig);
+            }
+            router.loadConfig();
+            fs.rmSync(tempWorkspace, { recursive: true, force: true });
+        }
+    });
+
     test('DELETE /plugins/:name refuses to remove mandatory Graphify plugin', async () => {
         const response = await invoke('delete', '/plugins/:name', {
             params: { name: 'graphify' }
@@ -109,5 +311,296 @@ describe('RestController Integration', () => {
         expect(response.payload).toEqual(expect.objectContaining({
             code: 'mandatory_plugin'
         }));
+    });
+
+    test('security defaults require remote pairing tokens', () => {
+        const original = process.env.YODAMAN_REQUIRE_PAIRING_TOKEN;
+        delete process.env.YODAMAN_REQUIRE_PAIRING_TOKEN;
+
+        try {
+            expect(router.isPairingRequiredByDefault()).toBe(true);
+        } finally {
+            if (original === undefined) {
+                delete process.env.YODAMAN_REQUIRE_PAIRING_TOKEN;
+            } else {
+                process.env.YODAMAN_REQUIRE_PAIRING_TOKEN = original;
+            }
+        }
+    });
+
+    test('plugin uploads are disabled by default and filenames are restricted', () => {
+        const original = process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS;
+        delete process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS;
+
+        try {
+            expect(router.arePluginUploadsEnabled()).toBe(false);
+            expect(() => router.safePluginFilename('../evil.js')).toThrow('Invalid plugin filename');
+            expect(() => router.safePluginFilename('evil.txt')).toThrow('Plugin upload must be a JavaScript file');
+            expect(router.safePluginFilename('good-plugin.js')).toBe('good-plugin.js');
+        } finally {
+            if (original === undefined) {
+                delete process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS;
+            } else {
+                process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS = original;
+            }
+        }
+    });
+
+    describe('Graphify artifact routes', () => {
+        let workspace;
+        let originalConfig;
+
+        beforeEach(() => {
+            workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-rest-graph-workspace-'));
+            fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
+            originalConfig = fs.existsSync(configPath())
+                ? fs.readFileSync(configPath(), 'utf8')
+                : undefined;
+            fs.writeFileSync(configPath(), JSON.stringify({
+                watchedDirectories: [workspace],
+                removedDirectories: []
+            }, null, 2));
+            router.loadConfig();
+        });
+
+        afterEach(() => {
+            if (originalConfig === undefined) {
+                fs.rmSync(configPath(), { force: true });
+            } else {
+                fs.writeFileSync(configPath(), originalConfig);
+            }
+            router.loadConfig();
+            watcherService.removeWatcher?.(workspace);
+            fs.rmSync(workspace, { recursive: true, force: true });
+        });
+
+        test('GET /graphify/artifact serves a known generated artifact', async () => {
+            const artifactPath = path.join(workspace, 'graphify-out', 'graph.html');
+            fs.writeFileSync(artifactPath, '<html><body>graph</body></html>');
+
+            const response = await invoke('get', '/graphify/artifact', {
+                query: { path: workspace, type: 'mindmap' }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(response.payload).toContain('<html><body>graph</body></html>');
+            expect(response.headers['Content-Security-Policy']).toContain("'unsafe-inline'");
+            expect(response.headers['Content-Security-Policy']).toContain('https://unpkg.com');
+        });
+
+        test('GET /graphify/artifact allows same-origin embedding in Graph Studio', async () => {
+            const artifactPath = path.join(workspace, 'graphify-out', 'graph.html');
+            fs.writeFileSync(artifactPath, '<html><body>graph</body></html>');
+
+            const response = await invoke('get', '/graphify/artifact', {
+                query: { path: workspace, type: 'mindmap' }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(response.headers['X-Frame-Options']).toBe('SAMEORIGIN');
+            expect(response.headers['X-Frame-Options']).not.toBe('DENY');
+        });
+
+        test('GET /graphify/artifact rejects unknown artifact types', async () => {
+            const response = await invoke('get', '/graphify/artifact', {
+                query: { path: workspace, type: 'passwd' }
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(response.payload).toEqual(expect.objectContaining({
+                code: 'invalid_graphify_artifact'
+            }));
+        });
+
+        test('GET /graphify/artifact reports missing generated artifacts', async () => {
+            const response = await invoke('get', '/graphify/artifact', {
+                query: { path: workspace, type: 'visualizer' }
+            });
+
+            expect(response.statusCode).toBe(404);
+            expect(response.payload).toEqual(expect.objectContaining({
+                code: 'graphify_artifact_missing'
+            }));
+        });
+
+        test('GET /graphify/artifact rejects non-file generated artifacts', async () => {
+            fs.mkdirSync(path.join(workspace, 'graphify-out', 'graph.html'));
+
+            const response = await invoke('get', '/graphify/artifact', {
+                query: { path: workspace, type: 'mindmap' }
+            });
+
+            expect(response.statusCode).toBe(404);
+            expect(response.payload).toEqual(expect.objectContaining({
+                code: 'graphify_artifact_missing'
+            }));
+        });
+
+        test('GET /graphify/artifact rejects symlinked generated artifacts', async () => {
+            const externalFile = path.join(os.tmpdir(), `yodaman-graph-artifact-${Date.now()}.html`);
+            const artifactPath = path.join(workspace, 'graphify-out', 'graph.html');
+            fs.writeFileSync(externalFile, '<html><body>outside</body></html>');
+
+            try {
+                fs.symlinkSync(externalFile, artifactPath);
+            } catch (err) {
+                fs.rmSync(externalFile, { force: true });
+                return;
+            }
+
+            try {
+                const response = await invoke('get', '/graphify/artifact', {
+                    query: { path: workspace, type: 'mindmap' }
+                });
+
+                expect(response.statusCode).toBe(404);
+                expect(response.payload).toEqual(expect.objectContaining({
+                    code: 'graphify_artifact_missing'
+                }));
+            } finally {
+                fs.rmSync(externalFile, { force: true });
+            }
+        });
+
+        test('GET /graphify/artifact rejects symlinked graphify output directories', async () => {
+            const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-graph-out-'));
+            fs.writeFileSync(path.join(externalDir, 'graph.html'), '<html><body>outside</body></html>');
+            fs.rmSync(path.join(workspace, 'graphify-out'), { recursive: true, force: true });
+
+            try {
+                fs.symlinkSync(externalDir, path.join(workspace, 'graphify-out'), 'dir');
+            } catch (err) {
+                fs.rmSync(externalDir, { recursive: true, force: true });
+                fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
+                return;
+            }
+
+            try {
+                const response = await invoke('get', '/graphify/artifact', {
+                    query: { path: workspace, type: 'mindmap' }
+                });
+
+                expect(response.statusCode).toBe(404);
+                expect(response.payload).toEqual(expect.objectContaining({
+                    code: 'graphify_artifact_missing'
+                }));
+            } finally {
+                fs.rmSync(externalDir, { recursive: true, force: true });
+            }
+        });
+
+        test('GET /graphify/report returns markdown report text', async () => {
+            fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph_report.md'), '# Report\n\nHello graph.');
+
+            const response = await invoke('get', '/graphify/report', {
+                query: { path: workspace }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(response.payload).toEqual({
+                path: workspace,
+                report: '# Report\n\nHello graph.',
+                reportPath: path.join(workspace, 'graphify-out', 'graph_report.md')
+            });
+        });
+
+        test('GET /graphify/report rejects symlinked graphify output directories', async () => {
+            const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-graph-out-'));
+            fs.writeFileSync(path.join(externalDir, 'graph_report.md'), '# Outside report');
+            fs.rmSync(path.join(workspace, 'graphify-out'), { recursive: true, force: true });
+
+            try {
+                fs.symlinkSync(externalDir, path.join(workspace, 'graphify-out'), 'dir');
+            } catch (err) {
+                fs.rmSync(externalDir, { recursive: true, force: true });
+                fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
+                return;
+            }
+
+            try {
+                const response = await invoke('get', '/graphify/report', {
+                    query: { path: workspace }
+                });
+
+                expect(response.statusCode).toBe(404);
+                expect(response.payload).toEqual(expect.objectContaining({
+                    code: 'graphify_report_missing'
+                }));
+            } finally {
+                fs.rmSync(externalDir, { recursive: true, force: true });
+            }
+        });
+
+        test('GET /graphify/report rejects symlinked reports', async () => {
+            const externalFile = path.join(os.tmpdir(), `yodaman-graph-report-${Date.now()}.md`);
+            const reportPath = path.join(workspace, 'graphify-out', 'graph_report.md');
+            fs.writeFileSync(externalFile, '# Outside report');
+
+            try {
+                fs.symlinkSync(externalFile, reportPath);
+            } catch (err) {
+                fs.rmSync(externalFile, { force: true });
+                return;
+            }
+
+            try {
+                const response = await invoke('get', '/graphify/report', {
+                    query: { path: workspace }
+                });
+
+                expect(response.statusCode).toBe(404);
+                expect(response.payload).toEqual(expect.objectContaining({
+                    code: 'graphify_report_missing'
+                }));
+            } finally {
+                fs.rmSync(externalFile, { force: true });
+            }
+        });
+
+        test('GET /graphify/report rejects non-file reports', async () => {
+            fs.mkdirSync(path.join(workspace, 'graphify-out', 'graph_report.md'));
+
+            const response = await invoke('get', '/graphify/report', {
+                query: { path: workspace }
+            });
+
+            expect(response.statusCode).toBe(404);
+            expect(response.payload).toEqual(expect.objectContaining({
+                code: 'graphify_report_missing'
+            }));
+        });
+
+        test('POST /graphify/build queues a build and exposes job status', async () => {
+            const originalBuild = graphifyService.build;
+            graphifyService.build = jest.fn(async () => ({ graphPath: path.join(workspace, 'graphify-out', 'graph.json'), output: 'ok' }));
+
+            try {
+                const queued = await invoke('post', '/graphify/build', {
+                    body: { path: workspace }
+                });
+
+                expect(queued.statusCode).toBe(202);
+                expect(queued.payload).toEqual(expect.objectContaining({
+                    message: 'Graphify build queued',
+                    jobId: expect.any(String),
+                    path: workspace
+                }));
+
+                await new Promise(resolve => setImmediate(resolve));
+
+                const status = await invoke('get', '/graphify/build/status', {
+                    query: { path: workspace, jobId: queued.payload.jobId }
+                });
+
+                expect(status.statusCode).toBe(200);
+                expect(status.payload.job).toEqual(expect.objectContaining({
+                    id: queued.payload.jobId,
+                    state: 'succeeded'
+                }));
+                expect(graphifyService.build).toHaveBeenCalledWith(workspace, { update: true });
+            } finally {
+                graphifyService.build = originalBuild;
+            }
+        });
     });
 });

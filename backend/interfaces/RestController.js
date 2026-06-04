@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 
 // Infrastructure Layer
 const contextEngine = require('../infrastructure/ContextEngine');
@@ -21,7 +22,7 @@ const queueService = require('../core/QueueService');
 const agentEngine = require('../core/AgentReasoningEngine');
 
 const router = express.Router();
-const CONFIG_PATH = path.join(__dirname, '../../config.json');
+const DEFAULT_CONFIG_PATH = path.join(__dirname, '../../config.json');
 const PLUGINS_DIR = path.resolve(__dirname, '../../plugins');
 const ALLOWED_MODES = new Set(['code', 'doc']);
 
@@ -30,7 +31,11 @@ const storage = multer.diskStorage({
         cb(null, PLUGINS_DIR);
     },
     filename: (req, file, cb) => {
-        cb(null, file.originalname);
+        try {
+            cb(null, safePluginFilename(file.originalname));
+        } catch (err) {
+            cb(err);
+        }
     }
 });
 const upload = multer({ storage });
@@ -43,9 +48,84 @@ const upload = multer({ storage });
  */
 
 let config = { watchedDirectories: [], removedDirectories: [] };
+const graphifyBuildJobs = new Map();
+
+function getConfigPath() {
+    return process.env.YODAMAN_CONFIG_PATH || DEFAULT_CONFIG_PATH;
+}
 
 function jsonError(res, status, message, code) {
     return res.status(status).json({ error: message, code });
+}
+
+function setGraphifyArtifactHeaders(res) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self' data: blob: https://unpkg.com; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; connect-src 'self' http://localhost:* http://127.0.0.1:* https://unpkg.com"
+    );
+}
+
+function publicBuildJob(job) {
+    if (!job) return null;
+    return {
+        id: job.id,
+        path: job.path,
+        state: job.state,
+        message: job.message,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
+        durationMs: job.durationMs,
+        error: job.error
+    };
+}
+
+function latestBuildJobForPath(dirPath) {
+    return Array.from(graphifyBuildJobs.values())
+        .filter(job => job.path === dirPath)
+        .sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')))[0] || null;
+}
+
+function startGraphifyBuildJob(dirPath) {
+    const runningJob = Array.from(graphifyBuildJobs.values())
+        .find(job => job.path === dirPath && (job.state === 'queued' || job.state === 'running'));
+    if (runningJob) return runningJob;
+
+    const job = {
+        id: crypto.randomUUID(),
+        path: dirPath,
+        state: 'queued',
+        message: 'Graphify build queued',
+        startedAt: new Date().toISOString()
+    };
+    graphifyBuildJobs.set(job.id, job);
+
+    Promise.resolve().then(async () => {
+        const startedAt = new Date();
+        job.state = 'running';
+        job.message = 'Graphify build running';
+        job.startedAt = startedAt.toISOString();
+        try {
+            const result = await graphifyService.build(dirPath, { update: true });
+            const buildState = result.build?.state === 'partial' ? 'partial' : 'succeeded';
+            job.state = buildState;
+            job.message = result.build?.message || 'Graphify build completed';
+            job.completedAt = new Date().toISOString();
+            job.durationMs = new Date(job.completedAt).getTime() - startedAt.getTime();
+        } catch (err) {
+            job.state = 'failed';
+            job.message = err.message;
+            job.error = err.message;
+            job.completedAt = new Date().toISOString();
+            job.durationMs = new Date(job.completedAt).getTime() - startedAt.getTime();
+            logger.error('graphify_build_job_failed', err, { path: dirPath, jobId: job.id });
+        }
+    });
+
+    return job;
 }
 
 function validateString(value, name, { required = true, max = 4000 } = {}) {
@@ -100,9 +180,35 @@ function isLocalRequest(req) {
     return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 }
 
+function isPairingRequiredByDefault() {
+    return process.env.YODAMAN_REQUIRE_PAIRING_TOKEN !== 'false';
+}
+
+function arePluginUploadsEnabled() {
+    return process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS === 'true';
+}
+
+function safePluginFilename(originalName) {
+    const filename = path.basename(validateString(originalName, 'plugin filename', { max: 200 }));
+    if (filename !== originalName || filename.includes('..')) {
+        throw new Error('Invalid plugin filename');
+    }
+    if (!/^[a-zA-Z0-9._-]+\.js$/.test(filename)) {
+        throw new Error('Plugin upload must be a JavaScript file with a safe filename');
+    }
+    return filename;
+}
+
+function requirePluginUploadsEnabled(req, res, next) {
+    if (!arePluginUploadsEnabled()) {
+        return jsonError(res, 403, 'Plugin uploads are disabled. Set YODAMAN_ALLOW_PLUGIN_UPLOADS=true only for trusted local support sessions.', 'plugin_uploads_disabled');
+    }
+    return next();
+}
+
 router.use((req, res, next) => {
     if (req.path.startsWith('/pairing')) return next();
-    if (process.env.YODAMAN_REQUIRE_PAIRING_TOKEN !== 'true') return next();
+    if (!isPairingRequiredByDefault()) return next();
     if (isLocalRequest(req)) return next();
 
     const token = req.get('X-YodaMan-Token');
@@ -125,20 +231,42 @@ router.post('/mode', (req, res) => {
     }
 });
 
-function loadLocalConfig() {
-    if (fs.existsSync(CONFIG_PATH)) {
-        config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+function loadConfig() {
+    config = { watchedDirectories: [], removedDirectories: [] };
+    const configPath = getConfigPath();
+    if (fs.existsSync(configPath)) {
+        try {
+            config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        } catch (err) {
+            logger.error('config_load_failed', err, { path: configPath });
+            config = { watchedDirectories: [], removedDirectories: [] };
+        }
     }
     config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
     config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];
+    const originalWatchedCount = config.watchedDirectories.length;
+    config.watchedDirectories = config.watchedDirectories.filter(dir => !isGeneratedTempWorkspace(dir));
+    if (config.watchedDirectories.length !== originalWatchedCount && fs.existsSync(configPath)) {
+        saveConfig();
+    }
+    return config;
 }
 
+loadConfig();
+
 function saveConfig() {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
 }
 
 function projectNameForPath(dirPath) {
     return path.basename(dirPath) || dirPath;
+}
+
+function isGeneratedTempWorkspace(dirPath) {
+    const resolved = path.resolve(String(dirPath || ''));
+    const relativeToTmp = path.relative(os.tmpdir(), resolved);
+    const insideTmp = relativeToTmp && !relativeToTmp.startsWith('..') && !path.isAbsolute(relativeToTmp);
+    return insideTmp && /^yodaman-(graph-studio|graphify-service|graph-doctor|docs|audit-test|test)-/.test(path.basename(resolved));
 }
 
 async function removeFromCtxIndex(dirPath) {
@@ -179,7 +307,7 @@ function resolveProjectPath(projectId) {
     const resolved = path.resolve(projectId);
     if (path.isAbsolute(resolved)) return resolved;
 
-    loadLocalConfig();
+    loadConfig();
     return config.watchedDirectories.find(dir => (
         dir === projectId ||
         path.basename(dir) === projectId
@@ -198,9 +326,38 @@ function buildGraphAugmentedQuestion(question, graphInsights) {
     ].join('\n');
 }
 
+function sanitizeGraphReportForChat(report) {
+    return String(report || '')
+        .replace(/\n## Community Hubs \(Navigation\)[\s\S]*?(?=\n## |\s*$)/, '\n')
+        .trim();
+}
+
+function formatSearchResult(result, index) {
+    const filePath = result.metadata?.path || result.path || 'unknown file';
+    const line = result.metadata?.line ? `:${result.metadata.line}` : '';
+    const snippet = result.content || result.text || result.snippet || '';
+    return `${index + 1}. ${filePath}${line}\n${snippet}`.trim();
+}
+
+async function buildLocalAskFallbackAnswer({ question, projectPath, graphInsights, cause }) {
+    const searchResults = projectPath
+        ? await toolBox.searchCode({ query: question, project: projectPath, top: 5 }).catch(() => [])
+        : [];
+    const snippets = searchResults.slice(0, 5).map(formatSearchResult).join('\n\n');
+    return [
+        `YodaMan could not reach ctx ask (${cause.message}), so it answered from local workspace context instead.`,
+        '',
+        graphInsights ? `Graph context:\n${graphInsights}` : 'Graph context: no graph context was available.',
+        '',
+        snippets ? `Matching code snippets:\n${snippets}` : 'Matching code snippets: no local search matches were found.',
+        '',
+        `Question: ${question}`
+    ].join('\n');
+}
+
 function resolveRegisteredProjectPath(value) {
     const resolved = resolveUserPath(value);
-    loadLocalConfig();
+    loadConfig();
     if (!config.watchedDirectories.includes(resolved)) {
         const err = new Error(`Workspace is not registered: ${resolved}`);
         err.status = 404;
@@ -213,7 +370,7 @@ function resolveRegisteredProjectPath(value) {
 // --- Project Management ---
 
 router.get('/projects', async (req, res) => {
-    loadLocalConfig();
+    loadConfig();
     try {
         const cliData = await contextEngine.executeJson(['list']);
         const cliProjects = cliData.projects.map(p => ({
@@ -222,24 +379,11 @@ router.get('/projects', async (req, res) => {
             id: p.id || p.path
         })).filter(p => !config.removedDirectories.includes(p.path));
 
-        const cliPaths = cliProjects.map(p => p.path);
-        let hasNew = false;
-        
-        cliPaths.forEach(p => {
-            if (!config.watchedDirectories.includes(p)) {
-                config.watchedDirectories.push(p);
-                watcherService.setupWatcher(p);
-                hasNew = true;
-            }
-        });
+        const cliByPath = new Map(cliProjects.map(project => [project.path, project]));
 
-        if (hasNew) saveConfig();
-
-        const result = [...cliProjects];
-        config.watchedDirectories.forEach(dir => {
-            if (!cliPaths.includes(dir)) {
-                result.push({ name: path.basename(dir), path: dir, id: dir });
-            }
+        const result = config.watchedDirectories.map(dir => {
+            const cliProject = cliByPath.get(dir);
+            return cliProject || { name: path.basename(dir), path: dir, id: dir };
         });
 
         res.json(result);
@@ -257,7 +401,7 @@ router.post('/projects', (req, res) => {
         return jsonError(res, err.status || 400, err.message, 'invalid_path');
     }
 
-    loadLocalConfig();
+    loadConfig();
     if (!config.watchedDirectories.includes(resolvedPath)) {
         config.watchedDirectories.push(resolvedPath);
         config.removedDirectories = config.removedDirectories.filter(p => p !== resolvedPath);
@@ -278,7 +422,7 @@ router.delete('/projects', async (req, res) => {
         return jsonError(res, err.status || 400, err.message, 'invalid_path');
     }
     
-    loadLocalConfig();
+    loadConfig();
     const wasWatched = config.watchedDirectories.includes(resolvedPath);
     config.watchedDirectories = config.watchedDirectories.filter(p => p !== resolvedPath);
     if (!config.removedDirectories.includes(resolvedPath)) {
@@ -302,7 +446,7 @@ router.put('/projects', (req, res) => {
         return jsonError(res, err.status || 400, err.message, 'invalid_path');
     }
 
-    loadLocalConfig();
+    loadConfig();
     if (!config.watchedDirectories.includes(resolvedPath)) {
         return jsonError(res, 404, 'Project path is not being watched', 'project_not_found');
     }
@@ -383,7 +527,7 @@ router.post('/ask', async (req, res) => {
     try {
         let graphInsights = '';
         if (projectPath) {
-            const report = graphifyService.readReport(projectPath, { maxChars: 4000 });
+            const report = sanitizeGraphReportForChat(graphifyService.readReport(projectPath, { maxChars: 4000 }));
             const queryInsights = await graphifyService.query(question, projectPath);
             graphInsights = [
                 'Graph report summary:',
@@ -394,15 +538,41 @@ router.post('/ask', async (req, res) => {
             ].join('\n');
         }
         const augmentedQuestion = buildGraphAugmentedQuestion(question, graphInsights);
-        const { output } = await contextEngine.execute(['ask', '--', augmentedQuestion]);
-        const answer = output.trim();
+        let answer;
+        try {
+            const timeoutMs = Number(process.env.YODAMAN_CTX_ASK_TIMEOUT_MS || 12000);
+            const { output } = await contextEngine.execute(['ask', '--', augmentedQuestion], { timeoutMs });
+            answer = output.trim();
+        } catch (ctxErr) {
+            logger.warn('ask_ctx_fallback_started', {
+                requestId: req.id,
+                projectId,
+                projectPath,
+                mode,
+                error: ctxErr.message,
+                userAction: 'chat_ask',
+                severity: 'medium'
+            });
+            answer = await buildLocalAskFallbackAnswer({
+                question,
+                projectPath,
+                graphInsights,
+                cause: ctxErr
+            });
+        }
         if (projectPath && answer) {
             graphifyService.saveResult(projectPath, {
                 question,
                 answer,
                 type: 'query'
             }).catch(err => {
-                logger.warn('graphify_save_answer_failed', { requestId: req.id, path: projectPath, error: err.message });
+                logger.warn('graphify_save_answer_failed', {
+                    requestId: req.id,
+                    path: projectPath,
+                    userAction: 'chat_ask',
+                    severity: 'medium',
+                    error: err.message
+                });
             });
         }
         
@@ -412,7 +582,14 @@ router.post('/ask', async (req, res) => {
         
         res.json({ answer });
     } catch (err) {
-        logger.error('ask_failed', err, { requestId: req.id, projectId });
+        logger.error('ask_failed', err, {
+            requestId: req.id,
+            projectId,
+            projectPath,
+            mode,
+            userAction: 'chat_ask',
+            severity: 'high'
+        });
         res.status(500).json({ error: err.message, requestId: req.id });
     }
 });
@@ -517,18 +694,21 @@ const plugins = Array.from(toolBox.plugins.values()).map(p => ({
     res.json(plugins);
 });
 
-router.post('/plugins', upload.single('plugin'), (req, res) => {
+router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (req, res) => {
     if (!req.file) return res.status(400).send('No file uploaded');
 
     try {
-        const pluginPath = path.join(PLUGINS_DIR, req.file.originalname);
+        const pluginFilename = safePluginFilename(req.file.originalname);
+        const pluginPath = path.join(PLUGINS_DIR, pluginFilename);
         delete require.cache[require.resolve(pluginPath)];
         const plugin = require(pluginPath);
         toolBox.validatePlugin(plugin, { requireExplicitPermissions: true });
         toolBox.loadPlugins();
-        res.json({ message: 'Plugin uploaded and loaded', name: req.file.originalname });
+        res.json({ message: 'Plugin uploaded and loaded', name: pluginFilename });
     } catch (err) {
-        fs.unlinkSync(path.join(PLUGINS_DIR, req.file.originalname));
+        if (req.file?.path && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
         res.status(400).json({ error: err.message });
     }
 });
@@ -577,11 +757,57 @@ router.get('/audit', (req, res) => {
 });
 
 router.get('/logs', (req, res) => {
-    const { limit = 200 } = req.query;
+    const {
+        limit = 200,
+        level,
+        severity,
+        query,
+        userAction,
+        message,
+        since,
+        until
+    } = req.query;
     res.json({
-        logs: logger.list(limit),
+        logs: logger.list(limit, {
+            level,
+            severity,
+            query,
+            userAction,
+            message,
+            since,
+            until
+        }),
         queue: queueService.getStatus()
     });
+});
+
+router.post('/logs/client-error', (req, res) => {
+    let message;
+    let userAction;
+    let component;
+    let severity;
+    try {
+        message = validateString(req.body?.message, 'message', { max: 4000 });
+        userAction = validateString(req.body?.userAction, 'userAction', { required: false, max: 100 }) || 'client';
+        component = validateString(req.body?.component, 'component', { required: false, max: 100 });
+        severity = validateString(req.body?.severity, 'severity', { required: false, max: 20 }) || 'medium';
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_request');
+    }
+
+    const error = new Error(message);
+    if (typeof req.body?.stack === 'string') {
+        error.stack = req.body.stack.slice(0, 12000);
+    }
+
+    logger.error('client_error', error, {
+        requestId: req.id,
+        userAction,
+        component,
+        severity,
+        context: typeof req.body?.context === 'object' && req.body.context ? req.body.context : undefined
+    });
+    res.json({ ok: true });
 });
 
 router.get('/desktop/diagnostics', (req, res) => {
@@ -615,19 +841,79 @@ router.get('/graphify/status', (req, res) => {
         return jsonError(res, err.status || 400, err.message, err.code || 'invalid_path');
     }
 
-    res.json(graphifyService.freshness(dirPath));
+    res.json(graphifyService.freshness(dirPath, { scanSources: false }));
 });
 
-router.post('/graphify/build', async (req, res) => {
+router.post('/graphify/build', (req, res) => {
     let dirPath;
     try {
         dirPath = resolveRegisteredProjectPath(req.body?.path);
         validateIndexableDirectory(dirPath);
-        const result = await graphifyService.build(dirPath, { update: true });
-        res.json({ message: 'Graphify knowledge graph updated', ...result });
+        const job = startGraphifyBuildJob(dirPath);
+        res.status(202).json({
+            message: job.state === 'queued' ? 'Graphify build queued' : 'Graphify build already running',
+            path: dirPath,
+            jobId: job.id,
+            job: publicBuildJob(job),
+            build: graphifyService.readBuildStatus(dirPath)
+        });
     } catch (err) {
         logger.error('graphify_build_request_failed', err, { requestId: req.id, path: dirPath });
         jsonError(res, err.status || 500, err.message, err.code || 'graphify_build_failed');
+    }
+});
+
+router.get('/graphify/build/status', (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.query.path);
+        const jobId = validateString(req.query.jobId, 'jobId', { required: false, max: 100 });
+        const job = jobId ? graphifyBuildJobs.get(jobId) : latestBuildJobForPath(dirPath);
+        if (jobId && (!job || job.path !== dirPath)) {
+            return jsonError(res, 404, `Graphify build job not found: ${jobId}`, 'graphify_build_job_missing');
+        }
+        res.json({
+            path: dirPath,
+            job: publicBuildJob(job),
+            build: graphifyService.readBuildStatus(dirPath),
+            graph: graphifyService.freshness(dirPath, { scanSources: false })
+        });
+    } catch (err) {
+        logger.error('graphify_build_status_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_build_status_failed');
+    }
+});
+
+router.get('/graphify/artifact', (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.query.path);
+        const type = validateString(req.query.type, 'type', { max: 100 });
+        const html = graphifyService.readArtifact(dirPath, type);
+        setGraphifyArtifactHeaders(res);
+        res.send(html);
+    } catch (err) {
+        logger.error('graphify_artifact_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_artifact_failed');
+    }
+});
+
+router.get('/graphify/report', (req, res) => {
+    let dirPath;
+    try {
+        dirPath = resolveRegisteredProjectPath(req.query.path);
+        const report = graphifyService.readReport(dirPath, { maxChars: 120000 });
+        if (!report) {
+            return jsonError(res, 404, `Graphify report not found: ${graphifyService.reportPath(dirPath)}`, 'graphify_report_missing');
+        }
+        res.json({
+            path: dirPath,
+            report,
+            reportPath: graphifyService.reportPath(dirPath)
+        });
+    } catch (err) {
+        logger.error('graphify_report_request_failed', err, { requestId: req.id, path: dirPath });
+        jsonError(res, err.status || 500, err.message, err.code || 'graphify_report_failed');
     }
 });
 
@@ -747,7 +1033,7 @@ router.post('/reindex', (req, res) => {
     let dirPath;
     try {
         dirPath = resolveUserPath(req.body?.path);
-        loadLocalConfig();
+        loadConfig();
         if (!config.watchedDirectories.includes(dirPath)) {
             const err = new Error(`Workspace is not registered: ${dirPath}`);
             err.status = 404;
@@ -773,5 +1059,12 @@ router.delete('/audit', (req, res) => {
     auditLog.clear();
     res.json({ message: 'Audit logs cleared' });
 });
+
+router.loadConfig = loadConfig;
+router.getConfigPath = getConfigPath;
+router.isGeneratedTempWorkspace = isGeneratedTempWorkspace;
+router.isPairingRequiredByDefault = isPairingRequiredByDefault;
+router.arePluginUploadsEnabled = arePluginUploadsEnabled;
+router.safePluginFilename = safePluginFilename;
 
 module.exports = router;

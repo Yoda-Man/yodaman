@@ -1,26 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Puzzle, Upload, Trash2, CheckCircle, Plus, Terminal, Zap, FileCode, GitBranch, Play, Search, AlertTriangle } from 'lucide-react';
+import { Puzzle, Upload, Trash2, CheckCircle, Plus, Terminal, Zap, FileCode } from 'lucide-react';
 import { api } from '../api/api';
 
-export default function PluginsWindow({ selectedProject }) {
+export default function PluginsWindow() {
     const [plugins, setPlugins] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [status, setStatus] = useState(null);
-    const [graphStatus, setGraphStatus] = useState(null);
-    const [graphQuery, setGraphQuery] = useState('');
-    const [graphResult, setGraphResult] = useState('');
-    const [impactNode, setImpactNode] = useState('');
-    const [impactResult, setImpactResult] = useState('');
-    const [graphMap, setGraphMap] = useState(null);
-    const [isGraphBusy, setIsGraphBusy] = useState(false);
 
     useEffect(() => {
         loadPlugins();
     }, []);
-
-    useEffect(() => {
-        loadGraphStatus();
-    }, [selectedProject]);
 
     const loadPlugins = async () => {
         try {
@@ -30,80 +19,6 @@ export default function PluginsWindow({ selectedProject }) {
             console.error('Failed to load plugins:', err);
         }
     };
-
-    const loadGraphStatus = async () => {
-        if (!selectedProject?.path) {
-            setGraphStatus(null);
-            setGraphMap(null);
-            return;
-        }
-        try {
-            const [data, map] = await Promise.all([
-                api.getGraphifyStatus(selectedProject.path),
-                api.mapGraphify(selectedProject.path, 60).catch(() => null)
-            ]);
-            setGraphStatus(data);
-            setGraphMap(map);
-        } catch (err) {
-            console.error('Failed to load Graphify status:', err);
-        }
-    };
-
-    const buildGraph = async () => {
-        if (!selectedProject?.path || isGraphBusy) return;
-        setIsGraphBusy(true);
-        setStatus({ type: 'info', message: 'Updating Graphify knowledge graph...' });
-        try {
-            await api.buildGraphify(selectedProject.path);
-            await loadGraphStatus();
-            setStatus({ type: 'success', message: 'Graphify knowledge graph updated.' });
-        } catch (err) {
-            setStatus({ type: 'error', message: `Graphify update failed: ${err.message}` });
-        } finally {
-            setIsGraphBusy(false);
-        }
-    };
-
-    const queryGraph = async () => {
-        if (!selectedProject?.path || !graphQuery.trim() || isGraphBusy) return;
-        setIsGraphBusy(true);
-        setGraphResult('');
-        try {
-            const data = await api.queryGraphify(selectedProject.path, graphQuery.trim());
-            setGraphResult(data.insights || '');
-            await loadGraphStatus();
-        } catch (err) {
-            setGraphResult(`Graphify query failed: ${err.message}`);
-        } finally {
-            setIsGraphBusy(false);
-        }
-    };
-
-    const analyzeImpact = async () => {
-        if (!selectedProject?.path || !impactNode.trim() || isGraphBusy) return;
-        setIsGraphBusy(true);
-        setImpactResult('');
-        try {
-            const data = await api.affectedGraphify(selectedProject.path, impactNode.trim(), 3);
-            setImpactResult(data.impact || '');
-            await loadGraphStatus();
-        } catch (err) {
-            setImpactResult(`Impact analysis failed: ${err.message}`);
-        } finally {
-            setIsGraphBusy(false);
-        }
-    };
-
-    const positionedNodes = (graphMap?.nodes || []).map((node, index, list) => {
-        const angle = (Math.PI * 2 * index) / Math.max(list.length, 1);
-        const radius = 118 + ((node.community || 0) % 3) * 24;
-        return {
-            ...node,
-            x: 190 + Math.cos(angle) * radius,
-            y: 150 + Math.sin(angle) * radius
-        };
-    });
-    const positionById = Object.fromEntries(positionedNodes.map(node => [node.id, node]));
 
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
@@ -162,173 +77,6 @@ export default function PluginsWindow({ selectedProject }) {
                         </label>
                     </div>
                 </header>
-
-                <section className="mb-10 rounded-[32px] border border-cyan-500/15 bg-cyan-500/[0.04] p-6">
-                    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex min-w-0 items-start gap-4">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/10">
-                                <GitBranch size={24} className="text-cyan-300" />
-                            </div>
-                            <div className="min-w-0">
-                                <h2 className="text-xl font-bold text-white">Graphify Knowledge Graph</h2>
-                                <p className="mt-1 truncate text-xs font-mono text-slate-500">
-                                    {selectedProject?.path || 'Select a workspace to inspect graph state'}
-                                </p>
-                                {graphStatus && (
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                        <span className="rounded-lg bg-cyan-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-cyan-300">Mandatory</span>
-                                        <span className={`rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-widest ${graphStatus.graphExists ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>
-                                            {graphStatus.graphExists ? 'Graph Ready' : 'Needs Build'}
-                                        </span>
-                                        {graphStatus.stale && (
-                                            <span className="rounded-lg bg-rose-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-rose-300">
-                                                Stale
-                                            </span>
-                                        )}
-                                        {graphStatus.graphUpdatedAt && (
-                                            <span className="rounded-lg bg-white/5 px-2 py-1 text-[9px] font-mono text-slate-400">
-                                                {new Date(graphStatus.graphUpdatedAt).toLocaleString()}
-                                            </span>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                            <button
-                                onClick={loadGraphStatus}
-                                disabled={!selectedProject || isGraphBusy}
-                                className="h-11 w-11 rounded-xl border border-white/10 bg-white/5 text-slate-400 transition-all hover:bg-white/10 hover:text-white disabled:opacity-40"
-                                title="Refresh Graphify status"
-                            >
-                                <Zap size={17} className="mx-auto" />
-                            </button>
-                            <button
-                                onClick={buildGraph}
-                                disabled={!selectedProject || isGraphBusy}
-                                className="flex h-11 items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-4 text-xs font-black uppercase tracking-widest text-cyan-200 transition-all hover:bg-cyan-500/20 disabled:opacity-40"
-                            >
-                                <Play size={15} />
-                                Build Graph
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="mt-5 flex flex-col gap-3 md:flex-row">
-                        <input
-                            value={graphQuery}
-                            onChange={(e) => setGraphQuery(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && queryGraph()}
-                            disabled={!selectedProject || isGraphBusy}
-                            placeholder="Ask the graph about relationships, architecture, data flow..."
-                            className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200 outline-none transition-all placeholder:text-slate-600 focus:border-cyan-500/40"
-                        />
-                        <button
-                            onClick={queryGraph}
-                            disabled={!selectedProject || !graphQuery.trim() || isGraphBusy}
-                            className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 text-xs font-black uppercase tracking-widest text-slate-950 transition-all hover:bg-cyan-300 disabled:opacity-40"
-                        >
-                            <Search size={15} />
-                            Query
-                        </button>
-                    </div>
-
-                    {graphResult && (
-                        <pre className="mt-4 max-h-72 overflow-auto rounded-2xl border border-white/10 bg-black/30 p-4 text-xs leading-relaxed text-slate-300 custom-scrollbar">
-                            {graphResult}
-                        </pre>
-                    )}
-
-                    <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <div className="mb-3 flex items-center gap-2">
-                                <AlertTriangle size={16} className="text-amber-300" />
-                                <h3 className="text-sm font-bold text-white">Impact Analysis</h3>
-                            </div>
-                            <div className="flex flex-col gap-3 sm:flex-row">
-                                <input
-                                    value={impactNode}
-                                    onChange={(e) => setImpactNode(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && analyzeImpact()}
-                                    disabled={!selectedProject || isGraphBusy}
-                                    placeholder="Function, file, class, or concept..."
-                                    className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-amber-500/40"
-                                />
-                                <button
-                                    onClick={analyzeImpact}
-                                    disabled={!selectedProject || !impactNode.trim() || isGraphBusy}
-                                    className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-amber-200 transition-all hover:bg-amber-500/20 disabled:opacity-40"
-                                >
-                                    Analyze
-                                </button>
-                            </div>
-                            {impactResult && (
-                                <pre className="mt-4 max-h-56 overflow-auto rounded-xl border border-white/10 bg-black/30 p-3 text-xs leading-relaxed text-slate-300 custom-scrollbar">
-                                    {impactResult}
-                                </pre>
-                            )}
-                        </div>
-
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <div className="mb-3 flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                    <GitBranch size={16} className="text-cyan-300" />
-                                    <h3 className="text-sm font-bold text-white">Architecture Map</h3>
-                                </div>
-                                <span className="text-[10px] font-mono text-slate-500">
-                                    {graphMap ? `${graphMap.totalNodes} nodes / ${graphMap.totalLinks} links` : 'No graph'}
-                                </span>
-                            </div>
-                            {graphMap?.nodes?.length ? (
-                                <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
-                                    <svg viewBox="0 0 380 300" className="h-72 w-full rounded-xl border border-white/10 bg-slate-950/70">
-                                        {(graphMap.links || []).slice(0, 90).map((link, index) => {
-                                            const source = positionById[link.source];
-                                            const target = positionById[link.target];
-                                            if (!source || !target) return null;
-                                            return (
-                                                <line
-                                                    key={`${link.source}-${link.target}-${index}`}
-                                                    x1={source.x}
-                                                    y1={source.y}
-                                                    x2={target.x}
-                                                    y2={target.y}
-                                                    stroke="rgba(103,232,249,0.18)"
-                                                    strokeWidth="1"
-                                                />
-                                            );
-                                        })}
-                                        {positionedNodes.map((node) => (
-                                            <g key={node.id}>
-                                                <circle
-                                                    cx={node.x}
-                                                    cy={node.y}
-                                                    r={node.fileType === 'code' ? 5 : 4}
-                                                    fill={node.fileType === 'code' ? '#22d3ee' : '#a78bfa'}
-                                                    opacity="0.88"
-                                                />
-                                                <title>{node.label}</title>
-                                            </g>
-                                        ))}
-                                    </svg>
-                                    <div className="max-h-72 overflow-auto rounded-xl border border-white/10 bg-black/20 p-3 custom-scrollbar">
-                                        {(graphMap.nodes || []).slice(0, 30).map(node => (
-                                            <div key={node.id} className="mb-2 border-b border-white/5 pb-2 last:border-0">
-                                                <div className="truncate text-xs font-bold text-slate-200" title={node.label}>{node.label}</div>
-                                                <div className="truncate text-[10px] font-mono text-slate-500" title={node.sourceFile}>{node.sourceFile || node.fileType || 'graph node'}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="flex h-72 items-center justify-center rounded-xl border border-dashed border-white/10 text-xs font-bold uppercase tracking-widest text-slate-600">
-                                    Build graph to view map
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </section>
-
 
                 {status && (
                     <div className={`mb-8 p-4 rounded-2xl border flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${
@@ -428,7 +176,7 @@ export default function PluginsWindow({ selectedProject }) {
                                 You can build your own plugins using standard JavaScript. Every plugin you upload is instantly learned by the Yoda-Agent reasoning engine.
                             </p>
                             <div className="flex gap-4">
-                                <a href="#" className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-purple-400 hover:text-purple-300 transition-colors">
+                                <a href="/manual.html#plugins" className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-purple-400 hover:text-purple-300 transition-colors">
                                     <FileCode size={14} /> View Documentation
                                 </a>
                             </div>

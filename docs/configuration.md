@@ -1,6 +1,6 @@
 # Configuration
 
-YodaMan reads persistent workspace configuration from `config.json` and runtime settings from environment variables.
+YodaMan reads persistent workspace configuration from local `config.json` and runtime settings from environment variables. Releases ship `config.example.json`; each support machine should keep its own ignored `config.json`.
 
 ## `config.json`
 
@@ -24,10 +24,14 @@ Use absolute paths. The API validates submitted paths and normalizes them before
 | Variable | Default | Description |
 | --- | --- | --- |
 | `YODAMAN_PORT` | `3090` | Express runtime port. |
-| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `false` | When `true`, non-local clients must send `X-YodaMan-Token` from the pairing flow. |
+| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `true` | Non-local clients must send `X-YodaMan-Token` from the pairing flow. |
 | `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `false` | Allows plugins that declare unrestricted permissions. Keep disabled for normal use. |
+| `YODAMAN_ALLOW_PLUGIN_UPLOADS` | `false` | Enables plugin uploads. Keep disabled except during trusted local support sessions. |
+| `YODAMAN_ALLOW_AGENT_COMMANDS` | `false` | Enables agent shell command execution. Keep disabled except during trusted local support sessions. |
+| `YODAMAN_WATCH_DEBOUNCE_MS` | `1500` | Debounce window for filesystem watcher reindex queueing. |
 | `YODAMAN_GRAPHIFY_BIN` | `graphify` | Graphify executable path. Use this when `graphifyy` installs into a user Python bin directory outside `PATH`. |
-| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `120000` | Timeout for Graphify build, query, explain, and path subprocesses. |
+| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Timeout for Graphify build, query, explain, and path subprocesses. |
+| `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | `25000` | Default Graphify HTML visualization node limit passed as `GRAPHIFY_VIZ_NODE_LIMIT`. Lower it for slower machines or raise it when large mind maps are acceptable. |
 | `YODAMAN_GRAPHIFY_FULL_EXTRACT` | `false` | When `true`, use Graphify full semantic extraction through Ollama instead of the no-LLM update path. |
 | `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | `qwen3:5b` | Local Ollama model passed to Graphify when full extraction is enabled. |
 | `VITE_YODAMAN_API_BASE` | `/api` | Frontend API base path. Use this when the UI talks through a proxy or alternate host. |
@@ -40,3 +44,13 @@ Use absolute paths. The API validates submitted paths and normalizes them before
 - Graphify is mandatory. The runtime fails startup when the Graphify CLI cannot be found.
 - Graphify is local-only in YodaMan. Cloud model provider keys are stripped from Graphify subprocesses, and full extraction forces `--backend ollama`.
 - Plugin permissions are visible through `GET /api/policy`; review them before enabling third-party plugins.
+
+## CLI health checks
+
+Run a local Graphify health summary from the project root or installed package:
+
+```bash
+yodaman doctor --graph
+```
+
+The command reads `config.json`, checks each workspace's `graphify-out/graph.json`, reports active graph count, persisted freshness, orphaned nodes, and the most dependency-heavy source file.

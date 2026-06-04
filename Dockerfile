@@ -20,7 +20,13 @@ COPY backend ./backend
 COPY shared ./shared
 COPY public ./public
 COPY plugins ./plugins
-COPY server.js start.js package.json config.json ./
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-pip \
+    && npm install -g @contextexpert/cli \
+    && python3 -m pip install --break-system-packages graphifyy \
+    && rm -rf /var/lib/apt/lists/*
+COPY server.js start.js package.json config.example.json ./
+RUN cp config.example.json config.json
 
 EXPOSE 3090
 CMD ["node", "server.js"]

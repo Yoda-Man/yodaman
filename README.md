@@ -2,7 +2,7 @@
 
 YodaMan is a local-first AI workspace companion for developers. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private runtime.
 
-![Version](https://img.shields.io/badge/Version-0.2.1-gold)
+![Version](https://img.shields.io/badge/Version-0.2.2-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -58,7 +58,13 @@ python3 -m pip install graphifyy
 
 Runtime dependencies include Express for the local API, React and Vite for the web UI, Context Expert (`ctx`) for workspace intelligence, Graphify (`graphify`, installed from the `graphifyy` Python package) for mandatory knowledge graph construction and graph-aware answer context, Chokidar for file watching, Multer for plugin uploads, and Lucide React for UI icons. Development and packaging use Jest, Electron, Electron Builder, Tailwind CSS, PostCSS, Nodemon, Concurrently, and the release smoke-check script.
 
-Graphify is wired into YodaMan as a required knowledge layer. Reindexing a workspace updates both the Context Expert index and the Graphify graph, then adds the project graph to Graphify's global graph. Chat and agent answers receive graph report context plus question-specific graph traversal output; stale graphs rebuild before answer context is gathered. The Plugins tab exposes Graphify status, freshness warnings, manual graph rebuilds, direct graph queries, impact analysis, and architecture maps. Runtime clients can also call `/api/graphify/status`, `/api/graphify/build`, `/api/graphify/query`, `/api/graphify/explain`, `/api/graphify/path`, `/api/graphify/affected`, `/api/graphify/map`, and `/api/graphify/tree`.
+Graphify is wired into YodaMan as a required knowledge layer. Reindexing a workspace updates both the Context Expert index and the Graphify graph, then adds the project graph to Graphify's global graph. Chat and agent answers receive graph report context plus question-specific graph traversal output; stale graphs rebuild before answer context is gathered. The Graph tab opens Graph Studio, a dedicated project-scoped surface for interactive Graphify visualizations, graph reports, graph queries, and impact analysis. Runtime clients can also call `/api/graphify/status`, `/api/graphify/build`, `/api/graphify/artifact`, `/api/graphify/report`, `/api/graphify/query`, `/api/graphify/explain`, `/api/graphify/path`, `/api/graphify/affected`, `/api/graphify/map`, and `/api/graphify/tree`.
+
+Use the CLI graph doctor for a quick local health check across configured workspaces:
+
+```bash
+yodaman doctor --graph
+```
 
 Yoda-Agent also loads a default coding skill inspired by the Karpathy-style guidance for AI coding agents: surface assumptions, keep changes small, avoid speculative abstractions, make surgical edits, and verify work with targeted checks.
 
@@ -80,6 +86,8 @@ Add or update watched project directories in `config.json`:
   ]
 }
 ```
+
+Released packages include `config.example.json`; local `config.json` is intentionally ignored so support machines do not inherit developer-specific absolute paths.
 
 ## Run
 
@@ -104,10 +112,14 @@ Useful environment variables:
 | `YODAMAN_PORT` | `3090` | Backend runtime port. |
 | `VITE_YODAMAN_API_BASE` | `/api` | Frontend API base path for alternate hosts or proxies. |
 | `VITE_YODAMAN_FETCH_TIMEOUT_MS` | `30000` | Browser request timeout. |
-| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `false` | Requires `X-YodaMan-Token` for non-local API clients when set to `true`. |
+| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `true` | Requires `X-YodaMan-Token` for non-local API clients by default. Set to `false` only for trusted local-only development. |
 | `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `false` | Allows explicitly trusted unrestricted plugins. |
+| `YODAMAN_ALLOW_PLUGIN_UPLOADS` | `false` | Enables plugin uploads only for trusted local support sessions. |
+| `YODAMAN_ALLOW_AGENT_COMMANDS` | `false` | Enables agent shell command execution only for trusted local support sessions. |
+| `YODAMAN_WATCH_DEBOUNCE_MS` | `1500` | Debounce window for filesystem-triggered reindex queueing. |
 | `YODAMAN_GRAPHIFY_BIN` | `graphify` | Graphify CLI binary used to build and query workspace knowledge graphs. |
-| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `120000` | Timeout for Graphify build and query subprocesses. |
+| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Timeout for Graphify build and query subprocesses. |
+| `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | `25000` | Graphify HTML visualization node limit passed to Graphify subprocesses. |
 | `YODAMAN_GRAPHIFY_FULL_EXTRACT` | `false` | Use Graphify full semantic extraction through Ollama only. |
 | `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | `qwen3:5b` | Ollama model passed to Graphify when full extraction is enabled. |
 
@@ -127,6 +139,7 @@ npm run build        # Build the React app
 npm test             # Run Jest tests
 npm run desktop      # Build and launch the Electron app
 npm run desktop:pack # Create an unpacked desktop build
+yodaman doctor --graph # Check Graphify graph health
 ```
 
 The npm CLI entrypoint is `yodaman` after installation from the package.
@@ -141,9 +154,12 @@ npm run release:smoke
 
 ## Operations
 
-Health and support endpoints are available at `/api/status`, `/api/check?path=...`, `/api/desktop/diagnostics`, `/api/policy`, and `/api/audit`. Runtime logs are emitted as structured JSON with request IDs, and responses include `X-Request-Id` for support correlation.
+Health and support endpoints are available at `/api/status`, `/api/check?path=...`, `/api/desktop/diagnostics`, `/api/policy`, `/api/audit`, and `/api/logs`. Runtime logs are emitted as structured JSON with request IDs, severity, user action, error type, and stack traces for support correlation.
+
+`/api/logs` accepts `level`, `severity`, `query`, `userAction`, `message`, `since`, `until`, and `limit` filters. Use these filters or the Logs modal to isolate search failures, agent tool errors, chat failures, frontend client errors, and startup/runtime exceptions.
 
 Operational runbooks live in [docs/runbooks.md](docs/runbooks.md). Configuration details live in [docs/configuration.md](docs/configuration.md), and the ecosystem overview is in [docs/ecosystem-architecture.md](docs/ecosystem-architecture.md).
+Support ownership, escalation, and pre-handover checks live in [docs/support-handover.md](docs/support-handover.md).
 
 ## Clients
 

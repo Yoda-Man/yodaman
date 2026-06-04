@@ -41,7 +41,7 @@ The backend runtime listens on `http://localhost:3090`. The development web UI l
 
 ## Configuration
 
-YodaMan stores its configuration in `config.json` at the root of the project.
+YodaMan stores local workspace configuration in `config.json` at the root of the project. Releases ship `config.example.json`; copy it to `config.json` or use the app Settings screen to create local workspace configuration.
 
 ```json
 {
@@ -54,7 +54,13 @@ YodaMan stores its configuration in `config.json` at the root of the project.
 - **watchedDirectories**: A list of absolute paths that YodaMan will monitor for changes.
 - **removedDirectories**: A local tombstone list for workspaces deleted from YodaMan so they are not re-added from stale index metadata.
 
-YodaMan 0.2.1 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
+YodaMan 0.2.2 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
+
+Check Graphify graph health across configured workspaces:
+
+```bash
+yodaman doctor --graph
+```
 
 Runtime state files such as `audit-log.json`, `audit-log.jsonl`, `task-history.json`, and `task-history.jsonl` are local machine artifacts and are ignored by git.
 
@@ -82,6 +88,13 @@ Allow intentionally trusted unrestricted plugins:
 YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true npm start
 ```
 
+Enable plugin uploads or agent shell commands only during trusted local support sessions:
+
+```bash
+YODAMAN_ALLOW_PLUGIN_UPLOADS=true npm start
+YODAMAN_ALLOW_AGENT_COMMANDS=true npm start
+```
+
 Change the backend port:
 
 ```bash
@@ -104,6 +117,12 @@ Tune Graphify subprocess timeouts:
 
 ```bash
 YODAMAN_GRAPHIFY_TIMEOUT_MS=180000 npm start
+```
+
+Tune Graphify HTML visualization size:
+
+```bash
+YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT=25000 npm start
 ```
 
 Enable Graphify full semantic extraction through Ollama only:

@@ -5,6 +5,7 @@ const { exec } = require('child_process');
 const contextEngine = require('./ContextEngine');
 const auditLog = require('./AuditLog');
 const graphifyService = require('./GraphifyService');
+const logger = require('./Logger');
 
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
 const PLUGIN_PERMISSION_ALLOWLIST = new Set([
@@ -171,6 +172,9 @@ class ToolBox {
     async executeCommand({ command, cwd }) {
         const workingDirectory = this.resolveAllowedPath(cwd || process.cwd());
         this.assertCommandAllowed(command);
+        if (process.env.YODAMAN_ALLOW_AGENT_COMMANDS !== 'true') {
+            throw new Error('Agent shell commands are disabled. Set YODAMAN_ALLOW_AGENT_COMMANDS=true only for trusted local support sessions.');
+        }
 
         return new Promise((resolve) => {
             console.log(`[ToolBox] Running command: ${command} (cwd: ${workingDirectory})`);
@@ -184,10 +188,105 @@ class ToolBox {
         });
     }
 
-    async searchCode({ query, project }) {
+    async searchCode({ query, project, top } = {}) {
         const args = ['search', query];
         if (project) args.push('-p', this.resolveAllowedPath(project));
-        return await contextEngine.executeJson(args);
+        try {
+            const results = await contextEngine.executeJson(args);
+            if (Array.isArray(results)) return results;
+            if (Array.isArray(results?.results)) return results.results;
+            if (results?.error || results?.message) {
+                throw new Error(results.error || results.message);
+            }
+            throw new Error('ctx search returned an unsupported result shape');
+        } catch (err) {
+            logger.warn('ctx_search_fallback_started', {
+                query,
+                project,
+                error: err.message,
+                userAction: 'code_search',
+                severity: 'medium'
+            });
+            return this.searchCodeFilesystem({ query, project, top });
+        }
+    }
+
+    searchCodeFilesystem({ query, project, top = 10 }) {
+        const root = this.resolveAllowedPath(project || process.cwd());
+        const needle = String(query || '').trim().toLowerCase();
+        if (!needle) return [];
+
+        const ignoredDirs = new Set(['.git', 'node_modules', 'dist', 'build', 'release', 'graphify-out', '.next', '.cache']);
+        const ignoredFiles = new Set(['.env', '.env.local', '.env.development', '.env.production', '.env.test']);
+        const maxResults = Math.min(Math.max(Number(top || 10), 1), 50);
+        const results = [];
+
+        const walk = (dirPath, depth = 0) => {
+            if (results.length >= maxResults || depth > 8) return;
+            let entries;
+            try {
+                entries = fs.readdirSync(dirPath, { withFileTypes: true });
+            } catch {
+                return;
+            }
+
+            for (const entry of entries) {
+                if (results.length >= maxResults) break;
+                const entryPath = path.join(dirPath, entry.name);
+                if (entry.isDirectory()) {
+                    if (!ignoredDirs.has(entry.name)) walk(entryPath, depth + 1);
+                    continue;
+                }
+                if (!entry.isFile()) continue;
+                if (ignoredFiles.has(entry.name) || entry.name.startsWith('.env.')) continue;
+                this.searchFileForNeedle(entryPath, needle, results, maxResults);
+            }
+        };
+
+        walk(root);
+        return results;
+    }
+
+    searchFileForNeedle(filePath, needle, results, maxResults) {
+        let stat;
+        try {
+            stat = fs.statSync(filePath);
+        } catch {
+            return;
+        }
+        if (stat.size > 1024 * 1024) return;
+
+        let content;
+        try {
+            content = fs.readFileSync(filePath, 'utf8');
+        } catch {
+            return;
+        }
+        if (content.includes('\u0000')) return;
+
+        const lower = content.toLowerCase();
+        const index = lower.indexOf(needle);
+        if (index === -1) return;
+
+        const before = content.slice(0, index).split('\n');
+        const lineNumber = before.length;
+        const lines = content.split('\n');
+        const startLine = Math.max(lineNumber - 3, 0);
+        const endLine = Math.min(lineNumber + 2, lines.length);
+        const snippet = lines.slice(startLine, endLine).join('\n');
+        const exactPathMatch = path.basename(filePath).toLowerCase().includes(needle) ? 0.15 : 0;
+
+        results.push({
+            content: snippet,
+            text: snippet,
+            snippet,
+            score: Math.min(0.95, 0.65 + exactPathMatch),
+            metadata: {
+                path: filePath,
+                line: lineNumber,
+                source: 'filesystem-fallback'
+            }
+        });
     }
 
     async listFiles({ directoryPath }) {
