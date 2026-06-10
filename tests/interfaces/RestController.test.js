@@ -8,6 +8,7 @@ const contextEngine = require('../../backend/infrastructure/ContextEngine');
 const graphifyService = require('../../backend/infrastructure/GraphifyService');
 const watcherService = require('../../backend/infrastructure/FileSystemWatcher');
 const logger = require('../../backend/infrastructure/Logger');
+const gitService = require('../../backend/services/gitService');
 
 describe('RestController Integration', () => {
     let testConfigDir;
@@ -167,6 +168,48 @@ describe('RestController Integration', () => {
         expect(rejected.payload).toEqual(expect.objectContaining({
             code: 'invalid_mode'
         }));
+    });
+
+    test('GET /git endpoints expose local history, heatmap, branch, and commit diff', async () => {
+        const originalHistory = gitService.getCommitHistory;
+        const originalHeatmap = gitService.getHeatmapData;
+        const originalBranch = gitService.getBranchInfo;
+        const originalDiff = gitService.getCommitDiff;
+
+        gitService.getCommitHistory = jest.fn(async () => [{ hash: 'abc123', filesChanged: 2 }]);
+        gitService.getHeatmapData = jest.fn(async () => [{ filePath: 'src/App.jsx', changeCount: 4 }]);
+        gitService.getBranchInfo = jest.fn(async () => ({ currentBranch: 'main', ahead: 0, behind: 0 }));
+        gitService.getCommitDiff = jest.fn(async () => ({ hash: 'abc123', files: [{ filePath: 'src/App.jsx' }] }));
+
+        try {
+            const history = await invoke('get', '/git/history', {
+                query: { path: '/workspace', file: 'src/App.jsx', limit: '25' }
+            });
+            expect(history.statusCode).toBe(200);
+            expect(history.payload.commits[0].hash).toBe('abc123');
+            expect(gitService.getCommitHistory).toHaveBeenCalledWith('/workspace', 'src/App.jsx', 25);
+
+            const heatmap = await invoke('get', '/git/heatmap', {
+                query: { path: '/workspace' }
+            });
+            expect(heatmap.payload.files[0].changeCount).toBe(4);
+
+            const branch = await invoke('get', '/git/branch', {
+                query: { path: '/workspace' }
+            });
+            expect(branch.payload.currentBranch).toBe('main');
+
+            const commit = await invoke('get', '/git/commit', {
+                query: { path: '/workspace', hash: 'abc123' }
+            });
+            expect(commit.payload.files[0].filePath).toBe('src/App.jsx');
+            expect(gitService.getCommitDiff).toHaveBeenCalledWith('/workspace', 'abc123');
+        } finally {
+            gitService.getCommitHistory = originalHistory;
+            gitService.getHeatmapData = originalHeatmap;
+            gitService.getBranchInfo = originalBranch;
+            gitService.getCommitDiff = originalDiff;
+        }
     });
 
     test('POST /ask rejects malformed payloads before reaching ctx', async () => {

@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 
 // Infrastructure Layer
 const contextEngine = require('../infrastructure/ContextEngine');
@@ -10,6 +11,8 @@ const watcherService = require('../infrastructure/FileSystemWatcher');
 const toolBox = require('../infrastructure/ToolBox');
 const searchRouter = require('../services/searchRouter');
 const chatHandler = require('../services/chatHandler');
+const fileUploadService = require('../services/fileUploadService');
+const gitService = require('../services/gitService');
 const auditLog = require('../infrastructure/AuditLog');
 const pairingService = require('../infrastructure/PairingService');
 const logger = require('../infrastructure/Logger');
@@ -25,6 +28,7 @@ const router = express.Router();
 const DEFAULT_CONFIG_PATH = path.join(__dirname, '../../config.json');
 const PLUGINS_DIR = path.resolve(__dirname, '../../plugins');
 const ALLOWED_MODES = new Set(['code', 'doc']);
+const DEFAULT_PLUGINS = new Set(['graphify', 'Grand-Inquisitor', 'CodeTrooper', 'Droid-Sweep', 'lightsaber']);
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -144,6 +148,43 @@ function validateString(value, name, { required = true, max = 4000 } = {}) {
     return trimmed;
 }
 
+function runGit(dirPath, args) {
+    return new Promise((resolve, reject) => {
+        execFile('git', args, { cwd: dirPath, timeout: 5000 }, (err, stdout, stderr) => {
+            if (err) {
+                err.message = (stderr || err.message || '').trim() || err.message;
+                reject(err);
+                return;
+            }
+            resolve(String(stdout || '').trim());
+        });
+    });
+}
+
+async function readGitContext(dirPath) {
+    const [branch, status, commits] = await Promise.all([
+        runGit(dirPath, ['rev-parse', '--abbrev-ref', 'HEAD']),
+        runGit(dirPath, ['status', '--porcelain=v2', '--branch']),
+        runGit(dirPath, ['log', '--pretty=format:%h%x09%s%x09%cr', '-n', '8']).catch(() => '')
+    ]);
+
+    const branchLine = status.split('\n').find(line => line.startsWith('# branch.ab '));
+    const [, ahead = '+0', behind = '-0'] = branchLine?.match(/# branch\.ab (\+\d+) (-\d+)/) || [];
+
+    return {
+        branch,
+        ahead: Number(ahead.replace('+', '')) || 0,
+        behind: Math.abs(Number(behind.replace('-', ''))) || 0,
+        recentCommits: commits
+            .split('\n')
+            .filter(Boolean)
+            .map(line => {
+                const [hash, subject, relativeTime] = line.split('\t');
+                return { hash, subject, relativeTime };
+            })
+    };
+}
+
 function validateMode(mode, { required = false } = {}) {
     const value = validateString(mode, 'mode', { required, max: 20 });
     if (!value) return undefined;
@@ -181,11 +222,13 @@ function isLocalRequest(req) {
 }
 
 function isPairingRequiredByDefault() {
-    return process.env.YODAMAN_REQUIRE_PAIRING_TOKEN !== 'false';
+    const settings = require('../infrastructure/SettingsProvider');
+    return settings.get('requirePairingToken');
 }
 
 function arePluginUploadsEnabled() {
-    return process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS === 'true';
+    const settings = require('../infrastructure/SettingsProvider');
+    return settings.get('allowPluginUploads');
 }
 
 function safePluginFilename(originalName) {
@@ -193,8 +236,8 @@ function safePluginFilename(originalName) {
     if (filename !== originalName || filename.includes('..')) {
         throw new Error('Invalid plugin filename');
     }
-    if (!/^[a-zA-Z0-9._-]+\.js$/.test(filename)) {
-        throw new Error('Plugin upload must be a JavaScript file with a safe filename');
+    if (!/^[a-zA-Z0-9._-]+\.(js|zip)$/.test(filename)) {
+        throw new Error('Plugin upload must be a .js or .zip file with a safe filename');
     }
     return filename;
 }
@@ -230,6 +273,8 @@ router.post('/mode', (req, res) => {
         jsonError(res, err.status || 400, err.message, 'invalid_mode');
     }
 });
+
+router.use('/upload', fileUploadService.router);
 
 function loadConfig() {
     config = { watchedDirectories: [], removedDirectories: [] };
@@ -594,12 +639,81 @@ router.post('/ask', async (req, res) => {
     }
 });
 
+router.get('/git/context', async (req, res) => {
+    let dirPath;
+    try {
+        dirPath = validateString(req.query?.path, 'path', { max: 2000 });
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, 'invalid_request');
+    }
+
+    try {
+        const gitState = await readGitContext(dirPath);
+        res.json(gitState);
+    } catch (err) {
+        res.status(200).json({
+            branch: 'Unavailable',
+            ahead: 0,
+            behind: 0,
+            recentCommits: [],
+            error: err.message
+        });
+    }
+});
+
+router.get('/git/history', async (req, res) => {
+    try {
+        const workspacePath = validateString(req.query?.path, 'path', { max: 4096 });
+        const filePath = validateString(req.query?.file, 'file', { required: false, max: 4096 });
+        const limit = Math.max(1, Math.min(Number(req.query?.limit) || 100, 500));
+        const commits = await gitService.getCommitHistory(workspacePath, filePath, limit);
+        res.json({ commits });
+    } catch (err) {
+        jsonError(res, err.status || 500, err.message, 'git_history_failed');
+    }
+});
+
+router.get('/git/heatmap', async (req, res) => {
+    try {
+        const workspacePath = validateString(req.query?.path, 'path', { max: 4096 });
+        const files = await gitService.getHeatmapData(workspacePath);
+        res.json({ files });
+    } catch (err) {
+        jsonError(res, err.status || 500, err.message, 'git_heatmap_failed');
+    }
+});
+
+router.get('/git/branch', async (req, res) => {
+    try {
+        const workspacePath = validateString(req.query?.path, 'path', { max: 4096 });
+        const branch = await gitService.getBranchInfo(workspacePath);
+        res.json(branch);
+    } catch (err) {
+        jsonError(res, err.status || 500, err.message, 'git_branch_failed');
+    }
+});
+
+router.get('/git/commit', async (req, res) => {
+    try {
+        const workspacePath = validateString(req.query?.path, 'path', { max: 4096 });
+        const commitHash = validateString(req.query?.hash, 'hash', { max: 80 });
+        const diff = await gitService.getCommitDiff(workspacePath, commitHash);
+        res.json(diff);
+    } catch (err) {
+        jsonError(res, err.status || 500, err.message, 'git_commit_failed');
+    }
+});
+
 router.post('/agent/task', async (req, res) => {
     let task;
     let projectId;
+    let fileIds = [];
     try {
         task = validateString(req.body?.task, 'task', { max: 20000 });
         projectId = validateProjectId(req.body?.projectId);
+        fileIds = Array.isArray(req.body?.fileIds)
+            ? req.body.fileIds.filter(fileId => typeof fileId === 'string' && fileId.trim()).slice(0, 20)
+            : [];
     } catch (err) {
         return jsonError(res, err.status || 400, err.message, 'invalid_request');
     }
@@ -619,13 +733,22 @@ router.post('/agent/task', async (req, res) => {
     };
 
     try {
+        const uploadedFiles = [];
+        for (const fileId of fileIds) {
+            try {
+                uploadedFiles.push(fileUploadService.attachTempFileToTask(taskId, fileId));
+            } catch (err) {
+                sendEvent({ type: 'upload_error', fileId, message: err.message });
+            }
+        }
+
         sendEvent({ type: 'task_started', projectId });
 
         const steps = [];
         const finalAnswer = await agentEngine.executeTask(task, taskId, (step) => {
             steps.push(step);
             sendEvent(step);
-        }, { projectId });
+        }, { projectId, uploadedFiles });
 
         if (finalAnswer === null) {
             res.end();
@@ -695,28 +818,97 @@ const plugins = Array.from(toolBox.plugins.values()).map(p => ({
 });
 
 router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (req, res) => {
-    if (!req.file) return res.status(400).send('No file uploaded');
+    logger.info('plugin_upload_received', { filename: req.file?.originalname, size: req.file?.size, mime: req.file?.mimetype, tempPath: req.file?.path });
+    if (!req.file) {
+        logger.error('plugin_upload_no_file', new Error('No file in request'), { userAction: 'plugin_upload', severity: 'high' });
+        return res.status(400).send('No file uploaded');
+    }
+    const startTime = Date.now();
 
     try {
-        const pluginFilename = safePluginFilename(req.file.originalname);
-        const pluginPath = path.join(PLUGINS_DIR, pluginFilename);
+        let pluginFilename = req.file.originalname;
+        let pluginPath = req.file.path;
+        logger.info('plugin_upload_start', { filename: pluginFilename, path: pluginPath, size: req.file.size });
+
+        // Extract zip files using system unzip (no npm dependency needed)
+        if (pluginFilename.endsWith('.zip')) {
+            logger.info('plugin_upload_extract_begin', { filename: pluginFilename, size: req.file?.size });
+            const { execSync } = require('child_process');
+            const extractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-extract-'));
+            execSync(`unzip -o "${pluginPath}" -d "${extractDir}"`, { stdio: 'pipe' });
+
+            // Find the main .js file (prefer main.js, then any .js at root)
+            const walkDir = (dir) => { let r=[]; try{fs.readdirSync(dir).forEach(e=>{const p=path.join(dir,e);const s=fs.statSync(p);if(s.isDirectory()&&!e.startsWith('__MACOSX')&&!e.startsWith('.'))r=r.concat(walkDir(p));else if(e.endsWith('.js')&&!e.startsWith('._'))r.push(p);})}catch{} return r; };
+            const jsFiles = walkDir(extractDir);
+            // Prefer main.js at root level
+            const mainEntry = jsFiles.find(f => path.basename(f) === 'main.js') || jsFiles[0];
+            if (!mainEntry) throw new Error('No .js plugin file found in the zip archive');
+
+            const safeName = safePluginFilename(path.basename(mainEntry));
+            const targetPath = path.join(PLUGINS_DIR, safeName);
+            fs.copyFileSync(mainEntry, targetPath);
+
+            // Merge plugin.json fields into the plugin if present
+            logger.info('plugin_merge_looking_for_json', { extractDir });
+            const walkAll = (d) => { let r=[]; try{fs.readdirSync(d).forEach(e=>{const p=path.join(d,e);const s=fs.statSync(p);if(s.isDirectory()&&!e.startsWith('__MACOSX')&&!e.startsWith('.'))r=r.concat(walkAll(p));else if(!e.startsWith('._'))r.push(p);})}catch{} return r; };
+            const jsonFiles = walkAll(extractDir).filter(f => path.basename(f) === 'plugin.json');
+            logger.info('plugin_merge_json_found', { count: jsonFiles.length, files: jsonFiles });
+            let mergedPermissions = null;
+            for (const jf of jsonFiles) {
+                try {
+                    const meta = JSON.parse(fs.readFileSync(jf, 'utf8'));
+                    if (Array.isArray(meta.permissions)) mergedPermissions = meta.permissions;
+                    // Also copy plugin.json to plugins dir for reference
+                    const jsonTarget = path.join(PLUGINS_DIR, path.basename(jf));
+                    if (!fs.existsSync(jsonTarget)) fs.copyFileSync(jf, jsonTarget);
+                } catch (e) { logger.warn('plugin_json_parse_failed', { file: jf, error: e.message }); }
+            }
+            // Apply merged permissions by appending to the plugin source
+            if (mergedPermissions) {
+                let content = fs.readFileSync(targetPath, 'utf8');
+                const permStr = JSON.stringify(mergedPermissions);
+                // Inject permissions after name field
+                content = content.replace(/name:\s*['"][^'"]+['"]/, `$&,permissions:${permStr}`);
+                fs.writeFileSync(targetPath, content, 'utf8');
+                logger.info('plugin_merge_permissions', { permissions: mergedPermissions });
+            }
+
+            // Cleanup
+            fs.rmSync(extractDir, { recursive: true, force: true });
+            fs.unlinkSync(pluginPath);
+            pluginFilename = safeName;
+            pluginPath = targetPath;
+        }
+
+        const validatedName = safePluginFilename(pluginFilename);
+        if (!pluginFilename.endsWith('.zip')) {
+            // Only re-validate path if we didn't already extract
+            pluginPath = path.join(PLUGINS_DIR, validatedName);
+        }
+
+        logger.info('plugin_upload_require', { pluginPath });
         delete require.cache[require.resolve(pluginPath)];
         const plugin = require(pluginPath);
+        logger.info('plugin_upload_validate', { name: plugin.name, file: pluginFilename });
         toolBox.validatePlugin(plugin, { requireExplicitPermissions: true });
+        logger.info('plugin_upload_loading', { name: pluginFilename });
         toolBox.loadPlugins();
-        res.json({ message: 'Plugin uploaded and loaded', name: pluginFilename });
+        const elapsed = Date.now() - startTime;
+        logger.info('plugin_upload_success', { name: validatedName || pluginFilename, file: pluginFilename, durationMs: elapsed });
+        res.json({ message: 'Plugin uploaded and loaded', name: validatedName || pluginFilename });
     } catch (err) {
         if (req.file?.path && fs.existsSync(req.file.path)) {
             fs.unlinkSync(req.file.path);
         }
+        logger.error('plugin_upload_failed', err, { filename: req.file?.originalname, step: 'extract/validate', userAction: 'plugin_upload', severity: 'high' });
         res.status(400).json({ error: err.message });
     }
 });
 
 router.delete('/plugins/:name', (req, res) => {
     const { name } = req.params;
-    if (name === 'graphify') {
-        return jsonError(res, 403, 'Graphify is mandatory and cannot be removed', 'mandatory_plugin');
+    if (DEFAULT_PLUGINS.has(name)) {
+        return jsonError(res, 403, `${name} is a default plugin and cannot be removed`, 'mandatory_plugin');
     }
 
     const plugin = toolBox.plugins.get(name);
@@ -731,6 +923,41 @@ router.delete('/plugins/:name', (req, res) => {
     } else {
         res.status(404).send('Plugin not found');
     }
+});
+
+// --- Plugin Enable/Disable ---
+
+router.get('/plugins/:name/status', (req, res) => {
+    const { name } = req.params;
+    const plugin = toolBox.plugins.get(name);
+    const isDisabled = toolBox.disabledPlugins.has(name);
+    res.json({
+        name,
+        loaded: !!plugin,
+        enabled: !isDisabled,
+        disabled: isDisabled
+    });
+});
+
+router.post('/plugins/:name/enable', (req, res) => {
+    const { name } = req.params;
+    if (!toolBox.plugins.has(name) && !toolBox.disabledPlugins.has(name)) {
+        return jsonError(res, 404, 'Plugin not found', 'plugin_not_found');
+    }
+    toolBox.enablePlugin(name);
+    res.json({ message: `Plugin ${name} enabled`, name, enabled: true });
+});
+
+router.post('/plugins/:name/disable', (req, res) => {
+    const { name } = req.params;
+    if (DEFAULT_PLUGINS.has(name)) {
+        return jsonError(res, 403, `${name} is a default plugin and cannot be disabled`, 'mandatory_plugin');
+    }
+    if (!toolBox.plugins.has(name) && !toolBox.disabledPlugins.has(name)) {
+        return jsonError(res, 404, 'Plugin not found', 'plugin_not_found');
+    }
+    toolBox.disablePlugin(name);
+    res.json({ message: `Plugin ${name} disabled`, name, disabled: true });
 });
 
 
@@ -1058,6 +1285,28 @@ router.delete('/agent/tasks', (req, res) => {
 router.delete('/audit', (req, res) => {
     auditLog.clear();
     res.json({ message: 'Audit logs cleared' });
+});
+
+// --- Settings API ---
+
+router.get('/settings', (req, res) => {
+    const settings = require('../infrastructure/SettingsProvider');
+    res.json(settings.getAll());
+});
+
+router.put('/settings', (req, res) => {
+    const settings = require('../infrastructure/SettingsProvider');
+    const allowed = ['allowPluginUploads', 'allowUnrestrictedPlugins', 'allowAgentCommands', 'requirePairingToken'];
+    const updates = {};
+    for (const key of allowed) {
+        if (req.body[key] !== undefined) updates[key] = Boolean(req.body[key]);
+    }
+    if (Object.keys(updates).length === 0) return jsonError(res, 400, 'No valid settings provided', 'invalid_settings');
+    settings.save(updates);
+    // Reload ToolBox to pick up permission changes
+    const toolBox = require('../infrastructure/ToolBox');
+    toolBox.loadPluginPermissions();
+    res.json(settings.getAll());
 });
 
 router.loadConfig = loadConfig;

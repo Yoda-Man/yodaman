@@ -23,16 +23,21 @@ export default function PluginsWindow() {
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        console.log('[PluginUpload] File selected:', file.name, Math.round(file.size/1024)+'KB');
 
         setIsUploading(true);
         setStatus({ type: 'info', message: `Uploading ${file.name}...` });
 
         try {
-            await api.uploadPlugin(file);
+            console.log('[PluginUpload] Sending POST /api/plugins...');
+            const result = await api.uploadPlugin(file);
+            console.log('[PluginUpload] Upload response:', result);
             setStatus({ type: 'success', message: `${file.name} successfully loaded!` });
             loadPlugins();
         } catch (err) {
-            setStatus({ type: 'error', message: 'Upload failed. Ensure the file is a valid .js plugin.' });
+            const detail = err.payload?.error || err.message || 'Unknown error';
+            console.error('[PluginUpload] FAILED:', err.status, detail);
+            setStatus({ type: 'error', message: `Upload failed: ${detail}` });
         } finally {
             setIsUploading(false);
             setTimeout(() => setStatus(null), 3000);
@@ -69,7 +74,7 @@ export default function PluginsWindow() {
                             <Zap size={20} />
                         </button>
                         <label className="cursor-pointer group relative">
-                            <input type="file" accept=".js" onChange={handleFileUpload} className="hidden" disabled={isUploading} />
+                            <input type="file" accept=".js,.zip" onChange={handleFileUpload} className="hidden" disabled={isUploading} />
                             <div className="flex items-center gap-3 px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl transition-all shadow-2xl shadow-purple-500/20 active:scale-95">
                                 <Plus size={20} />
                                 <span className="font-bold text-sm">Install Plugin</span>

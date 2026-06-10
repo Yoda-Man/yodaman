@@ -1,244 +1,387 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>YodaMan | Local-first agent ecosystem for developers</title>
-    <meta
-      name="description"
-      content="YodaMan is a local-first developer agent ecosystem with a desktop app, VS Code extension, mobile approval companion, semantic code search, and auditable tool execution."
-    />
-    <link rel="icon" href="./assets/favicon.png" />
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <header class="site-header">
-      <a class="brand" href="#top" aria-label="YodaMan home">
-        <img src="./assets/logo.png" alt="" />
-        <span>YodaMan</span>
-      </a>
-      <nav aria-label="Primary">
-        <a href="#ecosystem">Ecosystem</a>
-        <a href="#security">Security</a>
-        <a href="#install">Install</a>
-        <a href="#downloads">Downloads</a>
-        <a href="#docs">Docs</a>
-      </nav>
-    </header>
 
-    <main id="top">
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-media" aria-hidden="true">
-          <div class="terminal-window">
-            <div class="window-bar">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <pre><code>$ yodaman
-Core running at localhost:3090
-Indexing 14 workspaces...
-Agent task started: refactor auth flow
-tool:start searchCode
-tool:start applyPatch
-awaiting approval: auth/session.js
-audit: write request captured</code></pre>
-          </div>
-        </div>
-        <div class="hero-content">
-          <img class="hero-logo" src="./assets/logo.png" alt="YodaMan logo" />
-          <p class="eyebrow">Local-first developer intelligence</p>
-          <h1 id="hero-title">YodaMan</h1>
-          <p class="hero-copy">
-            A private agent ecosystem for understanding, searching, changing, and reviewing your code across desktop, VS Code, and mobile, with Ollama-only Graphify knowledge graphs.
-          </p>
-          <div class="hero-actions">
-            <a class="button primary" href="#install">Get started</a>
-            <a class="button secondary" href="#ecosystem">Explore clients</a>
-          </div>
-        </div>
-      </section>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>YodaMan | Local-first agent ecosystem for developers</title>
+  <meta name="description"
+    content="YodaMan is a local-first developer agent ecosystem with a desktop app, VS Code extension, mobile approval companion, semantic code search, and auditable tool execution." />
+  <link rel="icon" href="./assets/favicon.png" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
 
-      <section class="proof-strip" aria-label="Core capabilities">
-        <div>
-          <strong>Private by design</strong>
-          <span>Local-first intelligence keeps your source code, prompts, and project context on your machine</span>
-        </div>
-        <div>
-          <strong>One brain for every repo</strong>
-          <span>Context Expert and local Graphify graphs connect workspaces so YodaMan can search, explain, map, and reason across projects</span>
-        </div>
-        <div>
-          <strong>Autonomy with approval</strong>
-          <span>Agents can plan and edit code while human-reviewed diffs and audit trails keep changes under control</span>
-        </div>
-      </section>
-
-      <section id="ecosystem" class="section">
-        <div class="section-heading">
-          <p class="eyebrow">One runtime, many surfaces</p>
-          <h2>Built around a shared agent core</h2>
-        </div>
-        <div class="ecosystem-grid">
-          <article>
-            <div class="icon">⌘</div>
-            <h3>VS Code extension</h3>
-            <p>Run agent tasks, search the workspace, review write proposals in native diffs, and stream tool events inside the editor.</p>
-          </article>
-          <article>
-            <div class="icon">▣</div>
-            <h3>Desktop control center</h3>
-            <p>Manage projects, plugins, sessions, indexing, model settings, approvals, and runtime health from a packaged desktop app.</p>
-          </article>
-          <article>
-            <div class="icon">▤</div>
-            <h3>Mobile companion</h3>
-            <p>Pair with the machine running YodaMan, check status, search code, ask questions, and approve pending file changes.</p>
-          </article>
-          <article>
-            <div class="icon">◇</div>
-            <h3>Runtime API</h3>
-            <p>REST and SSE endpoints expose task events, pending approvals, policy, audit logs, semantic search, and plugin tools.</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="split-section">
-        <div>
-          <p class="eyebrow">Agent workflows</p>
-          <h2>Give the agent useful power, then keep the keys in your hand</h2>
-          <p>
-            YodaMan can search, read, patch, write, list files, and execute commands inside allowed workspaces. Risky actions are visible through streamed events, approval prompts, and an audit log.
-          </p>
-        </div>
-        <div class="workflow">
-          <div><span>1</span> Ask about a workspace or assign a coding task</div>
-          <div><span>2</span> Agent searches context and calls approved tools</div>
-          <div><span>3</span> Proposed file changes wait for human review</div>
-          <div><span>4</span> Desktop, VS Code, or mobile can approve/reject</div>
-        </div>
-      </section>
-
-      <section id="security" class="section security-section">
-        <div class="section-heading">
-          <p class="eyebrow">Local-first safety</p>
-          <h2>Designed for private codebases</h2>
-        </div>
-        <div class="security-list">
-          <div>
-            <h3>Workspace boundaries</h3>
-            <p>File and command tools resolve paths against configured roots before they run.</p>
-          </div>
-          <div>
-            <h3>Command policy</h3>
-            <p>High-risk shell patterns are blocked by policy, with structured approval work planned next.</p>
-          </div>
-          <div>
-            <h3>Pairing tokens</h3>
-            <p>Mobile clients can pair through a temporary token and deep link to the machine running YodaMan.</p>
-          </div>
-          <div>
-            <h3>Audit logs</h3>
-            <p>Tool calls are recorded with status, duration, sanitized parameters, and result summaries.</p>
-          </div>
-        </div>
-      </section>
-
-      <section id="install" class="install-section">
-        <div>
-          <p class="eyebrow">Install</p>
-          <h2>Install from npm</h2>
-        </div>
-        <div class="install-panels">
-          <article>
-            <h3>Install YodaMan</h3>
-            <pre><code>npm install -g yodaman
-python3 -m pip install graphifyy</code></pre>
-          </article>
-          <article>
-            <h3>Start the runtime</h3>
-            <pre><code>yodaman</code></pre>
-          </article>
-          <article>
-            <h3>Open YodaMan</h3>
-            <pre><code>http://localhost:5190</code></pre>
-          </article>
-          <article>
-            <h3>Package page</h3>
-            <a class="button secondary" href="https://www.npmjs.com/package/yodaman">View on npm</a>
-          </article>
-        </div>
-      </section>
-
-      <section id="downloads" class="downloads-section">
-        <div class="section-heading">
-          <p class="eyebrow">Downloads</p>
-          <h2>Install YodaMan clients</h2>
-          <p>Choose the client that fits your workflow: desktop for the full control center, VS Code for editor-native access, and mobile for approvals on the move.</p>
-        </div>
-        <div class="download-grid">
-          <article>
-            <h3>macOS Desktop</h3>
-            <p>Apple Silicon build for macOS users who want the full local workspace experience.</p>
-            <a class="button primary" href="downloads/YodaMan-0.2.2-arm64.dmg" download>Download DMG</a>
-            <a class="button secondary" href="downloads/YodaMan-0.2.2-arm64-mac.zip" download>Download macOS ZIP</a>
-            <span>Use the ZIP option when you prefer a portable package.</span>
-          </article>
-          <article>
-            <h3>Windows Desktop</h3>
-            <p>Windows x64 installer and portable ZIP for local-first project work.</p>
-            <a class="button primary" href="downloads/YodaMan%20Setup%200.2.2.exe" download>Download EXE</a>
-            <a class="button secondary" href="downloads/YodaMan-0.2.2-win.zip" download>Download Windows ZIP</a>
-            <span>Use the installer for guided setup or the ZIP for portable use.</span>
-          </article>
-          <article>
-            <h3>Linux Desktop</h3>
-            <p>Linux x64 AppImage and portable ZIP for flexible desktop installation.</p>
-            <a class="button primary" href="downloads/YodaMan-0.2.2.AppImage" download>Download AppImage</a>
-            <a class="button secondary" href="downloads/yodaman-0.2.2.zip" download>Download Linux ZIP</a>
-            <span>Choose AppImage for a single-file launch or ZIP for portable setup.</span>
-          </article>
-          <article>
-            <h3>VS Code Extension</h3>
-            <p>Install YodaMan from the Marketplace or download the VSIX for editor-native agent access.</p>
-            <a class="button primary" href="https://marketplace.visualstudio.com/items?itemName=yodaman.vscode-yodaman">View on Marketplace</a>
-            <a class="button secondary" href="downloads/vscode-yodaman-0.2.2.vsix" download>Download VSIX</a>
-            <span>Use the VSIX for offline installs or internal distribution.</span>
-          </article>
-          <article>
-            <h3>Android Mobile</h3>
-            <p>Pair with your YodaMan runtime to monitor tasks, search projects, and approve changes from your phone.</p>
-            <a class="button secondary" href="./docs.html#mobile-linking">Pair mobile</a>
-            <span>Mobile access is designed for lightweight oversight away from the keyboard.</span>
-          </article>
-          <article>
-            <h3>iOS Mobile</h3>
-            <p>Use the iOS companion experience for task status, approvals, and project visibility on the go.</p>
-            <a class="button secondary" href="./docs.html#mobile-linking">Pair mobile</a>
-            <span>Built for quick review moments when you are away from your desktop.</span>
-          </article>
-        </div>
-      </section>
-
-      <section id="docs" class="docs-section">
-        <div class="section-heading">
-          <p class="eyebrow">Project docs</p>
-          <h2>Everything behind the ecosystem</h2>
-        </div>
-        <div class="doc-links">
-          <a href="./docs.html#ecosystem">Ecosystem architecture</a>
-          <a href="./docs.html#security">Security and audit</a>
-          <a href="./docs.html#mobile-linking">Mobile linking</a>
-          <a href="./docs.html#downloads-info">Downloads and updates</a>
-          <a href="./docs.html#api">API reference</a>
-          <a href="./docs.html#support">Choosing a client</a>
-        </div>
-      </section>
-    </main>
-
-    <footer>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="YodaMan home">
+      <img src="./assets/logo.png" alt="" />
       <span>YodaMan</span>
-      <span>Local-first agent ecosystem for serious codebases.</span>
-    </footer>
-  </body>
+    </a>
+    <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">☰</button>
+    <nav aria-label="Primary">
+      <a href="#ecosystem">Ecosystem</a>
+      <a href="#pillars">Pillars</a>
+      <a href="#holocron-vr">Holocron VR</a>
+      <a href="#security">Security</a>
+      <a href="#install">Install</a>
+      <a href="#downloads">Downloads</a>
+      <a href="#docs">Docs</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-media hero-slider" aria-label="Holocron VR plugin preview">
+        <img src="./assets/holocron-slider/hero-constellation.png" alt="Holocron VR code constellation" />
+        <img src="./assets/holocron-slider/desktop-3d.png" alt="Holocron VR desktop 3D viewport" />
+        <img src="./assets/holocron-slider/vr-mode.png" alt="Holocron VR headset view" />
+        <img src="./assets/holocron-slider/info-panel.png" alt="Holocron VR selected node info panel" />
+        <img src="./assets/holocron-slider/settings-drawer.png" alt="Holocron VR settings drawer" />
+        <img src="./assets/holocron-slider/node-detail.png" alt="Holocron VR node detail close-up" />
+        <img src="./assets/holocron-slider/voice-command.png" alt="Holocron VR voice command feedback" />
+        <img src="./assets/holocron-slider/filtering.png" alt="Holocron VR filtered constellation view" />
+        <img src="./assets/holocron-slider/performance-hud.png" alt="Holocron VR performance HUD" />
+        <div class="slider-caption">
+          <strong>Holocron VR plugin</strong>
+          <span>Turn any codebase into an explorable universe. Fly through your architecture.</span>
+        </div>
+      </div>
+      <div class="hero-content">
+        <img class="hero-logo" src="./assets/logo.png" alt="YodaMan logo" />
+        <p class="eyebrow">Local-first developer intelligence</p>
+        <h1 id="hero-title">YodaMan</h1>
+        <p class="hero-copy">
+          A private agent ecosystem for understanding, searching, changing, and reviewing your code across desktop, VS
+          Code, and mobile, with Ollama-only Graphify knowledge graphs.
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="#install">Get started</a>
+          <a class="button secondary" href="#ecosystem">Explore clients</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="proof-strip" aria-label="Core capabilities">
+      <div>
+        <strong>Private by design</strong>
+        <span>Local-first intelligence keeps your source code, prompts, and project context on your machine</span>
+      </div>
+      <div>
+        <strong>One brain for every repo</strong>
+        <span>Context Expert and local Graphify graphs connect workspaces so YodaMan can search, explain, map, and
+          reason across projects</span>
+      </div>
+      <div>
+        <strong>Autonomy with approval</strong>
+        <span>Agents can plan and edit code while human-reviewed diffs and audit trails keep changes under
+          control</span>
+      </div>
+    </section>
+
+    <section id="ecosystem" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">One runtime, many surfaces</p>
+        <h2>Built around a shared agent core</h2>
+      </div>
+      <div class="ecosystem-grid">
+        <article>
+          <div class="icon">⌘</div>
+          <h3>VS Code extension</h3>
+          <p>Run agent tasks, search the workspace, review write proposals in native diffs, and stream tool events
+            inside the editor.</p>
+        </article>
+        <article>
+          <div class="icon">▣</div>
+          <h3>Desktop control center</h3>
+          <p>Manage projects, plugins, sessions, indexing, model settings, approvals, and runtime health from a packaged
+            desktop app.</p>
+        </article>
+        <article>
+          <div class="icon">▤</div>
+          <h3>Mobile companion</h3>
+          <p>Pair with the machine running YodaMan, check status, search code, ask questions, and approve pending file
+            changes.</p>
+        </article>
+        <article>
+          <div class="icon">◇</div>
+          <h3>Runtime API</h3>
+          <p>REST and SSE endpoints expose task events, pending approvals, policy, audit logs, semantic search, and
+            plugin tools.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="pillars" class="section pillars-section">
+      <div class="section-heading">
+        <p class="eyebrow">Core pillars</p>
+        <h2>The principles behind the runtime</h2>
+        <p>YodaMan is built for serious local work: private context, visible automation, one shared runtime, and tools
+          that can be extended without becoming invisible.</p>
+      </div>
+      <div class="pillar-grid">
+        <article>
+          <h3>Local-first intelligence</h3>
+          <p>Project context starts on your machine. Watched directories are indexed locally and reused by chat, search,
+            agent tasks, plugins, and external clients.</p>
+        </article>
+        <article>
+          <h3>Human-controlled automation</h3>
+          <p>Agents can reason through multi-step coding work, while streamed task events, approvals, cancellation, and
+            audit logs keep people in control.</p>
+        </article>
+        <article>
+          <h3>One ecosystem runtime</h3>
+          <p>The Express runtime is the shared contract for the React UI, desktop shell, VS Code extension, mobile app,
+            and CLI package.</p>
+        </article>
+        <article>
+          <h3>Extensible tools</h3>
+          <p>Built-in tools cover search, reads, controlled writes, patches, commands, and file listing. Plugins add
+            custom capabilities with declared permissions.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="holocron-vr" class="vr-plugin-section">
+      <div class="vr-plugin-copy">
+        <p class="eyebrow">Installable plugin</p>
+        <h2>Holocron VR turns your codebase into a 3D constellation</h2>
+        <p>
+          Holocron VR is a YodaMan plugin that transforms local Graphify knowledge graphs into an explorable Three.js
+          and WebXR scene. Files become glowing nodes, dependencies become spatial paths, and architecture becomes
+          something you can inspect with desktop controls, voice commands, or a Meta Quest headset.
+        </p>
+        <div class="vr-benefits">
+          <div>
+            <strong>See architecture faster</strong>
+            <span>Spot clusters, important files, dependency paths, and recent change hotspots without flattening
+              everything into search results.</span>
+          </div>
+          <div>
+            <strong>Stay local-first</strong>
+            <span>The plugin reads YodaMan and Graphify data from your local runtime. No code, audio, or metadata needs
+              to leave your machine.</span>
+          </div>
+          <div>
+            <strong>Bridge VR and agent work</strong>
+            <span>Select a node, ask the agent about it, open it in VS Code, or use Git heatmaps and time travel to
+              understand how the code evolved.</span>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <a class="button primary" href="#install-holocron">Install Holocron VR</a>
+        </div>
+      </div>
+      <figure class="vr-plugin-media">
+        <img src="./assets/holocron-vr-constellation.png" alt="Holocron VR 3D code constellation screenshot" />
+      </figure>
+    </section>
+
+    <section class="split-section">
+      <div>
+        <p class="eyebrow">Agent workflows</p>
+        <h2>Give the agent useful power, then keep the keys in your hand</h2>
+        <p>
+          YodaMan can search, read, patch, write, list files, and execute commands inside allowed workspaces. Risky
+          actions are visible through streamed events, approval prompts, and an audit log.
+        </p>
+      </div>
+      <div class="workflow">
+        <div><span>1</span> Ask about a workspace or assign a coding task</div>
+        <div><span>2</span> Agent searches context and calls approved tools</div>
+        <div><span>3</span> Proposed file changes wait for human review</div>
+        <div><span>4</span> Desktop, VS Code, or mobile can approve/reject</div>
+      </div>
+    </section>
+
+    <section id="security" class="section security-section">
+      <div class="section-heading">
+        <p class="eyebrow">Local-first safety</p>
+        <h2>Designed for private codebases</h2>
+      </div>
+      <div class="security-list">
+        <div>
+          <h3>Workspace boundaries</h3>
+          <p>File and command tools resolve paths against configured roots before they run.</p>
+        </div>
+        <div>
+          <h3>Command policy</h3>
+          <p>High-risk shell patterns are blocked by policy, with structured approval work planned next.</p>
+        </div>
+        <div>
+          <h3>Pairing tokens</h3>
+          <p>Mobile clients can pair through a temporary token and deep link to the machine running YodaMan.</p>
+        </div>
+        <div>
+          <h3>Audit logs</h3>
+          <p>Tool calls are recorded with status, duration, sanitized parameters, and result summaries.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="install" class="install-section">
+      <div>
+        <p class="eyebrow">Install</p>
+        <h2>Install from npm</h2>
+      </div>
+      <div class="install-panels">
+        <article>
+          <h3>Install YodaMan</h3>
+          <pre><code>npm install -g yodaman
+python3 -m pip install graphifyy</code></pre>
+        </article>
+        <article>
+          <h3>Start the runtime</h3>
+          <pre><code>yodaman</code></pre>
+        </article>
+        <article>
+          <h3>Open YodaMan</h3>
+          <pre><code>http://localhost:5190</code></pre>
+        </article>
+        <article>
+          <h3>Package page</h3>
+          <a class="button secondary" href="https://www.npmjs.com/package/yodaman">View on npm</a>
+        </article>
+      </div>
+      <div id="install-holocron" class="plugin-install">
+        <div>
+          <p class="eyebrow">Plugin install</p>
+          <h2>Add Holocron VR</h2>
+          <p>Download the plugin zip, extract it into your YodaMan plugins directory, reload plugins, then open the
+            Holocron VR tab from YodaMan.</p>
+        </div>
+        <pre><code>unzip holocron-vr-0.5.0.zip -d ~/.yodaman/plugins/holocron-vr
+yodaman</code></pre>
+      </div>
+    </section>
+
+    <section id="downloads" class="downloads-section">
+      <div class="section-heading">
+        <p class="eyebrow">Downloads</p>
+        <h2>Install YodaMan clients</h2>
+        <p>Choose the client that fits your workflow: desktop for the full control center, VS Code for editor-native
+          access, and mobile for approvals on the move.</p>
+      </div>
+      <div class="download-grid">
+        <article>
+          <h3>macOS Desktop</h3>
+          <p>Apple Silicon build for macOS users who want the full local workspace experience.</p>
+          <a class="button primary" href="downloads/YodaMan-0.3.0-arm64.dmg" download>Download DMG</a>
+          <a class="button secondary" href="downloads/YodaMan-0.3.0-arm64-mac.zip" download>Download macOS ZIP</a>
+          <span>Use the ZIP option when you prefer a portable package.</span>
+        </article>
+        <article>
+          <h3>Windows Desktop</h3>
+          <p>Windows x64 installer and portable ZIP for local-first project work.</p>
+          <a class="button primary" href="downloads/YodaMan%20Setup%200.3.0.exe" download>Download EXE</a>
+          <a class="button secondary" href="downloads/YodaMan-0.3.0-win.zip" download>Download Windows ZIP</a>
+          <span>Use the installer for guided setup or the ZIP for portable use.</span>
+        </article>
+        <article>
+          <h3>Linux Desktop</h3>
+          <p>Linux x64 AppImage and portable ZIP for flexible desktop installation.</p>
+          <a class="button primary" href="downloads/YodaMan-0.3.0.AppImage" download>Download AppImage</a>
+          <a class="button secondary" href="downloads/yodaman-0.3.0.zip" download>Download Linux ZIP</a>
+          <span>Choose AppImage for a single-file launch or ZIP for portable setup.</span>
+        </article>
+        <article>
+          <h3>VS Code Extension</h3>
+          <p>Install YodaMan from the Marketplace or download the VSIX for editor-native agent access.</p>
+          <a class="button primary"
+            href="https://marketplace.visualstudio.com/items?itemName=yodaman.vscode-yodaman">View on Marketplace</a>
+          <a class="button secondary" href="downloads/vscode-yodaman-0.3.0.vsix" download>Download VSIX</a>
+          <span>Use the VSIX for offline installs or internal distribution.</span>
+        </article>
+        <article>
+          <h3>Holocron VR Plugin</h3>
+          <p>Install the Graphify VR explorer plugin for desktop 3D, WebXR code constellations, Git heatmaps, time
+            travel, voice commands, and agent handoff.</p>
+          <a class="button primary" href="downloads/holocron-vr-0.5.0.zip" download>Download Plugin</a>
+          <span>Version 0.5.0. Extract into your YodaMan plugins directory, then reload plugins.</span>
+        </article>
+        <article>
+          <h3>Android Mobile</h3>
+          <p>Pair with your YodaMan runtime to monitor tasks, search projects, and approve changes from your phone.</p>
+          <a class="button secondary" href="./docs.html#mobile-linking">Pair mobile</a>
+          <span>Mobile access is designed for lightweight oversight away from the keyboard.</span>
+        </article>
+        <article>
+          <h3>iOS Mobile</h3>
+          <p>Use the iOS companion experience for task status, approvals, and project visibility on the go.</p>
+          <a class="button secondary" href="./docs.html#mobile-linking">Pair mobile</a>
+          <span>Built for quick review moments when you are away from your desktop.</span>
+        </article>
+      </div>
+    </section>
+
+    <section id="docs" class="docs-section">
+      <div class="section-heading">
+        <p class="eyebrow">Project docs</p>
+        <h2>Everything behind the ecosystem</h2>
+      </div>
+      <div class="doc-links">
+        <a href="./docs.html#ecosystem">Ecosystem architecture</a>
+        <a href="./docs.html#security">Security and audit</a>
+        <a href="./docs.html#mobile-linking">Mobile linking</a>
+        <a href="./docs.html#downloads-info">Downloads and updates</a>
+        <a href="./docs.html#api">API reference</a>
+        <a href="./docs.html#support">Choosing a client</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>YodaMan</span>
+    <span>Local-first agent ecosystem for serious codebases.</span>
+  </footer>
+
+  <script>
+    // ── Hero Slider ──────────────────────────────────────────────────
+    (function slider() {
+      const el = document.querySelector('.hero-slider');
+      if (!el) return;
+      const imgs = el.querySelectorAll('img');
+      if (imgs.length < 2) return;
+      let idx = 0;
+      const total = imgs.length;
+      const interval = 5000;
+      const fade = 400;
+
+      // Show first image immediately
+      imgs.forEach((img, i) => { img.style.transition = 'opacity ' + fade + 'ms ease'; img.style.opacity = i === 0 ? '1' : '0'; });
+
+      function next() {
+        imgs[idx].style.opacity = '0';
+        idx = (idx + 1) % total;
+        imgs[idx].style.opacity = '1';
+      }
+
+      setInterval(next, interval);
+    })();
+
+    // ── Mobile Nav Toggle ────────────────────────────────────────────
+    (function navToggle() {
+      const btn = document.querySelector('.nav-toggle');
+      const nav = document.querySelector('.site-header nav');
+      if (!btn || !nav) return;
+
+      btn.addEventListener('click', function () {
+        const expanded = this.getAttribute('aria-expanded') === 'true' ? false : true;
+        this.setAttribute('aria-expanded', expanded);
+        nav.classList.toggle('nav-open');
+        this.textContent = expanded ? '✕' : '☰';
+      });
+
+      // Close nav when a link is clicked
+      nav.querySelectorAll('a').forEach(function (a) {
+        a.addEventListener('click', function () {
+          nav.classList.remove('nav-open');
+          btn.setAttribute('aria-expanded', 'false');
+          btn.textContent = '☰';
+        });
+      });
+    })();
+  </script>
+</body>
+
 </html>

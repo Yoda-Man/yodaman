@@ -13,7 +13,7 @@ This is the first editor-native client for the YodaMan runtime.
 - Searches the workspace through `/api/search`.
 - Queues workspace reindexing through `/api/reindex`.
 - Opens runtime logs and index queue state from `/api/logs`.
-- Runs agent tasks through `/api/agent/task`.
+- Runs agent tasks through `/api/agent/task`. The web UI includes a **task presets** dropdown with a **📊 Impact Analysis** template that pre-fills a prompt for affected files, breaking changes, and suggested tests — toggle to the web UI's Agent Chat tab to use it directly.
 - Streams task events into a `YodaMan` output channel.
 - Opens write proposals as VS Code diffs against the real target file when it exists.
 - Sends approval or rejection to `/api/agent/approve`.

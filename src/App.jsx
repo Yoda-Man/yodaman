@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import ProjectList from './components/ProjectList'
-import ChatWindow from './components/ChatWindow'
+import AgentChatTab from './components/AgentChatTab'
 import SearchWindow from './components/SearchWindow'
 import Dashboard from './components/Dashboard'
 import StatusBar from './components/StatusBar'
@@ -190,7 +190,7 @@ export default function App() {
           </div>
 
           <div className="flex-1 overflow-hidden bg-white/[0.01] border-t border-white/5">
-            {activeTab === 'chat' && <ChatWindow selectedProject={selectedProject} />}
+            {activeTab === 'chat' && <AgentChatTab selectedProject={selectedProject} />}
             {activeTab === 'search' && <SearchWindow selectedProject={selectedProject} />}
             {activeTab === 'graph' && <GraphStudio selectedProject={selectedProject} />}
             {activeTab === 'dashboard' && <Dashboard />}

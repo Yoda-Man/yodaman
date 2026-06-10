@@ -1,6 +1,6 @@
 # YodaMan
 
-YodaMan is a local-first AI workspace companion for developers. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private runtime.
+YodaMan is your code's memory palace. Private. Extensible. Graph-powered.. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private runtime.
 
 ![Version](https://img.shields.io/badge/Version-0.2.2-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -26,6 +26,10 @@ Project context starts on your machine. Watched directories are stored in `confi
 
 The agent can reason through multi-step coding work, but write proposals require review. Runtime events expose `task_started`, tool activity, approvals, cancellation, final answers, and errors so clients can stay transparent.
 
+**Task presets** are pre-built prompt templates in the Agent Chat UI that speed up common workflows. The **📊 Impact Analysis** preset, for example, fills the prompt with a three-part analysis structure — affected files, breaking changes, and suggested tests — and can be expanded to cover additional Graphify-backed impact workflows.
+
+Agent responses are **graph-aware** when project graph context is available. Answers cite specific files and their dependencies from the knowledge graph and include a `[view graph](http://localhost:5190)` link so you can explore the visual graph directly. When asking "How to add a new API endpoint?" the agent will show similar endpoints found in the graph, suggest files to create based on existing patterns, and estimate how many existing files would be affected.
+
 ### One ecosystem runtime
 
 The Express runtime is the shared contract for the React UI, desktop shell, VS Code extension, mobile app, and CLI package. Each client can ask, search, reindex, inspect task state, and participate in approvals.
@@ -33,6 +37,14 @@ The Express runtime is the shared contract for the React UI, desktop shell, VS C
 ### Extensible tools
 
 Built-in tools cover file reads, controlled writes, exact patching, command execution, search, and file listing. Plugin tools can be dropped into `plugins/`, and declared permissions keep risky tools visible and restricted.
+
+Scaffold new plugins instantly with the CLI:
+
+```bash
+yodaman create-plugin my-tool
+```
+
+This generates a plugin `.js` file, a Jest test file, updates the plugin API reference in `plugins/README.md`, and auto-registers the plugin in `config.json`. See [user_manual.md](user_manual.md) for more details.
 
 ## Prerequisites
 
