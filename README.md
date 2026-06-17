@@ -1,186 +1,137 @@
 # YodaMan
 
-YodaMan is your code's memory palace. Private. Extensible. Graph-powered.. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private runtime.
+YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime.
 
-![Version](https://img.shields.io/badge/Version-0.2.2-gold)
+![Version](https://img.shields.io/badge/Version-0.3.0-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
 
-- **Keep code private**: YodaMan is designed around local project indexing and local model workflows through Context Expert and optional Ollama.
+- **Keep code private**: Designed around local project indexing and local model workflows through Context Expert and optional Ollama. No code leaves your machine.
 - **Understand the whole workspace**: Search and ask across indexed repositories instead of juggling isolated editor tabs.
 - **See relationships, not fragments**: Graphify builds mandatory knowledge graphs that connect code, docs, diagrams, and architectural concepts.
 - **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and approval gates for file changes.
-- **Work where you already are**: Use the web UI, desktop app, CLI package, VS Code extension, and mobile companion surfaces against the same runtime.
-- **Extend the assistant**: Add JavaScript plugins for custom tools while keeping tool activity visible through policy and audit endpoints.
-- **Choose query intent**: Switch between code and documentation modes so answers and search flows match the kind of context you need.
-- **Recover gracefully**: Desktop, web, VS Code, and mobile clients show clear runtime recovery guidance when the local service is unavailable.
+- **Work where you already are**: Web UI, desktop app, CLI, VS Code extension, and mobile companion all talk to the same runtime.
+- **Extend the assistant**: Add JavaScript plugins for custom tools. Three pre-installed plugins (CodeTrooper, Droid-Sweep, Grand Inquisitor) plus community plugins like Lightsaber.
+- **Choose query intent**: Switch between Code and Docs modes for more relevant answers.
+- **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
+
+## Version 0.3.0 — What's New
+
+- **Pre-installed plugins**: CodeTrooper (line counter), Droid-Sweep (unused file finder), Grand Inquisitor (dependency scanner), Lightsaber (Git hotspot analysis)
+- **Plugin enable/disable**: Toggle any plugin on/off from Settings → Developer Settings without restarting
+- **Centralized settings**: All environment-level settings managed through the Settings API and UI
+- **Legacy plugin support**: Holocron VR and other community plugins using the `onLoad` lifecycle now work automatically
+- **Zip plugin upload**: Upload plugins as `.zip` files — extracts and validates automatically
+- **Chat improvements**: Code/Docs mode toggle, animated processing indicators, 10-second fallback for slow connections, Clear conversation button, 50-message cap
+- **Scrolling fixes**: Vertical scrollbar in chat works properly
 
 ## Core Pillars
 
 ### Local-first intelligence
-
-Project context starts on your machine. Watched directories are stored in `config.json`, indexed locally, and reused by chat, search, agent tasks, and external clients.
+Project context stays on your machine. Watched directories in `config.json` are indexed locally and reused by chat, search, agent tasks, and external clients.
 
 ### Human-controlled automation
-
-The agent can reason through multi-step coding work, but write proposals require review. Runtime events expose `task_started`, tool activity, approvals, cancellation, final answers, and errors so clients can stay transparent.
-
-**Task presets** are pre-built prompt templates in the Agent Chat UI that speed up common workflows. The **📊 Impact Analysis** preset, for example, fills the prompt with a three-part analysis structure — affected files, breaking changes, and suggested tests — and can be expanded to cover additional Graphify-backed impact workflows.
-
-Agent responses are **graph-aware** when project graph context is available. Answers cite specific files and their dependencies from the knowledge graph and include a `[view graph](http://localhost:5190)` link so you can explore the visual graph directly. When asking "How to add a new API endpoint?" the agent will show similar endpoints found in the graph, suggest files to create based on existing patterns, and estimate how many existing files would be affected.
+The agent reasons through multi-step coding work, but write proposals require human approval. Events stream: `task_started`, tool activity, approvals, cancellation, final answers, errors.
 
 ### One ecosystem runtime
-
-The Express runtime is the shared contract for the React UI, desktop shell, VS Code extension, mobile app, and CLI package. Each client can ask, search, reindex, inspect task state, and participate in approvals.
+The Express runtime is the shared contract for the React UI, Electron desktop shell, VS Code extension, mobile app, and CLI. Each client can ask, search, reindex, inspect tasks, and participate in approvals.
 
 ### Extensible tools
+Built-in tools cover file reads, controlled writes, exact patching, command execution, search, and file listing. Plugin tools in `plugins/` extend functionality with declared permissions.
 
-Built-in tools cover file reads, controlled writes, exact patching, command execution, search, and file listing. Plugin tools can be dropped into `plugins/`, and declared permissions keep risky tools visible and restricted.
+## Sub-Projects
 
-Scaffold new plugins instantly with the CLI:
-
-```bash
-yodaman create-plugin my-tool
-```
-
-This generates a plugin `.js` file, a Jest test file, updates the plugin API reference in `plugins/README.md`, and auto-registers the plugin in `config.json`. See [user_manual.md](user_manual.md) for more details.
+| Project | Location | Description |
+|---------|----------|-------------|
+| **YodaMan Core** | `core/` | Main Express runtime, React UI, agent engine, plugins |
+| **Lightsaber** | `lightsaber/` | Git health map plugin — code hotspot analysis |
+| **Holocron VR** | `Holocron VR/` | 3D VR codebase explorer (community plugin) |
 
 ## Prerequisites
 
-- Node.js 18 or newer
-- Python 3.10 or newer
-- Context Expert CLI:
+- Node.js 18+
+- Python 3.10+
+- Context Expert CLI: `npm install -g @contextexpert/cli`
+- Graphify: `pip install graphifyy`
+- Ollama (for local model execution)
 
-```bash
-npm install -g @contextexpert/cli
-```
-
-- Graphify knowledge graph CLI:
-
-```bash
-python3 -m pip install graphifyy
-```
-
-- Ollama is required for local model execution. Graphify runs through Ollama only; YodaMan strips cloud provider API keys from Graphify subprocesses.
-
-- Ollama, required for local model execution
-
-## Dependencies
-
-Runtime dependencies include Express for the local API, React and Vite for the web UI, Context Expert (`ctx`) for workspace intelligence, Graphify (`graphify`, installed from the `graphifyy` Python package) for mandatory knowledge graph construction and graph-aware answer context, Chokidar for file watching, Multer for plugin uploads, and Lucide React for UI icons. Development and packaging use Jest, Electron, Electron Builder, Tailwind CSS, PostCSS, Nodemon, Concurrently, and the release smoke-check script.
-
-Graphify is wired into YodaMan as a required knowledge layer. Reindexing a workspace updates both the Context Expert index and the Graphify graph, then adds the project graph to Graphify's global graph. Chat and agent answers receive graph report context plus question-specific graph traversal output; stale graphs rebuild before answer context is gathered. The Graph tab opens Graph Studio, a dedicated project-scoped surface for interactive Graphify visualizations, graph reports, graph queries, and impact analysis. Runtime clients can also call `/api/graphify/status`, `/api/graphify/build`, `/api/graphify/artifact`, `/api/graphify/report`, `/api/graphify/query`, `/api/graphify/explain`, `/api/graphify/path`, `/api/graphify/affected`, `/api/graphify/map`, and `/api/graphify/tree`.
-
-Use the CLI graph doctor for a quick local health check across configured workspaces:
-
-```bash
-yodaman doctor --graph
-```
-
-Yoda-Agent also loads a default coding skill inspired by the Karpathy-style guidance for AI coding agents: surface assumptions, keep changes small, avoid speculative abstractions, make surgical edits, and verify work with targeted checks.
-
-## Setup
+## Quick Start
 
 ```bash
 git clone https://github.com/Yoda-Man/yodaman.git
 cd yodaman
 npm install
 sh setup.sh
-```
-
-Add or update watched project directories in `config.json`:
-
-```json
-{
-  "watchedDirectories": [
-    "/Users/username/projects/my-app"
-  ]
-}
-```
-
-Released packages include `config.example.json`; local `config.json` is intentionally ignored so support machines do not inherit developer-specific absolute paths.
-
-## Run
-
-Start the local runtime and web UI:
-
-```bash
 npm start
 ```
 
-This checks that `ctx` is available, then runs the backend and Vite client. The runtime listens on `http://localhost:3090`, and the dev UI is available at `http://localhost:5190`.
-
-You can also run the dev command directly:
+The runtime listens on `http://localhost:3090`. For the desktop app:
 
 ```bash
-npm run dev
+npm run desktop
 ```
 
-Useful environment variables:
+## Key Technologies
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `YODAMAN_PORT` | `3090` | Backend runtime port. |
-| `VITE_YODAMAN_API_BASE` | `/api` | Frontend API base path for alternate hosts or proxies. |
-| `VITE_YODAMAN_FETCH_TIMEOUT_MS` | `30000` | Browser request timeout. |
-| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `true` | Requires `X-YodaMan-Token` for non-local API clients by default. Set to `false` only for trusted local-only development. |
-| `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `false` | Allows explicitly trusted unrestricted plugins. |
-| `YODAMAN_ALLOW_PLUGIN_UPLOADS` | `false` | Enables plugin uploads only for trusted local support sessions. |
-| `YODAMAN_ALLOW_AGENT_COMMANDS` | `false` | Enables agent shell command execution only for trusted local support sessions. |
-| `YODAMAN_WATCH_DEBOUNCE_MS` | `1500` | Debounce window for filesystem-triggered reindex queueing. |
-| `YODAMAN_GRAPHIFY_BIN` | `graphify` | Graphify CLI binary used to build and query workspace knowledge graphs. |
-| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Timeout for Graphify build and query subprocesses. |
-| `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | `25000` | Graphify HTML visualization node limit passed to Graphify subprocesses. |
-| `YODAMAN_GRAPHIFY_FULL_EXTRACT` | `false` | Use Graphify full semantic extraction through Ollama only. |
-| `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | `qwen3:5b` | Ollama model passed to Graphify when full extraction is enabled. |
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Node.js/Express |
+| Frontend | React 18 + Vite + Tailwind CSS |
+| AI/LLM | Ollama (qwen3.5:9b) |
+| Embeddings | HuggingFace (BAAI/bge-large-en-v1.5) |
+| Knowledge Graph | Graphify |
+| Code Indexing | Context Expert (ctx) |
+| Desktop | Electron |
+| Mobile | React Native (companion) |
+| VS Code | Extension API |
+| Database | SQLite + JSON/JSONL fallback |
+| Git | simple-git |
 
-## Query Modes
+## Project Structure
 
-YodaMan supports two query modes from the chat toolbar and `/api/mode`:
-
-- `code`: prioritizes source-oriented answers and searches.
-- `doc`: preprocesses Markdown, reST, text, AsciiDoc, and JSDoc into indexable documentation chunks before documentation search.
-
-The selected mode is stored in browser local storage and sent with `/api/ask` requests. See [docs/QUERY_MODE.md](docs/QUERY_MODE.md) for the API contract and troubleshooting notes.
-
-## Common Commands
-
-```bash
-npm run build        # Build the React app
-npm test             # Run Jest tests
-npm run desktop      # Build and launch the Electron app
-npm run desktop:pack # Create an unpacked desktop build
-yodaman doctor --graph # Check Graphify graph health
+```
+yodaman/
+├── backend/                    # Express runtime
+│   ├── core/                   # Agent engine, queue service
+│   ├── infrastructure/         # ToolBox, Graphify, ContextEngine, Logger
+│   ├── interfaces/             # REST controller (all API routes)
+│   ├── services/               # Git, search, chat, file upload
+│   └── utils/                  # Doc preprocessing, query classification
+├── bin/                        # CLI entrypoint (yodaman)
+├── dist/                       # Built frontend
+├── electron/                   # Desktop app shell
+├── extensions/vscode-yodaman/  # VS Code extension
+├── frontend/                   # Shared frontend utilities
+├── plugins/                    # Installed plugins (CodeTrooper, Droid-Sweep, etc.)
+├── scripts/                    # Build and release scripts
+├── shared/                     # Shared protocol/types for external clients
+├── src/                        # React UI source
+├── tests/                      # Jest test suites
+├── website/                    # Public website + downloads
+├── server.js                   # Express entry point
+├── start.js                    # CLI launcher
+└── package.json
 ```
 
-The npm CLI entrypoint is `yodaman` after installation from the package.
+## Configuration
 
-Generated local state files such as `audit-log.json`, `audit-log.jsonl`, `task-history.json`, and `task-history.jsonl` are ignored by git.
+Copy `config.example.json` to `config.json` and add your workspace paths:
 
-Run release smoke checks before packaging:
-
-```bash
-npm run release:smoke
+```json
+{
+  "watchedDirectories": ["/path/to/your/project"]
+}
 ```
 
-## Operations
-
-Health and support endpoints are available at `/api/status`, `/api/check?path=...`, `/api/desktop/diagnostics`, `/api/policy`, `/api/audit`, and `/api/logs`. Runtime logs are emitted as structured JSON with request IDs, severity, user action, error type, and stack traces for support correlation.
-
-`/api/logs` accepts `level`, `severity`, `query`, `userAction`, `message`, `since`, `until`, and `limit` filters. Use these filters or the Logs modal to isolate search failures, agent tool errors, chat failures, frontend client errors, and startup/runtime exceptions.
-
-Operational runbooks live in [docs/runbooks.md](docs/runbooks.md). Configuration details live in [docs/configuration.md](docs/configuration.md), and the ecosystem overview is in [docs/ecosystem-architecture.md](docs/ecosystem-architecture.md).
-Support ownership, escalation, and pre-handover checks live in [docs/support-handover.md](docs/support-handover.md).
+All developer settings (plugin uploads, unrestricted plugins, agent commands) are managed through Settings → Developer Settings in the UI.
 
 ## Clients
 
-- **Web UI**: React control center for projects, chat, search, plugins, approvals, and status.
-- **Desktop app**: Electron shell for the same control center with desktop packaging.
-- **VS Code extension**: Editor-native status, ask, search, reindex, agent tasks, and diff approval.
-- **Mobile app**: Companion app for pairing, project status, task timelines, approvals, search, and prompts.
-
-The desktop app starts the managed runtime automatically. If the service cannot start, it stays open with a recovery screen, runtime logs, and restart guidance instead of closing unexpectedly.
+- **Web UI**: React control center at `http://localhost:3090`
+- **Desktop app**: Electron shell with managed runtime
+- **VS Code extension**: Editor-native access from the command palette
+- **Mobile companion**: React Native app for task monitoring and approvals
 
 ## License
 

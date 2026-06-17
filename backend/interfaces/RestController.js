@@ -17,6 +17,7 @@ const auditLog = require('../infrastructure/AuditLog');
 const pairingService = require('../infrastructure/PairingService');
 const logger = require('../infrastructure/Logger');
 const graphifyService = require('../infrastructure/GraphifyService');
+const dependencyChecker = require('../infrastructure/DependencyChecker');
 
 const multer = require('multer');
 
@@ -968,9 +969,22 @@ router.use('/search', searchRouter);
 router.get('/status', async (req, res) => {
     try {
         const data = await contextEngine.executeJson(['status']);
-        res.json(data);
+        res.json({
+            version: data.version || 'ctx',
+            llm: data.llm || { model: 'n/a' },
+            projects: data.projects || [],
+            ok: true
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        // ctx CLI may not be available — return degraded status
+        res.json({
+            version: 'ctx-unavailable',
+            llm: { model: 'Not Available' },
+            projects: [],
+            ok: false,
+            error: err.message,
+            hint: 'Install ctx: npm install -g @context-expert/cli'
+        });
     }
 });
 
@@ -1312,8 +1326,134 @@ router.put('/settings', (req, res) => {
 router.loadConfig = loadConfig;
 router.getConfigPath = getConfigPath;
 router.isGeneratedTempWorkspace = isGeneratedTempWorkspace;
+// ─────────────────────────────────────────────────────────────────────────
+//  HEALTH & SELF-HEALING ENDPOINTS
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/health — Full health report.
+ *
+ * Returns status of every dependency the runtime needs. The Electron
+ * recovery page polls this on load to render the diagnostic dashboard.
+ */
+router.get('/health', async (req, res) => {
+    const healthState = req.app ? req.app.get('healthState') : null;
+    const checks = healthState || {
+        started: false,
+        graphify: { ok: false, message: 'runtime not initialized' },
+        ollama: { ok: false, message: 'runtime not initialized' },
+        ctx: { ok: false, message: 'runtime not initialized' },
+        config: { ok: false, message: 'runtime not initialized' },
+        projects: 0,
+        indexed: 0,
+        syncComplete: false
+    };
+
+    const ollamaRunning = await dependencyChecker.checkRunning('ollama')
+        .catch(() => ({ running: null, reason: 'check failed' }));
+
+    // Normalize each check to include a `version` field if not already set
+    const enrich = (c) => c ? { ...c, version: c.version || null } : c;
+
+    res.json({
+        status: checks.started ? 'degraded' : 'starting',
+        started: checks.started,
+        uptimeSeconds: Math.round(process.uptime()),
+        checks: {
+            node: {
+                ok: true,
+                version: process.version,
+                message: `${process.version} on ${process.platform} ${process.arch}`
+            },
+            runtime: {
+                ok: true,
+                version: null,
+                message: `PID ${process.pid}, listening on port ${req.app?.get('port') || 3090}`
+            },
+            graphify: enrich(checks.graphify),
+            ollama: enrich(checks.ollama),
+            ctx: enrich(checks.ctx),
+            config: enrich(checks.config)
+        },
+        services: { ollama: ollamaRunning },
+        projects: { total: checks.projects, indexed: checks.indexed, synced: checks.syncComplete },
+        memory: process.memoryUsage(),
+        platform: { hostname: os.hostname(), release: os.release(), arch: os.arch() },
+        tasks: {
+            total: agentEngine.getTasks().length,
+            pendingApprovals: agentEngine.getPendingApprovals().length
+        },
+        plugins: toolBox.getPolicy().plugins
+    });
+});
+
+/**
+ * POST /api/health/install — Self-heal a missing dependency.
+ *
+ * Body: { component: "ollama" | "ctx" }
+ *
+ * Tries to auto-install the requested component. Returns success/failure.
+ */
+router.post('/health/install', (req, res) => {
+    const { component } = req.body;
+
+    switch (component) {
+        case 'ollama': {
+            const installScript = process.platform === 'darwin'
+                ? 'curl -fsSL https://ollama.com/install.sh | sh'
+                : process.platform === 'win32'
+                    ? 'winget install Ollama.Ollama'
+                    : 'curl -fsSL https://ollama.com/install.sh | sh';
+
+            logger.info('health_install_started', { component, command: installScript });
+
+            execFile('/bin/sh', ['-c', installScript], { timeout: 120000 }, (err, stdout) => {
+                if (err) {
+                    logger.error('health_install_failed', err, { component });
+                    res.json({
+                        ok: false,
+                        component,
+                        message: `Installation failed: ${err.message}. Install manually from https://ollama.com`,
+                        stdout: stdout || ''
+                    });
+                    return;
+                }
+                logger.info('health_install_completed', { component });
+                res.json({ ok: true, component, message: 'Ollama installed. Restart the runtime.' });
+            });
+            break;
+        }
+
+        case 'ctx': {
+            const installScript = process.platform === 'darwin'
+                ? 'npm install -g @context-expert/cli'
+                : 'npm install -g @context-expert/cli';
+
+            logger.info('health_install_started', { component, command: installScript });
+
+            execFile('/bin/sh', ['-c', installScript], { timeout: 120000 }, (err, stdout) => {
+                if (err) {
+                    res.json({
+                        ok: false,
+                        component,
+                        message: `Installation failed: ${err.message}. Install manually: npm install -g @context-expert/cli`,
+                        stdout: stdout || ''
+                    });
+                    return;
+                }
+                res.json({ ok: true, component, message: 'Context Expert installed. Restart the runtime.' });
+            });
+            break;
+        }
+
+        default:
+            res.status(400).json({ ok: false, message: `Unknown component: ${component}` });
+    }
+});
+
 router.isPairingRequiredByDefault = isPairingRequiredByDefault;
 router.arePluginUploadsEnabled = arePluginUploadsEnabled;
 router.safePluginFilename = safePluginFilename;
+router.isGeneratedTempWorkspace = isGeneratedTempWorkspace;
 
 module.exports = router;

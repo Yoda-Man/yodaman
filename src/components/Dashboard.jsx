@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Database, Cpu, Shield, Activity, Package, Server, RefreshCw, Link, ClipboardList } from 'lucide-react'
 import { api } from '../api/api'
+import HealthDashboard from './HealthDashboard'
 
 export default function Dashboard() {
     const [status, setStatus] = useState(null)
@@ -14,11 +15,38 @@ export default function Dashboard() {
 
     const fetchStatus = async () => {
         try {
+            // Try primary status endpoint first
             const data = await api.getStatus()
-            setStatus(data)
+            setStatus({ ...data, ctxInstalled: true })
+        } catch (_) {
+            // Status endpoint may fail if ctx is unresponsive;
+            // health endpoint is the reliable fallback.
+            try {
+                const healthRes = await fetch('/api/health')
+                const healthData = await healthRes.json()
+                setStatus({
+                    version: healthData.checks?.ctx?.ok ? 'ctx-active' : 'ctx-unavailable',
+                    ctxInstalled: healthData.checks?.ctx?.ok === true,
+                    ctxVersion: healthData.checks?.ctx?.version || null,
+                    nodeVersion: healthData.checks?.node?.message || 'unknown',
+                    platform: healthData.platform?.arch || 'unknown',
+                    llm: healthData.checks?.ollama?.ok
+                        ? { model: healthData.checks.ollama.version || 'ollama', provider: 'ollama' }
+                        : { model: 'n/a', provider: 'none' },
+                    database: { sizeFormatted: '—', path: '—' },
+                    totalChunks: 0,
+                    projects: healthData.projects?.total || 0,
+                    embedding: { provider: '—', model: '—' }
+                })
+            } catch (_) {
+                console.error('Failed to fetch status via health endpoint')
+            }
+        }
+
+        try {
             setDiagnostics(await api.getDesktopDiagnostics())
-        } catch (err) {
-            console.error('Failed to fetch status:', err)
+        } catch (_) {
+            // Non-critical
         } finally {
             setLoading(false)
         }
@@ -100,7 +128,7 @@ export default function Dashboard() {
                         </div>
                     </div>
 
-                    {/* AI Model Stats */}
+                    {/* AI Model Stats + Context Expert Status */}
                     <div className="glass-panel p-6 space-y-4">
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-purple-500/10 border border-purple-500/20 rounded-xl">
@@ -115,6 +143,12 @@ export default function Dashboard() {
                         <div className="pt-4 border-t border-white/5 flex justify-between items-center">
                             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Provider</span>
                             <span className="text-[10px] text-slate-400 font-mono uppercase">{status.llm?.provider}</span>
+                        </div>
+                        <div className="pt-4 border-t border-white/5 flex justify-between items-center">
+                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Context Expert</span>
+                            <span className="text-[10px] font-mono font-bold uppercase">
+                                {status.ctxInstalled ? `✓ ${status.ctxVersion || ''}` : '✓ Checking...'}
+                            </span>
                         </div>
                     </div>
 
@@ -185,17 +219,19 @@ export default function Dashboard() {
                     </div>
                 </div>
 
+                {/* System Health — reusable HealthDashboard component */}
                 <div className="glass-panel p-8 space-y-6">
                     <div className="flex items-center gap-4">
                         <div className="h-10 w-10 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl flex items-center justify-center">
                             <ClipboardList size={20} className="text-cyan-300" />
                         </div>
-                        <div>
-                            <h3 className="font-bold text-slate-100 tracking-tight">Runtime Diagnostics</h3>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Desktop and task state</p>
+                        <div className="flex-1">
+                            <h3 className="font-bold text-slate-100 tracking-tight">System Health</h3>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Dependency status &amp; runtime diagnostics</p>
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <HealthDashboard />
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                         <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
                             <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">PID</div>
                             <div className="text-sm font-bold text-slate-200">{diagnostics?.runtime?.pid || '...'}</div>

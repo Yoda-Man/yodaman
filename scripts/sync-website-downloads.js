@@ -28,7 +28,8 @@ for (const artifact of artifacts) {
     const destination = path.join(downloadsDir, artifact.name);
 
     if (!fs.existsSync(source)) {
-        throw new Error(`Missing release artifact: ${source}`);
+        console.warn(`\x1b[33mWarning: Missing release artifact: ${source}. Skipping...\x1b[0m`);
+        continue;
     }
 
     fs.copyFileSync(source, destination);

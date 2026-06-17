@@ -1,14 +1,25 @@
 const { spawn } = require('child_process');
+const dependencyChecker = require('./DependencyChecker');
 
 /**
  * ContextEngine (Infrastructure Layer)
  * 
  * Handles all direct communication with the 'ctx' CLI.
- * It abstracts the execution of CLI commands and provides JSON parsing.
+ * Uses DependencyChecker to resolve the full binary path so it works
+ * inside Electron's limited PATH (NVM, Homebrew, pip --user, etc.).
  */
 class ContextEngine {
     constructor() {
-        this.binary = 'ctx';
+        // Resolve the full path to 'ctx' using DependencyChecker's
+        // cross-platform search (NVM, Homebrew, which, etc.).
+        // Falls back to bare 'ctx' (system PATH) if not found.
+        const resolved = dependencyChecker.which('ctx');
+        this.binary = resolved || 'ctx';
+        if (resolved) {
+            console.log(`[ContextEngine] ctx resolved to: ${resolved}`);
+        } else {
+            console.log('[ContextEngine] ctx not found via DependencyChecker — will rely on system PATH');
+        }
     }
 
     /**
