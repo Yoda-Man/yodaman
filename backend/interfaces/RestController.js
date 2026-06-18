@@ -422,20 +422,29 @@ router.get('/projects', async (req, res) => {
         const cliProjects = cliData.projects.map(p => ({
             name: p.name,
             path: p.path,
-            id: p.id || p.path
+            id: p.id || p.path,
+            files: p.files || 0,
+            chunks: p.chunks || 0,
+            indexed: true
         })).filter(p => !config.removedDirectories.includes(p.path));
 
-        const cliByPath = new Map(cliProjects.map(project => [project.path, project]));
+        // Merge ctx projects with watched directories.
+        // ctx is the source of truth; config.watchedDirectories may have
+        // manually-added paths not yet indexed by ctx.
+        const cliByPath = new Map(cliProjects.map(p => [p.path, p]));
+        const result = [...cliProjects];
 
-        const result = config.watchedDirectories.map(dir => {
-            const cliProject = cliByPath.get(dir);
-            return cliProject || { name: path.basename(dir), path: dir, id: dir };
-        });
+        // Add any watched directories not in ctx (pending / not yet indexed)
+        for (const dir of config.watchedDirectories) {
+            if (!cliByPath.has(dir)) {
+                result.push({ name: path.basename(dir), path: dir, id: dir, files: 0, chunks: 0, indexed: false });
+            }
+        }
 
         res.json(result);
     } catch (err) {
         logger.warn('projects_list_ctx_failed', { requestId: req.id, error: err.message });
-        res.json(config.watchedDirectories.map(d => ({ name: path.basename(d), path: d, id: d })));
+        res.json(config.watchedDirectories.map(d => ({ name: path.basename(d), path: d, id: d, files: 0, chunks: 0, indexed: false })));
     }
 });
 
@@ -705,6 +714,58 @@ router.get('/git/commit', async (req, res) => {
     }
 });
 
+// ── Git mutations ──
+
+router.post('/git/commit', async (req, res) => {
+    try {
+        const dirPath = validateString(req.body?.path, 'path', { max: 2000 });
+        const message = validateString(req.body?.message, 'message', { max: 2000 });
+        const files = req.body?.files || ['.'];
+        const [branch, hash] = await Promise.all([
+            runGit(dirPath, ['rev-parse', '--abbrev-ref', 'HEAD']),
+            runGit(dirPath, ['add', ...files]).then(() =>
+                runGit(dirPath, ['commit', '-m', message]).catch(() =>
+                    runGit(dirPath, ['commit', '--allow-empty', '-m', message])
+                )
+            ).then(() => runGit(dirPath, ['rev-parse', 'HEAD']))
+        ]);
+        res.json({ ok: true, branch, hash: hash.substring(0, 7) });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+router.post('/git/push', async (req, res) => {
+    try {
+        const dirPath = validateString(req.body?.path, 'path', { max: 2000 });
+        const output = await runGit(dirPath, ['push']);
+        res.json({ ok: true, output });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+router.post('/git/pull', async (req, res) => {
+    try {
+        const dirPath = validateString(req.body?.path, 'path', { max: 2000 });
+        const output = await runGit(dirPath, ['pull', '--rebase']);
+        res.json({ ok: true, output });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+router.post('/git/branch', async (req, res) => {
+    try {
+        const dirPath = validateString(req.body?.path, 'path', { max: 2000 });
+        const branch = validateString(req.body?.branch, 'branch', { max: 250 });
+        await runGit(dirPath, ['checkout', '-b', branch]);
+        res.json({ ok: true, branch });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 router.post('/agent/task', async (req, res) => {
     let task;
     let projectId;
@@ -971,16 +1032,26 @@ router.get('/status', async (req, res) => {
         const data = await contextEngine.executeJson(['status']);
         res.json({
             version: data.version || 'ctx',
-            llm: data.llm || { model: 'n/a' },
-            projects: data.projects || [],
+            nodeVersion: data.nodeVersion || process.version,
+            platform: data.platform || process.platform,
+            database: data.database || { sizeFormatted: '—', path: '—' },
+            totalChunks: typeof data.totalChunks === 'number' ? data.totalChunks : 0,
+            projects: data.projects || 0,
+            embedding: data.embedding || { provider: '—', model: '—' },
+            llm: data.llm || { model: 'n/a', provider: 'none' },
             ok: true
         });
     } catch (err) {
         // ctx CLI may not be available — return degraded status
         res.json({
             version: 'ctx-unavailable',
-            llm: { model: 'Not Available' },
-            projects: [],
+            nodeVersion: process.version,
+            platform: process.platform,
+            database: { sizeFormatted: '—', path: '—' },
+            totalChunks: 0,
+            projects: 0,
+            embedding: { provider: '—', model: '—' },
+            llm: { model: 'Not Available', provider: 'none' },
             ok: false,
             error: err.message,
             hint: 'Install ctx: npm install -g @context-expert/cli'
@@ -1262,11 +1333,30 @@ router.get('/check', async (req, res) => {
     } catch (err) {
         return jsonError(res, err.status || 400, err.message, 'invalid_path');
     }
+
     try {
-        const data = await contextEngine.executeJson(['check', dirPath]);
-        res.json(data);
+        // ctx check expects a project name, not a path. Resolve from the project list.
+        const cliData = await contextEngine.executeJson(['list']);
+        const project = cliData.projects.find(p => p.path === dirPath);
+
+        if (!project) {
+            // Not a ctx-managed project — check if directory exists at least
+            const fs = require('fs');
+            if (fs.existsSync(dirPath)) {
+                return res.json({ status: 'healthy', name: dirPath.split('/').pop(), path: dirPath, ctxManaged: false });
+            }
+            return res.status(404).json({ error: 'Path not found', status: 'missing' });
+        }
+
+        const data = await contextEngine.executeJson(['check', project.name]);
+        res.json({ ...data, name: project.name, path: dirPath });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        // Fallback: return basic health based on directory existence
+        const fs = require('fs');
+        if (fs.existsSync(dirPath)) {
+            return res.json({ status: 'healthy', path: dirPath, ctxManaged: true, note: err.message });
+        }
+        res.status(500).json({ status: 'error', error: err.message });
     }
 });
 
@@ -1326,6 +1416,33 @@ router.put('/settings', (req, res) => {
 router.loadConfig = loadConfig;
 router.getConfigPath = getConfigPath;
 router.isGeneratedTempWorkspace = isGeneratedTempWorkspace;
+
+// ─────────────────────────────────────────────────────────────────────────
+//  CTX CONFIG ENDPOINTS — wrapper around ctx config list/set
+// ─────────────────────────────────────────────────────────────────────────
+
+router.get('/ctx/config', async (req, res) => {
+    try {
+        const data = await contextEngine.executeJson(['config', 'list']);
+        res.json({ ok: true, config: data });
+    } catch (err) {
+        res.json({ ok: false, error: err.message });
+    }
+});
+
+router.post('/ctx/config', async (req, res) => {
+    const { key, value } = req.body || {};
+    if (!key || value === undefined) {
+        return res.status(400).json({ ok: false, error: 'key and value are required' });
+    }
+    try {
+        await contextEngine.execute(['config', 'set', key, String(value)]);
+        res.json({ ok: true, key, value });
+    } catch (err) {
+        res.json({ ok: false, error: err.message });
+    }
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 //  HEALTH & SELF-HEALING ENDPOINTS
 // ─────────────────────────────────────────────────────────────────────────

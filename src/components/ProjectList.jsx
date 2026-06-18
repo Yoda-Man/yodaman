@@ -152,13 +152,14 @@ export default function ProjectList({
                                             ? 'text-indigo-400 bg-indigo-400/10' 
                                             : 'text-slate-700 hover:text-slate-500 hover:bg-slate-700/10'
                                         }`}
+                                        title={project.included ? 'Exclude from context' : 'Include in context'}
                                     >
                                         {project.included ? <CheckCircle size={16} /> : <Circle size={16} />}
                                     </button>
                                     <button 
                                         onClick={(e) => deleteProject(e, project)}
                                         className="p-1.5 hover:bg-rose-400/10 rounded-lg text-slate-500 hover:text-rose-400"
-                                        title="Delete workspace"
+                                        title="Remove workspace"
                                     >
                                         <Trash2 size={14} />
                                     </button>

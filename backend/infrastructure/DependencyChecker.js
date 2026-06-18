@@ -21,6 +21,92 @@ const path = require('path');
 const os = require('os');
 const { execFile, execFileSync } = require('child_process');
 
+// ─────────────────────────────────────────────────────────────────────────
+//  PATH AUGMENTATION — ran once at module init so that `execFile` (used
+//  for version checks) and `spawn` (used by ContextEngine) inherit a
+//  PATH that includes NVM, Homebrew, pip --user, and other common tool
+//  install directories. Without this, commands with `#!/usr/bin/env node`
+//  shebangs (like ctx) fail inside Electron's minimal PATH.
+// ─────────────────────────────────────────────────────────────────────────
+(function augmentPath() {
+    const candidates = [];
+
+    // macOS & Linux: NVM
+    const nvmRoot = path.join(os.homedir(), '.nvm', 'versions', 'node');
+    if (fs.existsSync(nvmRoot)) {
+        try {
+            fs.readdirSync(nvmRoot)
+                .sort()
+                .reverse()
+                .forEach(v => candidates.push(path.join(nvmRoot, v, 'bin')));
+        } catch (_) { }
+    }
+
+    // macOS: Homebrew
+    if (process.platform === 'darwin') {
+        candidates.push('/opt/homebrew/bin', '/usr/local/bin');
+    }
+
+    // Linux: Linuxbrew, Snap, Flatpak
+    if (process.platform === 'linux') {
+        candidates.push(
+            '/home/linuxbrew/.linuxbrew/bin',
+            path.join(os.homedir(), '.linuxbrew/bin'),
+            '/snap/bin',
+            '/var/lib/flatpak/exports/bin',
+            path.join(os.homedir(), '.local/share/flatpak/exports/bin')
+        );
+    }
+
+    // All: pip --user, npm global
+    candidates.push(
+        path.join(os.homedir(), '.local', 'bin'),
+        path.join(os.homedir(), 'bin')
+    );
+
+    // macOS: fnm (Fast Node Manager)
+    if (process.platform === 'darwin' && fs.existsSync(path.join(os.homedir(), 'Library', 'Application Support', 'fnm'))) {
+        const fnmNode = path.join(os.homedir(), 'Library', 'Application Support', 'fnm', 'node-versions');
+        if (fs.existsSync(fnmNode)) {
+            try {
+                fs.readdirSync(fnmNode)
+                    .sort()
+                    .reverse()
+                    .forEach(v => candidates.push(path.join(fnmNode, v, 'installation', 'bin')));
+            } catch (_) { }
+        }
+    }
+
+    // Windows: fnm, Chocolatey, Scoop
+    if (process.platform === 'win32') {
+        candidates.push(
+            path.join(os.homedir(), 'AppData', 'Local', 'fnm_multishell'),
+            path.join(os.homedir(), 'scoop', 'shims'),
+            'C:\\ProgramData\\chocolatey\\bin'
+        );
+    }
+
+    // Append to PATH — only if the directory exists and isn't already there
+    const current = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+    const added = [];
+    for (const c of candidates) {
+        if (fs.existsSync(c) && !current.some(p => path.normalize(p) === path.normalize(c))) {
+            added.push(c);
+        }
+    }
+
+    if (added.length > 0) {
+        process.env.PATH = [...current, ...added].join(path.delimiter);
+        // Log once at init time so it's visible in runtime logs
+        const logger = require('./Logger');
+        logger.info('dependency_path_augmented', {
+            added: added.length,
+            sample: added.slice(0, 3).join(', '),
+            total: current.length + added.length
+        });
+    }
+})();
+
 // =========================================================================
 //  PLATFORM-SPECIFIC SEARCH PATHS
 // =========================================================================
@@ -30,7 +116,7 @@ const { execFile, execFileSync } = require('child_process');
 const PLATFORM_PATHS = {
     darwin: [
         '/opt/homebrew/bin',                    // Apple Silicon Homebrew
-        '/opt/homebrew/Cellar',                  // Direct Cellar (recursive)
+
         '/usr/local/bin',                        // Intel Homebrew / POSIX
         '/usr/bin',                              // System
         '/Applications/Ollama.app/Contents/Resources/cli',  // Official Ollama .app
@@ -144,6 +230,8 @@ const SERVICES = {
     graphify: {
         executable: 'graphify',
         versionArgs: ['--help'],
+        // graphify --help may include non-version output; accept any result as "installed"
+        versionLabel: 'installed',
         runningCheck: null,
         installUrl: 'pip install graphifyy',
         installHint: {
@@ -157,6 +245,13 @@ const SERVICES = {
 // =========================================================================
 //  CORE HELPERS
 // =========================================================================
+
+/**
+ * Check if a path is a real file (not a directory like Cellar/ollama).
+ */
+function isFile(p) {
+    try { return fs.statSync(p).isFile(); } catch (_) { return false; }
+}
 
 /**
  * Try to find an executable by name.
@@ -173,7 +268,7 @@ function which(name) {
     for (const dir of PATH) {
         try {
             const full = path.resolve(dir, name);
-            if (fs.existsSync(full)) return full;
+            if (isFile(full)) return full;
         } catch (_) { /* invalid path entry */ }
     }
 
@@ -186,11 +281,11 @@ function which(name) {
             const expanded = expandGlob(dir);
             for (const sub of expanded) {
                 const full = path.join(sub, name);
-                if (fs.existsSync(full)) return full;
+                if (isFile(full)) return full;
             }
         } else {
             const full = path.join(dir, name);
-            if (fs.existsSync(full)) return full;
+            if (isFile(full)) return full;
         }
     }
 
@@ -202,7 +297,7 @@ function which(name) {
                 timeout: 5000,
                 stdio: ['ignore', 'pipe', 'ignore'],
             }).trim();
-            if (result && fs.existsSync(result)) return result;
+            if (result && isFile(result)) return result;
         } catch (_) { /* which not available or not found */ }
     }
 
@@ -223,7 +318,7 @@ function which(name) {
             const result = execFileSync('where', [name], {
                 encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'],
             }).trim().split('\n')[0];
-            if (result && fs.existsSync(result)) return result;
+            if (result && isFile(result)) return result;
         } catch (_) { /* where not available or not found */ }
     }
 
@@ -257,8 +352,9 @@ function getVersion(binPath, versionArgs) {
                 const line = lines[i].trim();
                 if (!line) continue;
 
-                // Match "1.2.3", "v1.2.3", "1.2.3-alpha", or "version 1.2.3"
-                const m = line.match(/(?:version\s*)?v?(\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?)/i);
+                // Match any version-like string: "1.2.3", "v1.2.3", "version is 1.2.3",
+                // "ollama version is 0.30.8", "1.2.3-alpha", etc.
+                const m = line.match(/v?(\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?)/);
                 if (m) { resolve(m[1]); return; }
             }
 
@@ -316,7 +412,7 @@ async function locate(name) {
         };
     }
 
-    const version = await getVersion(binPath, svc.versionArgs);
+    const version = svc.versionLabel || (await getVersion(binPath, svc.versionArgs));
     return {
         found: true, path: binPath, version,
         error: null,

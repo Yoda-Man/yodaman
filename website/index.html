@@ -226,9 +226,22 @@
       </div>
       <div class="install-panels">
         <article>
-          <h3>Install YodaMan</h3>
-          <pre><code>npm install -g yodaman
-python3 -m pip install graphifyy</code></pre>
+          <h3>1. Prerequisites</h3>
+          <pre><code># Required — Context Expert (workspace indexing &amp; search)
+npm install -g @context-expert/cli
+
+# Required — Graphify (knowledge graphs)
+python3 -m pip install graphifyy
+
+# Required — Ollama (local LLM)
+# Download from https://ollama.com
+brew install ollama    # macOS
+# or: curl -fsSL https://ollama.com/install.sh | sh  # Linux
+# or: winget install Ollama.Ollama  # Windows</code></pre>
+        </article>
+        <article>
+          <h3>2. Install YodaMan</h3>
+          <pre><code>npm install -g yodaman</code></pre>
         </article>
         <article>
           <h3>Start the runtime</h3>
@@ -236,7 +249,7 @@ python3 -m pip install graphifyy</code></pre>
         </article>
         <article>
           <h3>Open YodaMan</h3>
-          <pre><code>http://localhost:5190</code></pre>
+          <pre><code>http://localhost:3090</code></pre>
         </article>
         <article>
           <h3>Package page</h3>

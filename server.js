@@ -152,13 +152,34 @@ async function initialize() {
         config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
         config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];
 
+        // Merge ctx projects into watched directories — ctx is the source of truth.
+        // New ctx projects are auto-added and queued for indexing.
+        let changed = false;
+        const newProjects = [];
+        for (const ctxPath of cliPaths) {
+            if (config.removedDirectories.includes(ctxPath)) continue;
+            if (!config.watchedDirectories.includes(ctxPath)) {
+                config.watchedDirectories.push(ctxPath);
+                newProjects.push(ctxPath);
+                changed = true;
+            }
+        }
+
         const activeCliPaths = new Set(cliPaths.filter(p => !config.removedDirectories.includes(p)));
         const watchedDirectories = config.watchedDirectories.filter(p => !apiRoutes.isGeneratedTempWorkspace(p));
         watchedDirectories.forEach(p => watcherService.setupWatcher(p));
 
-        if (watchedDirectories.length !== config.watchedDirectories.length) {
+        if (changed || watchedDirectories.length !== config.watchedDirectories.length) {
             config.watchedDirectories = watchedDirectories;
             fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+            logger.info('config_synced_from_ctx', { projects: watchedDirectories.length, new: newProjects.length });
+        }
+
+        // Auto-index newly discovered ctx projects (non-blocking — runs in parallel)
+        for (const p of newProjects) {
+            queueService.addToQueue(p);
+            graphifyService.build(p, { update: true }).catch(err =>
+                logger.error('startup_graphify_build_failed', err, { path: p }));
         }
 
         healthState.projects = watchedDirectories.length;

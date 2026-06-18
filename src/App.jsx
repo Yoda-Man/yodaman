@@ -155,18 +155,18 @@ export default function App() {
                 Dashboard
               </button>
               <button 
-                onClick={() => setActiveTab('manual')}
-                className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'manual' ? 'bg-white/[0.03] text-indigo-400 border-indigo-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
-              >
-                <Book size={14} />
-                Manual
-              </button>
-              <button 
                 onClick={() => setActiveTab('plugins')}
                 className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'plugins' ? 'bg-white/[0.03] text-indigo-400 border-indigo-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
               >
                 <Puzzle size={14} />
                 Plugins
+              </button>
+              <button 
+                onClick={() => setActiveTab('manual')}
+                className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'manual' ? 'bg-white/[0.03] text-indigo-400 border-indigo-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
+              >
+                <Book size={14} />
+                Manual
               </button>
             </div>
             <div className="mb-2 flex shrink-0 items-center gap-2">
@@ -189,7 +189,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-hidden bg-white/[0.01] border-t border-white/5">
+          <div className="flex-1 overflow-y-auto bg-white/[0.01] border-t border-white/5 custom-scrollbar">
             {activeTab === 'chat' && <AgentChatTab selectedProject={selectedProject} />}
             {activeTab === 'search' && <SearchWindow selectedProject={selectedProject} />}
             {activeTab === 'graph' && <GraphStudio selectedProject={selectedProject} />}
