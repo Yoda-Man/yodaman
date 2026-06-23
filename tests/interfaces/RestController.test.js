@@ -45,12 +45,60 @@ describe('RestController Integration', () => {
     }
 
     async function invoke(method, routePath, { body = {}, query = {}, params = {} } = {}) {
+        const appSettings = new Map();
         const req = {
             body,
             query,
             params,
             id: 'test-request-id',
-            get: jest.fn()
+            get: jest.fn(),
+            app: {
+                get: jest.fn((key) => appSettings.get(key)),
+                set: jest.fn((key, value) => appSettings.set(key, value))
+            }
+        };
+        const res = {
+            statusCode: 200,
+            headers: {},
+            setHeader: jest.fn(function setHeader(name, value) {
+                this.headers[name] = value;
+            }),
+            removeHeader: jest.fn(function removeHeader(name) {
+                delete this.headers[name];
+            }),
+            status: jest.fn(function status(code) {
+                this.statusCode = code;
+                return this;
+            }),
+            json: jest.fn(function json(payload) {
+                this.payload = payload;
+                return this;
+            }),
+            send: jest.fn(function send(payload) {
+                this.payload = payload;
+                return this;
+            }),
+            sendFile: jest.fn(function sendFile(filePath) {
+                this.filePath = filePath;
+                return this;
+            })
+        };
+
+        await routeHandler(method, routePath)(req, res);
+        return res;
+    }
+
+    async function invokeWithAppSettings(method, routePath, settings, options = {}) {
+        const req = {
+            body: options.body || {},
+            query: options.query || {},
+            params: options.params || {},
+            id: 'test-request-id',
+            get: jest.fn(),
+            app: {
+                get: jest.fn((key) => settings[key]),
+                set: jest.fn()
+            }
         };
         const res = {
             statusCode: 200,
@@ -168,6 +216,53 @@ describe('RestController Integration', () => {
         expect(rejected.payload).toEqual(expect.objectContaining({
             code: 'invalid_mode'
         }));
+    });
+
+    test('GET /health reports unchecked startup dependencies as pending, not failed', async () => {
+        const response = await invokeWithAppSettings('get', '/health', {
+            healthState: {
+                started: false,
+                graphify: { ok: false, message: 'not checked' },
+                ollama: { ok: false, message: 'not checked' },
+                ctx: { ok: false, message: 'not checked' },
+                config: { ok: false, message: 'not checked' },
+                projects: 0,
+                indexed: 0,
+                syncComplete: false
+            },
+            port: 3090
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.payload.status).toBe('starting');
+        expect(response.payload.checks.runtime.ok).toBe(true);
+        expect(response.payload.checks.graphify.ok).toBeNull();
+        expect(response.payload.checks.ollama.ok).toBeNull();
+        expect(response.payload.checks.ctx.ok).toBeNull();
+        expect(response.payload.checks.config.ok).toBeNull();
+    });
+
+    test('GET /health preserves failed dependency checks after startup completes', async () => {
+        const response = await invokeWithAppSettings('get', '/health', {
+            healthState: {
+                started: true,
+                graphify: { ok: false, message: 'graphify not found' },
+                ollama: { ok: false, message: 'ollama not found' },
+                ctx: { ok: true, message: 'available' },
+                config: { ok: true, message: 'loaded (0 dirs)' },
+                projects: 0,
+                indexed: 0,
+                syncComplete: true
+            },
+            port: 3090
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.payload.status).toBe('degraded');
+        expect(response.payload.checks.graphify.ok).toBe(false);
+        expect(response.payload.checks.ollama.ok).toBe(false);
+        expect(response.payload.checks.ctx.ok).toBe(true);
+        expect(response.payload.checks.config.ok).toBe(true);
     });
 
     test('GET /git endpoints expose local history, heatmap, branch, and commit diff', async () => {
@@ -378,7 +473,7 @@ describe('RestController Integration', () => {
         try {
             expect(router.arePluginUploadsEnabled()).toBe(false);
             expect(() => router.safePluginFilename('../evil.js')).toThrow('Invalid plugin filename');
-            expect(() => router.safePluginFilename('evil.txt')).toThrow('Plugin upload must be a JavaScript file');
+            expect(() => router.safePluginFilename('evil.txt')).toThrow('Plugin upload must be a .js or .zip file');
             expect(router.safePluginFilename('good-plugin.js')).toBe('good-plugin.js');
         } finally {
             if (original === undefined) {

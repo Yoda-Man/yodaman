@@ -1,4 +1,5 @@
 const queueService = require('../../backend/core/QueueService');
+const contextEngine = require('../../backend/infrastructure/ContextEngine');
 const { spawn } = require('child_process');
 
 jest.mock('child_process');
@@ -23,11 +24,10 @@ describe('QueueService', () => {
         queueService.addToQueue('/path/1');
         expect(queueService.queue).toHaveLength(0); // Shifted immediately
         expect(queueService.isProcessing).toBe(true);
-        expect(spawn).toHaveBeenCalledWith('ctx', ['index', '/path/1']);
+        expect(spawn).toHaveBeenCalledWith(contextEngine.binary, ['index', '/path/1']);
     });
 
     test('uses the configured ContextEngine binary for indexing', () => {
-        const contextEngine = require('../../backend/infrastructure/ContextEngine');
         const originalBinary = contextEngine.binary;
         contextEngine.binary = 'ctx-custom';
         const mockProc = {

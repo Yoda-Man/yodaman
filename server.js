@@ -20,10 +20,10 @@ const dependencyChecker = require('./backend/infrastructure/DependencyChecker');
 // ─────────────────────────────────────────────────────────────────────────
 const healthState = {
     started: false,
-    graphify: { ok: false, message: 'not checked' },
-    ollama: { ok: false, message: 'not checked' },
-    ctx: { ok: false, message: 'not checked' },
-    config: { ok: false, message: 'not checked' },
+    graphify: { ok: null, message: 'not checked' },
+    ollama: { ok: null, message: 'not checked' },
+    ctx: { ok: null, message: 'not checked' },
+    config: { ok: null, message: 'not checked' },
     projects: 0,
     indexed: 0,
     syncComplete: false

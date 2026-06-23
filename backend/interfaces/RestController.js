@@ -426,7 +426,7 @@ router.get('/projects', async (req, res) => {
             files: p.files || 0,
             chunks: p.chunks || 0,
             indexed: true
-        })).filter(p => !config.removedDirectories.includes(p.path));
+        })).filter(p => !config.removedDirectories.includes(p.path) && !isGeneratedTempWorkspace(p.path));
 
         // Merge ctx projects with watched directories.
         // ctx is the source of truth; config.watchedDirectories may have
@@ -1457,10 +1457,10 @@ router.get('/health', async (req, res) => {
     const healthState = req.app ? req.app.get('healthState') : null;
     const checks = healthState || {
         started: false,
-        graphify: { ok: false, message: 'runtime not initialized' },
-        ollama: { ok: false, message: 'runtime not initialized' },
-        ctx: { ok: false, message: 'runtime not initialized' },
-        config: { ok: false, message: 'runtime not initialized' },
+        graphify: { ok: null, message: 'runtime not initialized' },
+        ollama: { ok: null, message: 'runtime not initialized' },
+        ctx: { ok: null, message: 'runtime not initialized' },
+        config: { ok: null, message: 'runtime not initialized' },
         projects: 0,
         indexed: 0,
         syncComplete: false
@@ -1469,8 +1469,16 @@ router.get('/health', async (req, res) => {
     const ollamaRunning = await dependencyChecker.checkRunning('ollama')
         .catch(() => ({ running: null, reason: 'check failed' }));
 
-    // Normalize each check to include a `version` field if not already set
-    const enrich = (c) => c ? { ...c, version: c.version || null } : c;
+    // Normalize each check to include a `version` field if not already set.
+    // During startup, "not checked" means pending. Reporting it as a failure
+    // makes the Electron diagnostics page show a false startup error.
+    const enrich = (c) => {
+        if (!c) return c;
+        const ok = checks.started === false && c.ok === false && c.message === 'not checked'
+            ? null
+            : c.ok;
+        return { ...c, ok, version: c.version || null };
+    };
 
     res.json({
         status: checks.started ? 'degraded' : 'starting',

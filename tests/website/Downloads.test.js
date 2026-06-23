@@ -25,6 +25,7 @@ describe('Website downloads', () => {
             expect(html).toContain(`href="${href}"`);
         });
         expect(html).not.toMatch(/downloads\/[^"]*0\.2\.1/);
+        expect(html).not.toMatch(/downloads\/[^"]*0\.3\.1/);
     });
 
     test('local download links point to synced files', () => {

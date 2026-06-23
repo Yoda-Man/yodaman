@@ -1,6 +1,6 @@
 // Plugin upload safety tests
 describe('safePluginFilename',()=>{
-const RC=require('/Users/developer/Documents/yodaman/backend/interfaces/RestController');
+const RC=require('../../backend/interfaces/RestController');
 test('accepts .js',()=>{expect(()=>RC.safePluginFilename('p.js')).not.toThrow();});
 test('accepts .zip now',()=>{expect(()=>RC.safePluginFilename('p.zip')).not.toThrow();});
 test('rejects path traversal',()=>{expect(()=>RC.safePluginFilename('../p.js')).toThrow();});

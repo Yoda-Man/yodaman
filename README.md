@@ -2,7 +2,7 @@
 
 YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime.
 
-![Version](https://img.shields.io/badge/Version-0.3.0-gold)
+![Version](https://img.shields.io/badge/Version-0.3.2-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -16,7 +16,7 @@ YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It con
 - **Choose query intent**: Switch between Code and Docs modes for more relevant answers.
 - **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
 
-## Version 0.3.0 — What's New
+## Version 0.3.2 — What's New
 
 - **Pre-installed plugins**: CodeTrooper (line counter), Droid-Sweep (unused file finder), Grand Inquisitor (dependency scanner), Lightsaber (Git hotspot analysis)
 - **Plugin enable/disable**: Toggle any plugin on/off from Settings → Developer Settings without restarting
