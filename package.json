@@ -1,8 +1,8 @@
 {
   "name": "yodaman",
-  "version": "0.2.2",
-  "description": "Web GUI for Context Expert (ctx)",
-  "author": "YodaMan",
+  "version": "0.3.2",
+  "description": "YodaMan — local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
+  "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
     "yodaman": "bin/yodaman.js"
   },
@@ -38,27 +38,18 @@
     "generate:protocol": "node scripts/generate-protocol.js",
     "release:smoke": "node scripts/release-smoke.js"
   },
-  "jest": {
-    "modulePathIgnorePatterns": [
-      "<rootDir>/release",
-      "<rootDir>/dist",
-      "<rootDir>/extensions/vscode-yodaman/node_modules"
-    ],
-    "testPathIgnorePatterns": [
-      "<rootDir>/release",
-      "<rootDir>/dist",
-      "<rootDir>/extensions/vscode-yodaman/node_modules"
-    ]
-  },
   "dependencies": {
     "axios": "^1.6.2",
     "chokidar": "^3.5.3",
     "cors": "^2.8.5",
     "express": "^4.18.2",
+    "fs-extra": "^11.0.0",
+    "glob": "^10.0.0",
     "lucide-react": "^0.292.0",
     "multer": "^2.1.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "simple-git": "^3.36.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.2",
@@ -71,11 +62,44 @@
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.5",
     "vite": "^8.0.13",
-    "wait-on": "^9.0.10",
-    "fs-extra": "^11.0.0",
-    "glob": "^10.0.0"
+    "wait-on": "^9.0.10"
   },
   "overrides": {
     "esbuild": "^0.25.0"
+  },
+  "license": "MIT",
+  "private": false,
+  "keywords": [
+    "yodaman",
+    "ai-agent",
+    "code-search",
+    "knowledge-graph",
+    "developer-tools",
+    "workspace-intelligence",
+    "local-first",
+    "privacy"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yoda-Man/yodaman.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Yoda-Man/yodaman/issues"
+  },
+  "homepage": "https://github.com/Yoda-Man/yodaman#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "jest": {
+    "modulePathIgnorePatterns": [
+      "<rootDir>/release",
+      "<rootDir>/dist",
+      "<rootDir>/extensions/vscode-yodaman/node_modules"
+    ],
+    "testPathIgnorePatterns": [
+      "<rootDir>/release",
+      "<rootDir>/dist",
+      "<rootDir>/extensions/vscode-yodaman/node_modules"
+    ]
   }
 }

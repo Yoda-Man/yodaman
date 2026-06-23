@@ -57,6 +57,13 @@ ${defaultCodingSkill}
 - After a tool call, the user (system) will provide the result.
 - Continue until the task is complete, then provide a final summary.
 - Always be concise and precise.
+
+### Graph-Aware Responses:
+When project graph context is provided (you will see "Graphify knowledge graph report" in your context), reference it in your answer:
+- Cite specific files and their dependencies from the graph.
+- Append a '[view graph](http://localhost:5190)' link when you use graph-derived information.
+- If you identify similar patterns, suggest files to create based on existing module structure.
+- Mention how many files will be affected by a proposed change.
 `;
     }
 
@@ -164,9 +171,11 @@ ${defaultCodingSkill}
         });
 
         let graphContext = '';
+        let graphAvailable = false;
         if (metadata.projectId) {
             const insights = await graphifyService.query(task, metadata.projectId);
             const report = graphifyService.readReport(metadata.projectId, { maxChars: 4000 });
+            graphAvailable = !!(report || insights);
             graphContext = [
                 '',
                 '',
@@ -174,11 +183,27 @@ ${defaultCodingSkill}
                 report || '(No Graphify report generated yet.)',
                 '',
                 'Graphify query insights:',
-                insights
+                insights,
+                '',
+                '--- Graph-Aware Response Instructions ---',
+                'You have access to project graph context above. When you reference files, modules, or dependencies from the graph,',
+                'append a "[view graph](http://localhost:5190)" link to your answer so the user can explore the visual graph.',
+                'Example: "Similar endpoints exist in `routes/user.js` and `routes/product.js` [view graph](http://localhost:5190)"',
+                'If the graph has no data for this query, omit the link.',
+                '-----------------------------------------'
             ].join('\n');
         }
 
-        let conversation = `${this.getSystemPrompt()}${graphContext}\n\nUser Task: ${task}`;
+        const uploadedFileContext = Array.isArray(metadata.uploadedFiles) && metadata.uploadedFiles.length
+            ? [
+                '',
+                '',
+                'Attached local files for this task:',
+                ...metadata.uploadedFiles.map(file => `- ${file.filename} (${file.size} bytes): ${file.path}`)
+            ].join('\n')
+            : '';
+
+        let conversation = `${this.getSystemPrompt()}${graphContext}${uploadedFileContext}\n\nUser Task: ${task}`;
         let iteration = 0;
         let finalAnswer = '';
 

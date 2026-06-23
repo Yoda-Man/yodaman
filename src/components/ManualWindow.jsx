@@ -32,16 +32,18 @@ const featureGroups = [
         title: 'Chat and agent work',
         items: [
             'Ask project questions from the Chat tab using the selected workspace context.',
-            'Switch between standard code context and documentation mode where the chat controls expose that option.',
+            'Toggle between Code mode and Docs mode using the Code/Docs buttons next to the chat title.',
             'Yoda-Agent loads a default coding skill for assumptions, simplicity, surgical edits, and verification.',
-            'Agent tasks stream tool events, can be cancelled, and pause for approval before applying writes.'
+            'Agent tasks stream tool events, can be cancelled, and pause for approval before applying writes.',
+            'An animated processing indicator shows when the agent is thinking, with a "still working" fallback after 10 seconds on slow connections.',
+            'Use the 🗑 Clear button to reset the conversation and start fresh follow-up questions.'
         ]
     },
     {
         icon: GitBranch,
         title: 'Graphify',
         items: [
-            'Graphify is required in version 0.2.2 and uses Ollama local execution only for semantic extraction.',
+            'Graphify is required in version 0.3.2 and uses Ollama local execution only for semantic extraction.',
             'Graphify builds knowledge graphs for code, docs, diagrams, and architecture.',
             'Sync Repository updates the Context Expert index and the Graphify graph together.',
             'Run yodaman doctor --graph to check active graphs, freshness, orphaned nodes, and the most dependency-heavy file.',
@@ -64,7 +66,8 @@ const featureGroups = [
         items: [
             'Upload JavaScript plugins from the Plugins tab or place them in the plugins directory.',
             'Plugins expose a name, description, parameters, permissions, and an async execute function.',
-            'Plugin uploads, unrestricted plugins, and agent shell commands are disabled by default and should only be enabled for trusted local support sessions.'
+            'Three pre-installed plugins come with YodaMan: CodeTrooper (count lines of code), Droid-Sweep (find unused files), and Lightsaber (Git hotspot analysis). Enable or disable any plugin from Settings → Developer Settings.',
+            'Plugin uploads, unrestricted plugins, and agent shell commands can be toggled from Settings → Developer Settings without restarting the server.'
         ]
     },
     {
@@ -74,6 +77,15 @@ const featureGroups = [
             'Task history and audit logs persist locally in SQLite when available.',
             'YodaMan falls back to JSON files on Node runtimes without SQLite support.',
             'Clients can search runtime logs by text, severity, level, and user action, inspect index queue state, and clear task history or audit logs.'
+        ]
+    },
+    {
+        icon: Laptop,
+        title: 'Developer Settings',
+        items: [
+            'All environment-level settings (plugin uploads, unrestricted plugins, agent shell commands, pairing tokens) are now managed from Settings → Developer Settings.',
+            'Changes take effect immediately — no server restart required.',
+            'Settings are persisted in config.json and can still be overridden by environment variables.'
         ]
     },
     {
@@ -119,10 +131,10 @@ export default function ManualWindow() {
                         YodaMan Manual
                     </h1>
                     <p className="text-lg leading-relaxed text-slate-400 max-w-3xl">
-                        YodaMan 0.2.2 is a local-first workspace intelligence system for developers. It connects the web UI, desktop app, VS Code extension, mobile companion, CLI runtime, mandatory Graphify knowledge graphs, plugins, search, chat, and supervised agent workflows around one private local runtime.
+                        YodaMan 0.3.2 is a local-first workspace intelligence system for developers. It connects the web UI, desktop app, VS Code extension, mobile companion, CLI runtime, mandatory Graphify knowledge graphs, plugins, search, chat, supervised agent workflows, and a growing ecosystem of pre-installed tools around one private local runtime.
                     </p>
                     <div className="mt-6 flex flex-wrap items-center gap-3">
-                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.2.2</span>
+                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.3.2</span>
                         <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-400">Local runtime</span>
                         <span className="px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest text-cyan-300">Graphify required</span>
                         <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-300">Human approved writes</span>

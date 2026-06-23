@@ -3,6 +3,7 @@ const path = require('path');
 const os = require('os');
 const { execFile } = require('child_process');
 const logger = require('./Logger');
+const dependencyChecker = require('./DependencyChecker');
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 300000);
 const DEFAULT_OLLAMA_MODEL = process.env.YODAMAN_GRAPHIFY_OLLAMA_MODEL || 'qwen3:5b';
@@ -34,13 +35,29 @@ function findUserGraphifyBins() {
 
 function getGraphifyBin() {
     if (resolvedGraphifyBin) return resolvedGraphifyBin;
-    const candidates = [
-        process.env.YODAMAN_GRAPHIFY_BIN,
-        ...findUserGraphifyBins(),
-        'graphify'
-    ].filter(Boolean);
 
-    resolvedGraphifyBin = candidates[0];
+    // 1. Environment variable override
+    if (process.env.YODAMAN_GRAPHIFY_BIN) {
+        resolvedGraphifyBin = process.env.YODAMAN_GRAPHIFY_BIN;
+        return resolvedGraphifyBin;
+    }
+
+    // 2. DependencyChecker cross-platform search (handles any OS, any package manager)
+    const found = dependencyChecker.which('graphify');
+    if (found) {
+        resolvedGraphifyBin = found;
+        return resolvedGraphifyBin;
+    }
+
+    // 3. macOS Python user-install paths (legacy)
+    const userBins = findUserGraphifyBins();
+    if (userBins.length > 0) {
+        resolvedGraphifyBin = userBins[0];
+        return resolvedGraphifyBin;
+    }
+
+    // 4. Last resort — rely on system PATH (may fail in Electron)
+    resolvedGraphifyBin = 'graphify';
     return resolvedGraphifyBin;
 }
 
@@ -407,6 +424,8 @@ function enhanceArtifactHtml(html) {
 }
 
 module.exports = {
+    // Set to true after assertAvailable() confirms Ollama is installed.
+    _ollamaAvailable: false,
     graphPath,
     reportPath,
     buildStatusPath,
@@ -429,15 +448,33 @@ module.exports = {
             );
         }
 
-        await new Promise((resolve, reject) => {
-            execFile('ollama', ['--version'], { timeout: 10000 }, (err) => {
-                if (err) {
-                    reject(new Error('Ollama is required for local-only Graphify semantic extraction. Install Ollama and make sure the `ollama` command is in PATH.'));
-                    return;
+        // Ollama is optional — only needed for full-semantic extraction.
+        // Uses DependencyChecker which searches common install paths
+        // even when Electron's bundled PATH doesn't include them.
+        try {
+            const ollamaCheck = await dependencyChecker.check('ollama');
+            this._ollamaAvailable = ollamaCheck.found && ollamaCheck.running;
+            if (ollamaCheck.found) {
+                logger.info('ollama_available', {
+                    path: ollamaCheck.path,
+                    version: ollamaCheck.version,
+                    running: ollamaCheck.running
+                });
+                if (!ollamaCheck.running) {
+                    logger.warn('ollama_not_running', {
+                        message: `Ollama found at ${ollamaCheck.path} but is not running. Start it with \`ollama serve\` or launch the Ollama app.`
+                    });
                 }
-                resolve();
-            });
-        });
+            } else {
+                logger.warn('ollama_unavailable', {
+                    message: ollamaCheck.error + ' Graphify full-semantic extraction will be disabled.',
+                    binary: 'ollama'
+                });
+            }
+        } catch (err) {
+            logger.warn('ollama_check_error', { message: err.message });
+            this._ollamaAvailable = false;
+        }
     },
 
     async build(projectPath, { update = false } = {}) {

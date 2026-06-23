@@ -207,13 +207,41 @@ export const api = {
         return request(`${API_BASE}/agent/tasks`);
     },
 
-    async agentTask(task, projectId, onStep) {
+    async getGitContext(path) {
+        return request(`${API_BASE}/git/context?path=${encodeURIComponent(path)}`);
+    },
+
+    async uploadTempFile(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        return request(`${API_BASE}/upload/temp`, {
+            method: 'POST',
+            body: formData,
+            timeoutMs: 60000
+        });
+    },
+
+    async attachUploadFile(taskId, fileId) {
+        return request(`${API_BASE}/upload/attach`, jsonOptions('POST', { taskId, fileId }));
+    },
+
+    async deleteTempUploadFile(fileId) {
+        return request(`${API_BASE}/upload/temp/${encodeURIComponent(fileId)}`, {
+            method: 'DELETE'
+        });
+    },
+
+    async listTaskUploadFiles(taskId) {
+        return request(`${API_BASE}/upload/task/${encodeURIComponent(taskId)}/files`);
+    },
+
+    async agentTask(task, projectId, onStep, context = {}) {
         let response;
         try {
             response = await fetch(`${API_BASE}/agent/task`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ task, projectId })
+                body: JSON.stringify({ task, projectId, context, fileIds: context.fileIds || [] })
             });
         } catch (err) {
             if (err instanceof TypeError) {

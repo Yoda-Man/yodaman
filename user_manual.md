@@ -1,6 +1,6 @@
 # YodaMan User Manual
 
-Version: 0.2.2
+Version: 0.3.2
 
 YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, mandatory Graphify knowledge graph, plugin system, and local runtime API.
 
@@ -32,11 +32,11 @@ The Express runtime is the shared contract for every client. It serves the React
 
 ### Workspaces
 
-Workspaces are absolute local folder paths. Add them by pasting a path, browsing with a native folder picker in desktop clients, using the sidebar plus button, or using the desktop menu item `Add Project Folder`. In version 0.2.2 you can edit a workspace path when a project moves, delete stale workspaces, validate workspace health, refresh the workspace list, and run `Sync Repository` to reindex the active workspace and update its Graphify graph.
+Workspaces are absolute local folder paths. Add them by pasting a path, browsing with a native folder picker in desktop clients, using the sidebar plus button, or using the desktop menu item `Add Project Folder`. In version 0.3.2 you can edit a workspace path when a project moves, delete stale workspaces, validate workspace health, refresh the workspace list, and run `Sync Repository` to reindex the active workspace and update its Graphify graph.
 
 ### Graphify knowledge graph
 
-Graphify is mandatory in 0.2.2 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
+Graphify is mandatory in 0.3.2 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
 
 The Graph tab opens Graph Studio, a project-scoped visual workspace for Graphify outputs. Graph Studio embeds the generated mind-map and Vis.js canvas artifacts, shows graph freshness, renders the markdown report, and keeps graph query plus impact analysis actions close to the visualization.
 
@@ -60,6 +60,23 @@ Agent tasks stream task starts, tool calls, approval requests, cancellations, fi
 
 Task history and audit logs persist locally in SQLite when available. If Node SQLite support is unavailable, YodaMan falls back to JSON/JSONL files. Clients can clear task history and audit logs through the runtime endpoints.
 
+### Creating plugins with the CLI
+
+YodaMan includes a `create-plugin` command to scaffold new plugins:
+
+```bash
+yodaman create-plugin my-tool
+```
+
+This generates:
+
+- **`plugins/my-tool.js`** — plugin template with the standard YodaMan plugin interface (`name`, `description`, `permissions`, `parameters`, `execute`)
+- **`plugins/my-tool.test.js`** — Jest test file with basic structure checks
+- **`plugins/README.md`** — updated with an API reference entry for the new plugin
+- **`config.json`** — auto-registers the plugin as enabled
+
+After scaffolding, edit the generated `.js` file to implement your tool logic, update the `parameters` and `permissions`, then run `npx jest plugins/my-tool.test.js` to verify the structure.
+
 ### Plugins
 
 Plugins are JavaScript modules that extend the agent with custom tools. A plugin should export a `name`, `description`, `parameters`, `permissions`, and an async `execute` function. Plugin uploads, unrestricted plugins, and agent shell commands are disabled by default. Enable `YODAMAN_ALLOW_PLUGIN_UPLOADS`, `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS`, or `YODAMAN_ALLOW_AGENT_COMMANDS` only during trusted local support sessions.
@@ -69,6 +86,9 @@ Plugins are JavaScript modules that extend the agent with custom tools. A plugin
 - **Settings**: Open from the top-right Settings button, sidebar plus button, or Configuration modal. Paste an absolute path or use Browse in the desktop app, then add, edit, and delete workspace paths.
 - **Workspaces sidebar**: Select a project, refresh the list, validate health, toggle inclusion, edit the file path, delete a workspace, and sync the selected repository.
 - **Chat**: Ask questions using the selected workspace context.
+- **Agent Chat**: Send open-ended agent tasks or select a **task preset** from the dropdown above the textarea. The **📊 Impact Analysis** preset pre-fills a structured prompt asking for affected files, breaking changes, and suggested tests — ideal before editing shared utilities. More presets can be added to the `TASK_PRESETS` array in `AgentChatTab.jsx`.
+
+  Agent responses are **graph-aware**. When graph context is available, the agent cites specific files and their dependencies from the knowledge graph and appends a `[view graph](http://localhost:5190)` link so you can explore the visual graph. For example, asking "How to add a new API endpoint?" may produce an answer referencing similar endpoints found in the graph, suggesting files to create based on existing module patterns, and estimating the number of affected files.
 - **Search**: Run semantic search across indexed code and documentation, optionally scoped to the selected workspace.
 - **Dashboard**: View runtime status, database/index metrics, environment information, runtime diagnostics, task counts, pending approvals, plugin policy information, and mobile pairing.
 - **Logs**: Open searchable runtime logs, reindex requests, index queue state, and `ctx index` output. Filter by text, level, severity, and user action, then use Copy when sharing an error.

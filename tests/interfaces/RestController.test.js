@@ -8,6 +8,7 @@ const contextEngine = require('../../backend/infrastructure/ContextEngine');
 const graphifyService = require('../../backend/infrastructure/GraphifyService');
 const watcherService = require('../../backend/infrastructure/FileSystemWatcher');
 const logger = require('../../backend/infrastructure/Logger');
+const gitService = require('../../backend/services/gitService');
 
 describe('RestController Integration', () => {
     let testConfigDir;
@@ -44,12 +45,60 @@ describe('RestController Integration', () => {
     }
 
     async function invoke(method, routePath, { body = {}, query = {}, params = {} } = {}) {
+        const appSettings = new Map();
         const req = {
             body,
             query,
             params,
             id: 'test-request-id',
-            get: jest.fn()
+            get: jest.fn(),
+            app: {
+                get: jest.fn((key) => appSettings.get(key)),
+                set: jest.fn((key, value) => appSettings.set(key, value))
+            }
+        };
+        const res = {
+            statusCode: 200,
+            headers: {},
+            setHeader: jest.fn(function setHeader(name, value) {
+                this.headers[name] = value;
+            }),
+            removeHeader: jest.fn(function removeHeader(name) {
+                delete this.headers[name];
+            }),
+            status: jest.fn(function status(code) {
+                this.statusCode = code;
+                return this;
+            }),
+            json: jest.fn(function json(payload) {
+                this.payload = payload;
+                return this;
+            }),
+            send: jest.fn(function send(payload) {
+                this.payload = payload;
+                return this;
+            }),
+            sendFile: jest.fn(function sendFile(filePath) {
+                this.filePath = filePath;
+                return this;
+            })
+        };
+
+        await routeHandler(method, routePath)(req, res);
+        return res;
+    }
+
+    async function invokeWithAppSettings(method, routePath, settings, options = {}) {
+        const req = {
+            body: options.body || {},
+            query: options.query || {},
+            params: options.params || {},
+            id: 'test-request-id',
+            get: jest.fn(),
+            app: {
+                get: jest.fn((key) => settings[key]),
+                set: jest.fn()
+            }
         };
         const res = {
             statusCode: 200,
@@ -167,6 +216,95 @@ describe('RestController Integration', () => {
         expect(rejected.payload).toEqual(expect.objectContaining({
             code: 'invalid_mode'
         }));
+    });
+
+    test('GET /health reports unchecked startup dependencies as pending, not failed', async () => {
+        const response = await invokeWithAppSettings('get', '/health', {
+            healthState: {
+                started: false,
+                graphify: { ok: false, message: 'not checked' },
+                ollama: { ok: false, message: 'not checked' },
+                ctx: { ok: false, message: 'not checked' },
+                config: { ok: false, message: 'not checked' },
+                projects: 0,
+                indexed: 0,
+                syncComplete: false
+            },
+            port: 3090
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.payload.status).toBe('starting');
+        expect(response.payload.checks.runtime.ok).toBe(true);
+        expect(response.payload.checks.graphify.ok).toBeNull();
+        expect(response.payload.checks.ollama.ok).toBeNull();
+        expect(response.payload.checks.ctx.ok).toBeNull();
+        expect(response.payload.checks.config.ok).toBeNull();
+    });
+
+    test('GET /health preserves failed dependency checks after startup completes', async () => {
+        const response = await invokeWithAppSettings('get', '/health', {
+            healthState: {
+                started: true,
+                graphify: { ok: false, message: 'graphify not found' },
+                ollama: { ok: false, message: 'ollama not found' },
+                ctx: { ok: true, message: 'available' },
+                config: { ok: true, message: 'loaded (0 dirs)' },
+                projects: 0,
+                indexed: 0,
+                syncComplete: true
+            },
+            port: 3090
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.payload.status).toBe('degraded');
+        expect(response.payload.checks.graphify.ok).toBe(false);
+        expect(response.payload.checks.ollama.ok).toBe(false);
+        expect(response.payload.checks.ctx.ok).toBe(true);
+        expect(response.payload.checks.config.ok).toBe(true);
+    });
+
+    test('GET /git endpoints expose local history, heatmap, branch, and commit diff', async () => {
+        const originalHistory = gitService.getCommitHistory;
+        const originalHeatmap = gitService.getHeatmapData;
+        const originalBranch = gitService.getBranchInfo;
+        const originalDiff = gitService.getCommitDiff;
+
+        gitService.getCommitHistory = jest.fn(async () => [{ hash: 'abc123', filesChanged: 2 }]);
+        gitService.getHeatmapData = jest.fn(async () => [{ filePath: 'src/App.jsx', changeCount: 4 }]);
+        gitService.getBranchInfo = jest.fn(async () => ({ currentBranch: 'main', ahead: 0, behind: 0 }));
+        gitService.getCommitDiff = jest.fn(async () => ({ hash: 'abc123', files: [{ filePath: 'src/App.jsx' }] }));
+
+        try {
+            const history = await invoke('get', '/git/history', {
+                query: { path: '/workspace', file: 'src/App.jsx', limit: '25' }
+            });
+            expect(history.statusCode).toBe(200);
+            expect(history.payload.commits[0].hash).toBe('abc123');
+            expect(gitService.getCommitHistory).toHaveBeenCalledWith('/workspace', 'src/App.jsx', 25);
+
+            const heatmap = await invoke('get', '/git/heatmap', {
+                query: { path: '/workspace' }
+            });
+            expect(heatmap.payload.files[0].changeCount).toBe(4);
+
+            const branch = await invoke('get', '/git/branch', {
+                query: { path: '/workspace' }
+            });
+            expect(branch.payload.currentBranch).toBe('main');
+
+            const commit = await invoke('get', '/git/commit', {
+                query: { path: '/workspace', hash: 'abc123' }
+            });
+            expect(commit.payload.files[0].filePath).toBe('src/App.jsx');
+            expect(gitService.getCommitDiff).toHaveBeenCalledWith('/workspace', 'abc123');
+        } finally {
+            gitService.getCommitHistory = originalHistory;
+            gitService.getHeatmapData = originalHeatmap;
+            gitService.getBranchInfo = originalBranch;
+            gitService.getCommitDiff = originalDiff;
+        }
     });
 
     test('POST /ask rejects malformed payloads before reaching ctx', async () => {
@@ -335,7 +473,7 @@ describe('RestController Integration', () => {
         try {
             expect(router.arePluginUploadsEnabled()).toBe(false);
             expect(() => router.safePluginFilename('../evil.js')).toThrow('Invalid plugin filename');
-            expect(() => router.safePluginFilename('evil.txt')).toThrow('Plugin upload must be a JavaScript file');
+            expect(() => router.safePluginFilename('evil.txt')).toThrow('Plugin upload must be a .js or .zip file');
             expect(router.safePluginFilename('good-plugin.js')).toBe('good-plugin.js');
         } finally {
             if (original === undefined) {

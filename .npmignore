@@ -1,0 +1,16 @@
+.github/
+.gitignore
+.DS_Store
+test-results/
+sessions.json
+task-history.json
+task-history.jsonl
+audit-log.json
+audit-log.jsonl
+yodaman.db
+node_modules/
+release/
+dist/
+website/
+*.log
+config.json

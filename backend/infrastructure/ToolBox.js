@@ -8,13 +8,26 @@ const graphifyService = require('./GraphifyService');
 const logger = require('./Logger');
 
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
+const PLUGIN_CONFIG_PATH = path.join(__dirname, '../../plugins/config.json');
 const PLUGIN_PERMISSION_ALLOWLIST = new Set([
     'read',
     'write',
     'command',
     'network',
     'search',
-    'unrestricted'
+    'unrestricted',
+    'graphify:read',
+    'agent:invoke',
+    'audit:write',
+    'task:create',
+    'desktop:openFile',
+    'desktop:openfile',
+    'storage:indexeddb',
+    'webxr',
+    'speech',
+    'git:read',
+    'upload:temp',
+    'filesystem:read-selected'
 ]);
 
 /**
@@ -27,7 +40,37 @@ class ToolBox {
     constructor() {
         this.plugins = new Map();
         this.extraAllowedRoots = [];
+        this.disabledPlugins = new Set();
+        this.loadDisabledConfig();
         this.loadPlugins();
+    }
+
+    loadDisabledConfig() {
+        try {
+            if (fs.existsSync(PLUGIN_CONFIG_PATH)) {
+                const config = JSON.parse(fs.readFileSync(PLUGIN_CONFIG_PATH, 'utf8'));
+                if (Array.isArray(config.disabled)) this.disabledPlugins = new Set(config.disabled);
+            }
+        } catch (err) { console.error('[ToolBox] Failed to load plugin config:', err.message); }
+    }
+    loadPluginPermissions() {
+        // Reload plugin permissions from current settings — called after settings change
+        for (const [name, plugin] of this.plugins) {
+            try { this.assertPluginPermissions(name); }
+            catch (err) { console.warn(`[ToolBox] Plugin ${name} permission check failed after settings change:`, err.message); }
+        }
+    }
+    saveDisabledConfig() {
+        try { const dir = path.dirname(PLUGIN_CONFIG_PATH); if (!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true}); fs.writeFileSync(PLUGIN_CONFIG_PATH, JSON.stringify({disabled:Array.from(this.disabledPlugins)},null,2),'utf8'); }
+        catch (err) { console.error('[ToolBox] Failed to save plugin config:', err.message); }
+    }
+    enablePlugin(name) { this.disabledPlugins.delete(name); this.saveDisabledConfig(); this.loadPlugins(); console.log(`[ToolBox] Plugin enabled: ${name}`); }
+    disablePlugin(name) {
+        const plugin = this.plugins.get(name);
+        if (plugin && plugin._api && plugin.onDisable) {
+            plugin.onDisable(plugin._api).catch(e => console.warn(`[ToolBox] onDisable failed for ${name}:`, e.message));
+        }
+        this.disabledPlugins.add(name); this.plugins.delete(name); this.saveDisabledConfig(); console.log(`[ToolBox] Plugin disabled: ${name}`);
     }
 
     /**
@@ -39,7 +82,15 @@ class ToolBox {
 
         const files = fs.readdirSync(pluginsDir);
         files.forEach(file => {
-            if (file.endsWith('.js')) {
+            if (!file.endsWith('.js')) return;
+            // Check if disabled by reading plugin name from source
+            try {
+                const content = fs.readFileSync(path.join(pluginsDir, file), 'utf8');
+                const match = content.match(/name:\s*['"]([^'"]+)['"]/);
+                const pn = match ? match[1] : null;
+                if (pn && this.disabledPlugins.has(pn)) { console.log(`[ToolBox] Skipping disabled plugin: ${pn}`); return; }
+            } catch {}
+            
                 try {
                     const pluginPath = path.join(pluginsDir, file);
                     // Clear cache to allow reloading of updated plugins
@@ -59,7 +110,6 @@ class ToolBox {
                 } catch (err) {
                     console.error(`[ToolBox] Failed to load plugin ${file}:`, err.message);
                 }
-            }
         });
 
     }
@@ -172,8 +222,9 @@ class ToolBox {
     async executeCommand({ command, cwd }) {
         const workingDirectory = this.resolveAllowedPath(cwd || process.cwd());
         this.assertCommandAllowed(command);
-        if (process.env.YODAMAN_ALLOW_AGENT_COMMANDS !== 'true') {
-            throw new Error('Agent shell commands are disabled. Set YODAMAN_ALLOW_AGENT_COMMANDS=true only for trusted local support sessions.');
+        const settings = require('./SettingsProvider');
+        if (!settings.get('allowAgentCommands')) {
+            throw new Error('Agent shell commands are disabled. Enable in Settings.');
         }
 
         return new Promise((resolve) => {
@@ -422,8 +473,9 @@ class ToolBox {
         }
 
         if (permissions.includes('unrestricted')) {
-            if (process.env.YODAMAN_ALLOW_UNRESTRICTED_PLUGINS !== 'true') {
-                throw new Error(`Plugin ${name} is unrestricted. Set YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true to allow it.`);
+            const settings = require('./SettingsProvider');
+            if (!settings.get('allowUnrestrictedPlugins')) {
+                throw new Error(`Plugin ${name} is unrestricted. Enable in Settings.`);
             }
         }
     }
@@ -436,7 +488,22 @@ class ToolBox {
             throw new Error('Plugin name is required');
         }
         if (typeof plugin.execute !== 'function') {
-            throw new Error(`Plugin ${plugin.name} must export an execute function`);
+            // Support legacy plugin format (onLoad/onEnable lifecycle)
+            if (typeof plugin.onLoad === 'function' || typeof plugin.onEnable === 'function') {
+                const PluginAPI = require('./PluginAPI');
+                const pluginsDir = path.resolve(__dirname, '../../plugins');
+                const pluginDir = pluginsDir;
+                plugin._api = new PluginAPI(pluginDir);
+                plugin.execute = async (params = {}) => {
+                    if (plugin.onLoad) await plugin.onLoad(plugin._api);
+                    if (params._action === 'enable' && plugin.onEnable) await plugin.onEnable(plugin._api);
+                    if (params._action === 'disable' && plugin.onDisable) await plugin.onDisable(plugin._api);
+                    if (params._action === 'unload' && plugin.onUnload) await plugin.onUnload(plugin._api);
+                    return { legacy: true, name: plugin.name, message: 'Legacy plugin loaded with full API' };
+                };
+            } else {
+                throw new Error(`Plugin ${plugin.name} must export an execute function`);
+            }
         }
         if (options.requireExplicitPermissions && !Array.isArray(plugin.permissions)) {
             throw new Error(`Plugin ${plugin.name} must declare a permissions array`);
