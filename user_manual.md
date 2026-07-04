@@ -1,15 +1,16 @@
 # YodaMan User Manual
 
-Version: 0.3.2
+Version: 0.3.4
 
 YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, mandatory Graphify knowledge graph, plugin system, and local runtime API.
 
 ## 1. Setup
 
-Install Context Expert and Graphify, then install and start YodaMan from the project root:
+Install Context Expert, OpenSpec, and Graphify, then install and start YodaMan from the project root:
 
 ```bash
 npm install -g @contextexpert/cli
+npm install -g @fission-ai/openspec@latest
 python3 -m pip install graphifyy
 npm install
 sh setup.sh
@@ -93,6 +94,7 @@ Plugins are JavaScript modules that extend the agent with custom tools. A plugin
 - **Dashboard**: View runtime status, database/index metrics, environment information, runtime diagnostics, task counts, pending approvals, plugin policy information, and mobile pairing.
 - **Logs**: Open searchable runtime logs, reindex requests, index queue state, and `ctx index` output. Filter by text, level, severity, and user action, then use Copy when sharing an error.
 - **Manual**: Read the in-app version of this guide.
+- **Stardust**: OpenSpec CLI wrapper for structured spec-driven development. Propose, validate, apply, and archive changes with the `openspec` workflow. Includes built-in diagnostics, version checks, and one-click OpenSpec installation.
 - **Plugins**: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, delete non-mandatory plugin files, and manage Graphify graph status, rebuilds, and direct graph queries.
 
 ## 4. Desktop app
@@ -171,6 +173,7 @@ Use your desktop LAN address when pairing from a phone, for example `http://192.
 - **Search results are stale**: Select the workspace and run `Sync Repository`.
 - **Mobile cannot connect**: Use the desktop LAN IP, confirm firewall access to port `3090`, and generate a fresh pairing link.
 - **Plugin blocked**: Add explicit permissions to the plugin or intentionally allow unrestricted plugins with `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true`.
+- **OpenSpec not found**: Install `@fission-ai/openspec@latest` and confirm `openspec --version` works, or click "Install Now" in the Stardust tab.
 - **Crash screen**: Use `Copy Error` to copy the exact message and recent runtime logs.
 
 ## 9. Verification and builds
@@ -185,3 +188,32 @@ cd extensions/vscode-yodaman
 npm run lint
 npm run package
 ```
+
+## 10. Project Stardust — OpenSpec Integration
+
+YodaMan 0.3.4 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow.
+
+### Setup
+
+```bash
+npm install -g @fission-ai/openspec@latest
+```
+
+### Workflow
+
+1. **Propose**: Create a new change proposal with a title, description, and spec path.
+2. **Validate**: Check the change against your project's specs (supports `--strict` mode).
+3. **Apply**: Apply the validated change (supports `--dry-run` for safety).
+4. **Archive**: Archive a completed change.
+
+### Diagnostics
+
+The Stardust tab includes a Diagnostics panel that checks:
+- OpenSpec installation status
+- Current OpenSpec version
+- Whether `openspec/project.md` exists in your workspace
+
+### API Endpoints
+
+- `GET /api/stardust/diagnose?projectRoot=...` — Run OpenSpec diagnostics
+- `POST /api/stardust/run` — Execute any OpenSpec workflow action

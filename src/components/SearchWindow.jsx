@@ -8,12 +8,14 @@ export default function SearchWindow({ selectedProject }) {
     const [isSearching, setIsSearching] = useState(false)
     const [stats, setStats] = useState(null)
     const [error, setError] = useState('')
+    const [hasSearched, setHasSearched] = useState(false)
 
     const handleSearch = async (e) => {
         if (e) e.preventDefault()
         if (!query.trim() || isSearching) return
 
         setIsSearching(true)
+        setHasSearched(true)
         setError('')
         try {
             const data = await api.search(query, selectedProject?.path || selectedProject?.name)
@@ -95,14 +97,14 @@ export default function SearchWindow({ selectedProject }) {
             {/* Results Area */}
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                 <div className="max-w-4xl mx-auto space-y-6">
-                    {!isSearching && results.length === 0 && query && (
+                    {!isSearching && results.length === 0 && hasSearched && (
                         <div className="py-20 text-center">
                             <p className="text-slate-500 font-medium">{error ? 'Search could not complete.' : 'No matches found for your query.'}</p>
                             <p className="text-[10px] text-slate-600 uppercase tracking-widest mt-2 font-black">{error ? 'Open logs for diagnostics' : 'Try broader keywords'}</p>
                         </div>
                     )}
 
-                    {!isSearching && results.length === 0 && !query && (
+                    {!isSearching && results.length === 0 && !hasSearched && (
                         <div className="py-20 text-center space-y-4">
                             <div className="h-16 w-16 bg-white/[0.02] border border-white/5 rounded-3xl flex items-center justify-center mx-auto">
                                 <Search size={32} className="text-slate-700" />

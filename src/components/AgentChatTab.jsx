@@ -3,10 +3,12 @@ import { ChevronDown, ChevronRight, File, Mic, Send, Trash2, X } from 'lucide-re
 import { api } from '../api/api'
 import { VoiceAgentBridge, readVoiceAgentSettings, speakAgentResponse, writeVoiceAgentSettings } from '../../frontend/voiceAgentBridge.js'
 import FileUploader from '../../frontend/FileUploader.jsx'
+import GitPanel from './GitPanel'
 
 const INITIAL_SECTIONS = {
   current: true,
   git: true,
+  gitIntegration: false,
   files: true,
   timeline: true
 }
@@ -233,6 +235,7 @@ export default function AgentChatTab({ selectedProject }) {
   const [error, setError] = useState('')
   const [preset, setPreset] = useState('')
   const [queryMode, setQueryMode] = useState('code')
+  const [holocronAvailable, setHolocronAvailable] = useState(false)
   const messagesEndRef = useRef(null)
   const voiceBridgeRef = useRef(null)
 
@@ -250,6 +253,14 @@ export default function AgentChatTab({ selectedProject }) {
     loadHistory()
     loadGitContext()
   }, [selectedProject?.id, selectedProject?.path])
+
+  useEffect(() => {
+    api.getPlugins()
+      .then(plugins => setHolocronAvailable(
+        Array.isArray(plugins) && plugins.some(plugin => plugin.name === 'holocron-vr')
+      ))
+      .catch(() => setHolocronAvailable(false))
+  }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -377,6 +388,24 @@ export default function AgentChatTab({ selectedProject }) {
     window.dispatchEvent(new CustomEvent('yodaman:view-in-vr', { detail: { refs, selectedProject } }))
   }
 
+  async function openProjectInVr() {
+    try {
+      setError('')
+      await api.openPlugin('holocron-vr', selectedProject.path)
+      viewInVr([])
+    } catch (err) {
+      setError(err.message)
+      api.reportClientError({
+        message: err.message || 'Failed to open Holocron VR',
+        stack: err.stack,
+        userAction: 'open_project_in_vr',
+        component: 'AgentChatTab',
+        severity: 'high',
+        context: { project: selectedProject.path }
+      })
+    }
+  }
+
   async function sendAgentMessage(taskOverride = inputText, { usedVoice = usedVoiceForDraft, commandContext = {} } = {}) {
     const task = String(taskOverride || '').trim()
     if (!task || !selectedProject || isSending) return
@@ -492,6 +521,9 @@ export default function AgentChatTab({ selectedProject }) {
               <p className="truncate text-xs text-[var(--text-secondary)]">{selectedProject.path}</p>
             </div>
             <div className="flex items-center gap-2">
+              {holocronAvailable ? (
+                <button onClick={openProjectInVr} className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cyan-200 hover:bg-cyan-400/20" title="Load workspace in Holocron VR">Load in VR</button>
+              ) : null}
               <button onClick={()=>{setMessages([]);api.clearSessions(selectedProject.id).catch(()=>{});}} className="rounded-full border border-rose-400/20 bg-rose-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-rose-200 hover:bg-rose-400/20" title="Clear conversation">🗑 Clear</button>
               <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-200">SSE Ready</div>
             </div>
@@ -617,6 +649,10 @@ export default function AgentChatTab({ selectedProject }) {
             </div>
           </div>
           {gitState.error ? <div className="mt-3 text-xs text-slate-500">{gitState.error}</div> : null}
+        </ContextSection>
+
+        <ContextSection id="gitIntegration" title="Git Integration" open={sections.gitIntegration} onToggle={toggleSection}>
+          <GitPanel project={selectedProject} />
         </ContextSection>
 
         <ContextSection id="files" title="Attached Files" open={sections.files} onToggle={toggleSection}>

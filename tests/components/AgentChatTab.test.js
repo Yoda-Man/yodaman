@@ -25,6 +25,26 @@ describe('AgentChatTab component contract', () => {
         expect(text).toContain('renderMarkdown');
     });
 
+    test('places collapsible Git Integration directly after Git Context', () => {
+        const text = read(componentPath);
+        const gitContext = text.indexOf('title="Git Context"');
+        const gitIntegration = text.indexOf('title="Git Integration"');
+
+        expect(text).toContain("import GitPanel from './GitPanel'");
+        expect(text).toContain('gitIntegration: false');
+        expect(gitContext).toBeGreaterThan(-1);
+        expect(gitIntegration).toBeGreaterThan(gitContext);
+        expect(text).toContain('<GitPanel project={selectedProject} />');
+    });
+
+    test('shows workspace-aware Holocron VR control only for the loaded plugin', () => {
+        const text = read(componentPath);
+
+        expect(text).toContain("plugin.name === 'holocron-vr'");
+        expect(text).toContain('Load in VR');
+        expect(text).toContain("api.openPlugin('holocron-vr', selectedProject.path)");
+    });
+
     test('sends task context to the agent SSE endpoint', () => {
         const text = read(apiPath);
 

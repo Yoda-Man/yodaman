@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Database, Cpu, Shield, Activity, Package, Server, RefreshCw, Link, ClipboardList, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
 import { api } from '../api/api'
 import HealthDashboard from './HealthDashboard'
-import GitPanel from './GitPanel'
 import useHealthCheck from '../hooks/useHealthCheck'
 
 function CtxConfigPanel() {
@@ -344,9 +343,6 @@ export default function Dashboard() {
                         </div>
                     </div>
                 )}
-
-                {/* Git Integration */}
-                <GitPanel projects={projects} />
 
                 {/* ctx Configuration */}
                 <CtxConfigPanel />

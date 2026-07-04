@@ -7,10 +7,10 @@ import StatusBar from './components/StatusBar'
 import SettingsModal from './components/SettingsModal'
 import LogsModal from './components/LogsModal'
 import WelcomeModal from './components/WelcomeModal'
-import ManualWindow from './components/ManualWindow'
+import Stardust from './components/Stardust'
 import PluginsWindow from './components/PluginsWindow'
 import GraphStudio from './components/GraphStudio'
-import { MessageSquare, Search, LayoutDashboard, Book, Puzzle, Settings, Terminal, GitBranch } from 'lucide-react'
+import { MessageSquare, Search, LayoutDashboard, Puzzle, Settings, Terminal, GitBranch, Sparkles } from 'lucide-react'
 
 import { api } from './api/api'
 
@@ -19,7 +19,7 @@ export default function App() {
   const [selectedProject, setSelectedProject] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isLogsOpen, setIsLogsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('chat') // 'chat', 'search', 'dashboard', 'manual', 'plugins'
+  const [activeTab, setActiveTab] = useState('chat') // 'chat', 'search', 'graph', 'dashboard', 'plugins', 'stardust'
   const [isRefreshingProjects, setIsRefreshingProjects] = useState(false)
 
   useEffect(() => {
@@ -162,11 +162,11 @@ export default function App() {
                 Plugins
               </button>
               <button 
-                onClick={() => setActiveTab('manual')}
-                className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'manual' ? 'bg-white/[0.03] text-indigo-400 border-indigo-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
+                onClick={() => setActiveTab('stardust')}
+                className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'stardust' ? 'bg-white/[0.03] text-amber-400 border-amber-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
               >
-                <Book size={14} />
-                Manual
+                <Sparkles size={14} />
+                Stardust
               </button>
             </div>
             <div className="mb-2 flex shrink-0 items-center gap-2">
@@ -194,7 +194,7 @@ export default function App() {
             {activeTab === 'search' && <SearchWindow selectedProject={selectedProject} />}
             {activeTab === 'graph' && <GraphStudio selectedProject={selectedProject} />}
             {activeTab === 'dashboard' && <Dashboard />}
-            {activeTab === 'manual' && <ManualWindow />}
+            {activeTab === 'stardust' && <Stardust selectedProject={selectedProject} />}
             {activeTab === 'plugins' && <PluginsWindow selectedProject={selectedProject} />}
           </div>
 

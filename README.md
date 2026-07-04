@@ -2,7 +2,7 @@
 
 YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime.
 
-![Version](https://img.shields.io/badge/Version-0.3.2-gold)
+![Version](https://img.shields.io/badge/Version-0.3.4-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -16,15 +16,13 @@ YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It con
 - **Choose query intent**: Switch between Code and Docs modes for more relevant answers.
 - **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
 
-## Version 0.3.2 — What's New
+## Version 0.3.4 — Project Stardust
 
-- **Pre-installed plugins**: CodeTrooper (line counter), Droid-Sweep (unused file finder), Grand Inquisitor (dependency scanner), Lightsaber (Git hotspot analysis)
-- **Plugin enable/disable**: Toggle any plugin on/off from Settings → Developer Settings without restarting
-- **Centralized settings**: All environment-level settings managed through the Settings API and UI
-- **Legacy plugin support**: Holocron VR and other community plugins using the `onLoad` lifecycle now work automatically
-- **Zip plugin upload**: Upload plugins as `.zip` files — extracts and validates automatically
-- **Chat improvements**: Code/Docs mode toggle, animated processing indicators, 10-second fallback for slow connections, Clear conversation button, 50-message cap
-- **Scrolling fixes**: Vertical scrollbar in chat works properly
+- **Stardust tab**: OpenSpec CLI wrapper for structured spec-driven development (propose → validate → apply → archive)
+- **OpenSpec mandatory**: `npm install -g @fission-ai/openspec@latest` required
+- **Diagnostics panel**: Built-in OpenSpec health checks with one-click install
+- **Live output console**: Color-coded stdout/stderr with structured result parsing
+- **Fresh platform builds**: macOS, Windows, and Linux builds for 0.3.4
 
 ## Core Pillars
 
@@ -53,6 +51,7 @@ Built-in tools cover file reads, controlled writes, exact patching, command exec
 - Node.js 18+
 - Python 3.10+
 - Context Expert CLI: `npm install -g @contextexpert/cli`
+- OpenSpec CLI: `npm install -g @fission-ai/openspec@latest`
 - Graphify: `pip install graphifyy`
 - Ollama (for local model execution)
 

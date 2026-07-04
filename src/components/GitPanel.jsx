@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { GitBranch, GitCommit, GitPullRequest, ArrowUp, ArrowDown, Plus, RefreshCw, Check } from 'lucide-react'
+import { GitBranch, GitCommit, GitPullRequest, ArrowUp, ArrowDown, Plus } from 'lucide-react'
 
-export default function GitPanel({ projects = [] }) {
-    const [selected, setSelected] = useState('')
+export default function GitPanel({ project }) {
+    const selected = project?.path || ''
     const [git, setGit] = useState(null)
     const [loading, setLoading] = useState(false)
     const [commitMsg, setCommitMsg] = useState('')
@@ -18,10 +18,6 @@ export default function GitPanel({ projects = [] }) {
         } catch (_) { setGit(null) }
         setLoading(false)
     }
-
-    useEffect(() => {
-        if (projects.length > 0 && !selected) setSelected(projects[0].path)
-    }, [projects])
 
     useEffect(() => {
         if (selected) fetchGit(selected)
@@ -44,7 +40,7 @@ export default function GitPanel({ projects = [] }) {
         setTimeout(() => setActionStatus(''), 3000)
     }
 
-    if (projects.length === 0) return null
+    if (!selected) return null
 
     return (
         <div className="glass-panel p-6 space-y-4">
@@ -55,17 +51,6 @@ export default function GitPanel({ projects = [] }) {
                 <div className="flex-1">
                     <h3 className="font-bold text-slate-300 uppercase tracking-widest text-xs">Git Integration</h3>
                 </div>
-                {projects.length > 1 && (
-                    <select
-                        value={selected}
-                        onChange={e => setSelected(e.target.value)}
-                        className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-slate-300 outline-none"
-                    >
-                        {projects.map(p => (
-                            <option key={p.path} value={p.path}>{p.name}</option>
-                        ))}
-                    </select>
-                )}
             </div>
 
             {loading && <p className="text-xs text-slate-500">Loading git status...</p>}

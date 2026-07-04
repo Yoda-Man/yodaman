@@ -244,8 +244,11 @@ class ToolBox {
         if (project) args.push('-p', this.resolveAllowedPath(project));
         try {
             const results = await contextEngine.executeJson(args);
-            if (Array.isArray(results)) return results;
-            if (Array.isArray(results?.results)) return results.results;
+            if (Array.isArray(results) && results.length > 0) return results;
+            if (Array.isArray(results?.results) && results.results.length > 0) return results.results;
+            if (Array.isArray(results) || Array.isArray(results?.results)) {
+                return this.searchCodeFilesystem({ query, project, top });
+            }
             if (results?.error || results?.message) {
                 throw new Error(results.error || results.message);
             }

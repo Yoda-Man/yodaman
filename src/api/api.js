@@ -99,6 +99,10 @@ export const api = {
         return request(`${API_BASE}/plugins`);
     },
 
+    async openPlugin(name, project) {
+        return request(`${API_BASE}/plugins/${encodeURIComponent(name)}/open`, jsonOptions('POST', { project }));
+    },
+
     async uploadPlugin(file) {
         const formData = new FormData();
         formData.append('plugin', file);
@@ -291,5 +295,26 @@ export const api = {
 
     async setMode(mode, projectId) {
         return request(`${API_BASE}/mode`, jsonOptions('POST', { mode, projectId }));
+    },
+
+    // ── Stardust (OpenSpec wrapper) ──
+
+    async stardustDiagnose(projectRoot) {
+        const url = new URL(`${API_BASE}/stardust/diagnose`, window.location.origin);
+        if (projectRoot) url.searchParams.append('projectRoot', projectRoot);
+        return request(url);
+    },
+
+    async stardustRun({ action, changeId, title, description, specPath, projectRoot, dryRun, strict }) {
+        return request(`${API_BASE}/stardust/run`, jsonOptions('POST', {
+            action,
+            changeId,
+            title,
+            description,
+            specPath,
+            projectRoot,
+            dryRun,
+            strict,
+        }));
     },
 };

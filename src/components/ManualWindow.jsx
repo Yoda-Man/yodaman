@@ -43,7 +43,7 @@ const featureGroups = [
         icon: GitBranch,
         title: 'Graphify',
         items: [
-            'Graphify is required in version 0.3.2 and uses Ollama local execution only for semantic extraction.',
+            'Graphify is required in version 0.3.3 and uses Ollama local execution only for semantic extraction.',
             'Graphify builds knowledge graphs for code, docs, diagrams, and architecture.',
             'Sync Repository updates the Context Expert index and the Graphify graph together.',
             'Run yodaman doctor --graph to check active graphs, freshness, orphaned nodes, and the most dependency-heavy file.',
@@ -131,10 +131,10 @@ export default function ManualWindow() {
                         YodaMan Manual
                     </h1>
                     <p className="text-lg leading-relaxed text-slate-400 max-w-3xl">
-                        YodaMan 0.3.2 is a local-first workspace intelligence system for developers. It connects the web UI, desktop app, VS Code extension, mobile companion, CLI runtime, mandatory Graphify knowledge graphs, plugins, search, chat, supervised agent workflows, and a growing ecosystem of pre-installed tools around one private local runtime.
+                        YodaMan 0.3.3 is a local-first workspace intelligence system for developers. It connects the web UI, desktop app, VS Code extension, mobile companion, CLI runtime, mandatory Graphify knowledge graphs, plugins, search, chat, supervised agent workflows, and a growing ecosystem of pre-installed tools around one private local runtime.
                     </p>
                     <div className="mt-6 flex flex-wrap items-center gap-3">
-                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.3.2</span>
+                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.3.3</span>
                         <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-400">Local runtime</span>
                         <span className="px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest text-cyan-300">Graphify required</span>
                         <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-300">Human approved writes</span>

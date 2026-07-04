@@ -2,14 +2,22 @@
 
 All notable changes to the YodaMan project are documented here.
 
-## [Unreleased]
+## [0.3.4] - 2026-07-04
 
-### Ecosystem Roadmap Execution
-- Added shared protocol/client declarations for web, VS Code, mobile, and runtime consumers.
-- Added append-only local audit/task history logs alongside bounded JSON snapshots.
-- Added desktop task notifications and folder picker support.
-- Added mobile task event detail inspection.
-- Added release smoke checks and refreshed user-facing documentation.
+### 🛰️ Project Stardust — OpenSpec Integration
+- **Stardust tab**: Replaced User Manual tab with Stardust — an OpenSpec CLI wrapper for structured spec-driven development.
+- **OpenSpec mandatory**: `@fission-ai/openspec` is now a required dependency. Install with `npm install -g @fission-ai/openspec@latest`.
+- **StardustWrapper**: Backend service that spawns `openspec` CLI as a child process with full workflow support: propose → validate → apply → archive.
+- **Diagnostics panel**: Built-in OpenSpec diagnostics — version check, project status, one-click install.
+- **Live output console**: Color-coded stdout/stderr capture with structured result parsing.
+- **Updated documentation**: User manual, README, and website now include OpenSpec setup instructions.
+- **Fresh platform builds**: macOS, Windows, and Linux desktop builds for 0.3.4.
+
+### 🧹 Documentation Updates
+- `user_manual.md` and `public/manual.html` refreshed with Stardust/OpenSpec documentation.
+- Website install instructions and download links updated for 0.3.4.
+
+## [Unreleased]
 
 ## [0.1.5] - 2026-05-14
 

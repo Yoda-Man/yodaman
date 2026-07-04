@@ -470,6 +470,7 @@ function diagnosticsPage({ title, message, status, logs = '' }) {
     </div>
 
     <div class="actions">
+      <button id="continue-to-dashboard">Continue →</button>
       <button id="try-again">⟳ Try Again</button>
       <button class="secondary" id="copy-error">📋 Copy Error</button>
       <button class="secondary" id="open-dev-tools">🔧 Dev Tools</button>
@@ -619,6 +620,10 @@ function diagnosticsPage({ title, message, status, logs = '' }) {
     }
 
     // — Event handlers —
+    document.getElementById('continue-to-dashboard').addEventListener('click', () => {
+      window.location.href = RUNTIME_URL;
+    });
+
     document.getElementById('try-again').addEventListener('click', async () => {
       const btn = document.getElementById('try-again');
       btn.disabled = true; btn.textContent = '⟳ Restarting…';

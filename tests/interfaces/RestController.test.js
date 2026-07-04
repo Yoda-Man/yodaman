@@ -315,6 +315,47 @@ describe('RestController Integration', () => {
         }));
     });
 
+    test('POST /plugins/:name/open invokes a loaded plugin for the selected workspace', async () => {
+        const toolBox = require('../../backend/infrastructure/ToolBox');
+        const execute = jest.fn(async ({ _action, project }) => ({ _action, project }));
+        toolBox.plugins.set('holocron-vr', {
+            name: 'holocron-vr',
+            permissions: [],
+            execute
+        });
+
+        try {
+            const response = await invoke('post', '/plugins/:name/open', {
+                params: { name: 'holocron-vr' },
+                body: { project: '/workspace/yodaman' }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(execute).toHaveBeenCalledWith({
+                _action: 'open',
+                project: '/workspace/yodaman'
+            });
+            expect(response.payload).toEqual(expect.objectContaining({
+                ok: true,
+                project: '/workspace/yodaman'
+            }));
+        } finally {
+            toolBox.plugins.delete('holocron-vr');
+        }
+    });
+
+    test('POST /plugins/:name/open rejects an unavailable plugin', async () => {
+        const response = await invoke('post', '/plugins/:name/open', {
+            params: { name: 'missing-plugin' },
+            body: { project: '/workspace/yodaman' }
+        });
+
+        expect(response.statusCode).toBe(404);
+        expect(response.payload).toEqual(expect.objectContaining({
+            code: 'plugin_not_found'
+        }));
+    });
+
     test('POST /ask returns a local fallback answer when ctx ask fails', async () => {
         const originalExecute = contextEngine.execute;
         const originalQuery = graphifyService.query;

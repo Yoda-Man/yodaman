@@ -18,6 +18,7 @@ const pairingService = require('../infrastructure/PairingService');
 const logger = require('../infrastructure/Logger');
 const graphifyService = require('../infrastructure/GraphifyService');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
+const stardustWrapper = require('../stardust/StardustWrapper');
 
 const multer = require('multer');
 
@@ -1001,6 +1002,27 @@ router.get('/plugins/:name/status', (req, res) => {
     });
 });
 
+router.post('/plugins/:name/open', async (req, res) => {
+    const { name } = req.params;
+    const plugin = toolBox.plugins.get(name);
+    if (!plugin || toolBox.disabledPlugins.has(name)) {
+        return jsonError(res, 404, 'Plugin not found or disabled', 'plugin_not_found');
+    }
+
+    try {
+        const result = await plugin.execute({ _action: 'open', project: req.body?.project });
+        res.json({ ok: true, name, project: req.body?.project, result });
+    } catch (err) {
+        logger.error('plugin_open_failed', err, {
+            plugin: name,
+            project: req.body?.project,
+            userAction: 'open_plugin',
+            severity: 'high'
+        });
+        res.status(500).json({ error: err.message, code: 'plugin_open_failed' });
+    }
+});
+
 router.post('/plugins/:name/enable', (req, res) => {
     const { name } = req.params;
     if (!toolBox.plugins.has(name) && !toolBox.disabledPlugins.has(name)) {
@@ -1573,6 +1595,80 @@ router.post('/health/install', (req, res) => {
 
         default:
             res.status(400).json({ ok: false, message: `Unknown component: ${component}` });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Stardust — OpenSpec CLI wrapper
+// ─────────────────────────────────────────────────────────────────────────
+
+router.get('/stardust/diagnose', async (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const result = await stardustWrapper.diagnose(projectRoot);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/stardust/run', async (req, res) => {
+    try {
+        const { action, changeId, title, description, specPath, projectRoot, dryRun, strict } = req.body || {};
+
+        if (!action) {
+            return res.status(400).json({ error: 'Missing required field: action' });
+        }
+
+        let result;
+        const opts = { cwd: projectRoot || process.cwd() };
+
+        switch (action) {
+            case 'diagnose':
+                result = await stardustWrapper.diagnose(opts.cwd);
+                break;
+            case 'propose':
+                if (!title || !description || !specPath) {
+                    return res.status(400).json({ error: 'propose requires title, description, and specPath' });
+                }
+                result = await stardustWrapper.propose(title, description, specPath, { ...opts, dryRun });
+                break;
+            case 'validate':
+                if (!changeId) {
+                    return res.status(400).json({ error: 'validate requires changeId' });
+                }
+                result = await stardustWrapper.validate(changeId, { ...opts, strict: strict !== false });
+                break;
+            case 'apply':
+                if (!changeId) {
+                    return res.status(400).json({ error: 'apply requires changeId' });
+                }
+                result = await stardustWrapper.apply(changeId, { ...opts, dryRun: dryRun !== false });
+                break;
+            case 'archive':
+                if (!changeId) {
+                    return res.status(400).json({ error: 'archive requires changeId' });
+                }
+                result = await stardustWrapper.archive(changeId, opts);
+                break;
+            case 'list':
+                result = await stardustWrapper.list(opts);
+                break;
+            case 'install':
+                result = await stardustWrapper.install();
+                break;
+            default:
+                return res.status(400).json({ error: `Unknown stardust action: ${action}` });
+        }
+
+        res.json({
+            success: result.success,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.code,
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
