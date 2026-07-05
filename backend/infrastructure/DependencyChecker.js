@@ -240,6 +240,17 @@ const SERVICES = {
             win32: 'py -m pip install graphifyy',
         },
     },
+    openspec: {
+        executable: 'openspec',
+        versionArgs: ['--version'],
+        runningCheck: null,
+        installUrl: 'npm install -g @fission-ai/openspec@latest',
+        installHint: {
+            darwin: 'npm install -g @fission-ai/openspec@latest',
+            linux: 'npm install -g @fission-ai/openspec@latest',
+            win32: 'npm install -g @fission-ai/openspec@latest',
+        },
+    },
 };
 
 // =========================================================================

@@ -11,4 +11,21 @@ describe('SearchWindow component contract', () => {
         expect(text).toContain('setHasSearched(true)');
         expect(text).toContain('results.length === 0 && hasSearched');
     });
+
+    test('has expand/collapse state for search results', () => {
+        const text = fs.readFileSync(componentPath, 'utf8');
+
+        expect(text).toContain('expandedResults');
+        expect(text).toContain('setExpandedResults');
+        expect(text).toContain('ChevronUp');
+        expect(text).toContain('View full content');
+    });
+
+    test('search result view button has onClick handler', () => {
+        const text = fs.readFileSync(componentPath, 'utf8');
+
+        // The ExternalLink/expand button must have an onClick with setExpandedResults
+        const viewButtonRegex = /onClick\s*=\s*\{[^}]*setExpandedResults[^}]*\}/s;
+        expect(viewButtonRegex.test(text)).toBe(true);
+    });
 });

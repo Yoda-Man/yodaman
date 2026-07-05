@@ -2,6 +2,14 @@
 
 All notable changes to the YodaMan project are documented here.
 
+## [0.3.5] - 2026-07-05
+
+### 🧩 UX Fixes & State Persistence
+- **Tab state preserved**: All tabs now stay mounted when switching — chat, search, graph results, dashboard, stardust, and plugins no longer reset.
+- **Chat history persisted**: Messages saved to localStorage for instant restore across tab switches and app restarts.
+- **Search view fixed**: ExternalLink button now toggles expanded content view with full file path and line info.
+- **Health dashboard**: OpenSpec now shows in system health diagnostic table.
+
 ## [0.3.4] - 2026-07-04
 
 ### 🛰️ Project Stardust — OpenSpec Integration

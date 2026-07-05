@@ -23,6 +23,7 @@ const healthState = {
     graphify: { ok: null, message: 'not checked' },
     ollama: { ok: null, message: 'not checked' },
     ctx: { ok: null, message: 'not checked' },
+    openspec: { ok: null, message: 'not checked' },
     config: { ok: null, message: 'not checked' },
     projects: 0,
     indexed: 0,
@@ -126,7 +127,21 @@ async function initialize() {
         healthState.ctx = { ok: false, message: `ctx check failed: ${err.message}` };
     }
 
-    // 4. Config file
+    // 4. OpenSpec CLI — check via DependencyChecker
+    try {
+        const openspecCheck = await dependencyChecker.check('openspec');
+        healthState.openspec = {
+            ok: openspecCheck.found,
+            version: openspecCheck.version || null,
+            message: openspecCheck.found
+                ? `v${openspecCheck.version} at ${openspecCheck.path}`
+                : openspecCheck.error
+        };
+    } catch (err) {
+        healthState.openspec = { ok: false, message: `openspec check failed: ${err.message}` };
+    }
+
+    // 5. Config file
     try {
         const cfg = fs.existsSync(CONFIG_PATH)
             ? JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))

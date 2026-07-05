@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const dependencyChecker = require('../infrastructure/DependencyChecker');
 
 /**
  * StardustWrapper — CLI subprocess wrapper for OpenSpec.
@@ -28,32 +29,16 @@ class StardustWrapper {
     async _resolveBinary() {
         if (this._binary) return this._binary;
 
-        // Try global binary first
-        const globalCandidates = [];
-        if (process.platform === 'win32') {
-            globalCandidates.push(
-                path.join(process.env.APPDATA || '', 'npm', 'openspec.cmd'),
-                path.join(process.env.ProgramFiles || 'C:\\Program Files', 'nodejs', 'openspec.cmd'),
-            );
-        } else {
-            globalCandidates.push(
-                path.join(os.homedir(), '.nvm', 'versions', 'node'),
-                '/usr/local/bin/openspec',
-                '/opt/homebrew/bin/openspec',
-                path.join(os.homedir(), '.local', 'bin', 'openspec'),
-            );
-        }
-
-        for (const candidate of globalCandidates) {
-            try {
-                if (fs.existsSync(candidate)) {
-                    this._binary = candidate;
-                    return this._binary;
-                }
-            } catch (_) { /* ignore */ }
+        // Use DependencyChecker's cross-platform PATH resolution (same as ContextEngine)
+        const resolved = dependencyChecker.which('openspec');
+        if (resolved) {
+            this._binary = resolved;
+            console.log(`[StardustWrapper] openspec resolved to: ${resolved}`);
+            return this._binary;
         }
 
         // Fall back to npx
+        console.log('[StardustWrapper] openspec not found via DependencyChecker — will use npx');
         this._binary = 'npx';
         return this._binary;
     }
@@ -138,9 +123,23 @@ class StardustWrapper {
             });
 
             proc.on('close', (code) => {
+                const trimmedStdout = stdout.trim();
+                const trimmedStderr = stderr.trim();
+
+                // Always log to server console for diagnostics
+                if (trimmedStderr) {
+                    console.warn(`[StardustWrapper] stderr (code ${code}): ${trimmedStderr.slice(0, 500)}`);
+                }
+                if (code !== 0) {
+                    console.error(`[StardustWrapper] Command failed with exit code ${code}: ${bin} ${spawnArgs.join(' ')}`);
+                    if (trimmedStderr) console.error(`[StardustWrapper] stderr: ${trimmedStderr}`);
+                } else {
+                    console.log(`[StardustWrapper] Command succeeded (code ${code})`);
+                }
+
                 finish({
-                    stdout: stdout.trim(),
-                    stderr: stderr.trim(),
+                    stdout: trimmedStdout,
+                    stderr: trimmedStderr,
                     code,
                     success: code === 0,
                 });
@@ -173,6 +172,12 @@ class StardustWrapper {
             projectMdPath: null,
             binary: 'openspec',
             errors: [],
+            // Raw diagnostic outputs for debugging
+            _debug: {
+                versionRawStdout: null,
+                versionRawStderr: null,
+                versionExitCode: null,
+            },
         };
 
         const effectiveRoot = projectRoot || process.cwd();
@@ -185,31 +190,41 @@ class StardustWrapper {
             return result;
         }
 
-        // Check version
+        // Check version (stdout and stderr — some CLIs write version to stderr)
         try {
-            const { stdout, success } = await this._runCommand(['--version'], { timeoutMs: 15000 });
-            if (success && stdout) {
-                result.version = stdout.trim();
+            const { stdout, stderr: versionStderr, success, code } = await this._runCommand(['--version'], { timeoutMs: 15000 });
+            result._debug.versionRawStdout = stdout;
+            result._debug.versionRawStderr = versionStderr;
+            result._debug.versionExitCode = code;
+            const versionOutput = (stdout + versionStderr).trim();
+            if (versionOutput) {
+                result.version = versionOutput;
                 result.installed = true;
-            } else if (stdout) {
-                // Some CLIs output version to stderr or return non-zero
-                result.version = stdout.trim();
+            } else if (success) {
                 result.installed = true;
             }
+            if (!result.installed) {
+                result.errors.push(`Version check returned no output (exit code: ${code}). Raw stderr: "${versionStderr.slice(0, 200)}"`);
+            }
         } catch (err) {
-            result.errors.push(`Version check failed: ${err.message}`);
+            result.errors.push(`Version check threw: ${err.message}`);
         }
 
         // Check project root
-        const projectMdPath = path.join(effectiveRoot, 'openspec', 'project.md');
-        const projectMdAltPath = path.join(effectiveRoot, 'openspec', 'project.json');
+        // OpenSpec init creates: openspec/config.yaml, openspec/changes/, openspec/specs/
+        const configYamlPath = path.join(effectiveRoot, 'openspec', 'config.yaml');
+        const specsDir = path.join(effectiveRoot, 'openspec', 'specs');
+        const changesDir = path.join(effectiveRoot, 'openspec', 'changes');
         try {
-            if (fs.existsSync(projectMdPath)) {
+            if (fs.existsSync(configYamlPath)) {
                 result.projectRootFound = true;
-                result.projectMdPath = projectMdPath;
-            } else if (fs.existsSync(projectMdAltPath)) {
+                result.projectMdPath = configYamlPath;
+            } else if (fs.existsSync(specsDir) && fs.statSync(specsDir).isDirectory()) {
                 result.projectRootFound = true;
-                result.projectMdPath = projectMdAltPath;
+                result.projectMdPath = specsDir;
+            } else if (fs.existsSync(changesDir) && fs.statSync(changesDir).isDirectory()) {
+                result.projectRootFound = true;
+                result.projectMdPath = changesDir;
             }
         } catch (err) {
             result.errors.push(`Project root check failed: ${err.message}`);
@@ -223,70 +238,56 @@ class StardustWrapper {
     // ──────────────────────────────────────────────
 
     /**
-     * Propose a new change.
-     * @param {string} title — change title
-     * @param {string} description — change description
-     * @param {string} specPath — path to the spec file
+     * Validate a change or spec.
+     * @param {string} itemName — change or spec name
      * @param {object} [opts]
      * @param {string} [opts.cwd]
-     * @param {boolean} [opts.dryRun]
      * @returns {Promise<{stdout: string, stderr: string, success: boolean}>}
      */
-    async propose(title, description, specPath, { cwd, dryRun = false } = {}) {
-        const args = ['propose', '--title', title, '--description', description, '--spec', specPath, '--non-interactive'];
-        if (dryRun) args.push('--dry-run');
-        return this._runCommand(args, { cwd });
+    async validate(itemName, { cwd } = {}) {
+        return this._runCommand(['validate', itemName], { cwd });
     }
 
     /**
-     * Validate a change.
-     * @param {string} changeId
+     * Archive a completed change.
+     * @param {string} changeName
      * @param {object} [opts]
-     * @param {boolean} [opts.strict=true]
      * @param {string} [opts.cwd]
      * @returns {Promise<{stdout: string, stderr: string, success: boolean}>}
      */
-    async validate(changeId, { strict = true, cwd } = {}) {
-        const args = ['validate', changeId, '--non-interactive'];
-        if (strict) args.push('--strict');
-        return this._runCommand(args, { cwd });
+    async archive(changeName, { cwd } = {}) {
+        return this._runCommand(['archive', changeName], { cwd });
     }
 
     /**
-     * Apply a change.
-     * @param {string} changeId
+     * List current changes or specs.
      * @param {object} [opts]
-     * @param {boolean} [opts.dryRun=true]
+     * @param {boolean} [opts.specs=false] — list specs instead of changes
      * @param {string} [opts.cwd]
      * @returns {Promise<{stdout: string, stderr: string, success: boolean}>}
      */
-    async apply(changeId, { dryRun = true, cwd } = {}) {
-        const args = ['apply', changeId, '--non-interactive', '--yes'];
-        if (dryRun) args.push('--dry-run');
+    async list({ specs = false, cwd } = {}) {
+        const args = ['list', '--json'];
+        if (specs) args.push('--specs');
         return this._runCommand(args, { cwd });
     }
 
-    /**
-     * Archive a change.
-     * @param {string} changeId
-     * @param {object} [opts]
-     * @param {string} [opts.cwd]
-     * @returns {Promise<{stdout: string, stderr: string, success: boolean}>}
-     */
-    async archive(changeId, { cwd } = {}) {
-        const args = ['archive', changeId, '--non-interactive', '--yes'];
-        return this._runCommand(args, { cwd });
-    }
+    // ──────────────────────────────────────────────
+    //  Project initialization
+    // ──────────────────────────────────────────────
 
     /**
-     * List current changes.
+     * Initialize OpenSpec in a project directory.
+     * Runs `openspec init [path]` to create openspec/project.md and related files.
+     *
+     * @param {string} projectRoot — workspace root
      * @param {object} [opts]
-     * @param {string} [opts.cwd]
+     * @param {string} [opts.tools='all'] — AI tools config
      * @returns {Promise<{stdout: string, stderr: string, success: boolean}>}
      */
-    async list({ cwd } = {}) {
-        const args = ['list', '--non-interactive'];
-        return this._runCommand(args, { cwd });
+    async init(projectRoot, { tools = 'all' } = {}) {
+        const args = ['init', projectRoot, '--tools', tools, '--force'];
+        return this._runCommand(args, { cwd: projectRoot });
     }
 
     // ──────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, FileCode, Hash, ExternalLink, Filter, Loader2, Sparkles } from 'lucide-react'
+import { Search, FileCode, Hash, ExternalLink, Filter, Loader2, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import { api } from '../api/api'
 
 export default function SearchWindow({ selectedProject }) {
@@ -9,6 +9,7 @@ export default function SearchWindow({ selectedProject }) {
     const [stats, setStats] = useState(null)
     const [error, setError] = useState('')
     const [hasSearched, setHasSearched] = useState(false)
+    const [expandedResults, setExpandedResults] = useState({})
 
     const handleSearch = async (e) => {
         if (e) e.preventDefault()
@@ -113,7 +114,10 @@ export default function SearchWindow({ selectedProject }) {
                         </div>
                     )}
 
-                    {results.map((result, idx) => (
+                    {results.map((result, idx) => {
+                        const isExpanded = expandedResults[idx] || false
+                        const content = result.content || result.text || result.snippet || ''
+                        return (
                         <div key={idx} className="glass-panel group hover:border-indigo-500/30 transition-all">
                             <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
                                 <div className="flex items-center gap-3">
@@ -125,18 +129,29 @@ export default function SearchWindow({ selectedProject }) {
                                         <Hash size={12} />
                                         Score: <span className="text-indigo-400">{(result.score * 100).toFixed(1)}%</span>
                                     </div>
-                                    <button className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-slate-500 hover:text-white">
-                                        <ExternalLink size={14} />
+                                    <button
+                                        onClick={() => setExpandedResults(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                        className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-slate-500 hover:text-white"
+                                        title={isExpanded ? 'Collapse' : 'View full content'}
+                                    >
+                                        {isExpanded ? <ChevronUp size={14} /> : <ExternalLink size={14} />}
                                     </button>
                                 </div>
                             </div>
                             <div className="p-5 bg-slate-950/40">
                                 <pre className="text-[13px] font-mono text-slate-300 leading-relaxed overflow-x-auto custom-scrollbar">
-                                    <code>{result.content || result.text || result.snippet}</code>
+                                    <code>{content}</code>
                                 </pre>
+                                {isExpanded && result.metadata?.path && (
+                                    <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-2 text-[10px] text-slate-500">
+                                        <FileCode size={12} />
+                                        <span>Full path: {result.metadata.path}</span>
+                                        {result.metadata?.line && <span className="text-indigo-400">Line {result.metadata.line}</span>}
+                                    </div>
+                                )}
                             </div>
                         </div>
-                    ))}
+                    )})}
                 </div>
             </div>
         </div>

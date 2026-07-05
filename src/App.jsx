@@ -190,12 +190,24 @@ export default function App() {
           </div>
 
           <div className="flex-1 overflow-y-auto bg-white/[0.01] border-t border-white/5 custom-scrollbar">
-            {activeTab === 'chat' && <AgentChatTab selectedProject={selectedProject} />}
-            {activeTab === 'search' && <SearchWindow selectedProject={selectedProject} />}
-            {activeTab === 'graph' && <GraphStudio selectedProject={selectedProject} />}
-            {activeTab === 'dashboard' && <Dashboard />}
-            {activeTab === 'stardust' && <Stardust selectedProject={selectedProject} />}
-            {activeTab === 'plugins' && <PluginsWindow selectedProject={selectedProject} />}
+            <div style={{display: activeTab === 'chat' ? 'contents' : 'none'}}>
+              <AgentChatTab selectedProject={selectedProject} />
+            </div>
+            <div style={{display: activeTab === 'search' ? 'contents' : 'none'}}>
+              <SearchWindow selectedProject={selectedProject} />
+            </div>
+            <div style={{display: activeTab === 'graph' ? 'contents' : 'none'}}>
+              <GraphStudio selectedProject={selectedProject} />
+            </div>
+            <div style={{display: activeTab === 'dashboard' ? 'contents' : 'none'}}>
+              <Dashboard />
+            </div>
+            <div style={{display: activeTab === 'stardust' ? 'contents' : 'none'}}>
+              <Stardust selectedProject={selectedProject} />
+            </div>
+            <div style={{display: activeTab === 'plugins' ? 'contents' : 'none'}}>
+              <PluginsWindow selectedProject={selectedProject} />
+            </div>
           </div>
 
         </div>

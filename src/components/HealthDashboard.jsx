@@ -21,6 +21,7 @@ const CHECK_LABELS = {
     graphify: { label: 'Graphify',     icon: '◈' },
     ollama:   { label: 'Ollama',       icon: '◇' },
     ctx:      { label: 'Context Expert', icon: '⊡' },
+    openspec: { label: 'OpenSpec',     icon: '⚡' },
     config:   { label: 'Config',       icon: '⚐' },
 }
 

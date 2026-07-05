@@ -7,7 +7,6 @@ import {
     AlertTriangle,
     Play,
     FileCheck,
-    Rocket,
     Archive,
     FolderOpen,
     Terminal,
@@ -16,6 +15,8 @@ import {
     ChevronDown,
     ChevronRight,
     Loader2,
+    Clipboard,
+    ClipboardCheck,
 } from 'lucide-react';
 import { api } from '../api/api';
 
@@ -76,16 +77,13 @@ export default function Stardust({ selectedProject }) {
 
     // Command state
     const [changeId, setChangeId] = useState('');
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [specPath, setSpecPath] = useState('');
-    const [dryRun, setDryRun] = useState(true);
     const [cwd, setCwd] = useState('');
     const [running, setRunning] = useState(false);
     const [currentAction, setCurrentAction] = useState(null);
 
     // Console output
     const [consoleLines, setConsoleLines] = useState([]);
+    const [verbose, setVerbose] = useState(false);
     const consoleEndRef = useRef(null);
 
     // Derive effective CWD
@@ -102,6 +100,24 @@ export default function Stardust({ selectedProject }) {
     }, []);
 
     const clearConsole = () => setConsoleLines([]);
+
+    const copyConsole = () => {
+        const text = consoleLines.map(l => l.text).join('\n');
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => {
+            // brief feedback handled by state below
+        }).catch(() => {
+            // fallback for non-HTTPS contexts
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        });
+    };
 
     // Auto-scroll console
     useEffect(() => {
@@ -144,11 +160,7 @@ export default function Stardust({ selectedProject }) {
             const payload = {
                 action,
                 changeId: changeId || undefined,
-                title: title || undefined,
-                description: description || undefined,
-                specPath: specPath || undefined,
                 projectRoot: effectiveCwd || undefined,
-                dryRun: action === 'apply' || action === 'propose' ? dryRun : undefined,
                 ...extra,
             };
 
@@ -199,7 +211,55 @@ export default function Stardust({ selectedProject }) {
         }
     };
 
+    const handleInit = async () => {
+        setRunning(true);
+        setCurrentAction('init');
+        appendConsole('\n── INIT ──', 'info');
+        appendConsole(`Initializing OpenSpec in ${effectiveCwd}...`, 'info');
+        try {
+            const result = await api.stardustRun({ action: 'init', projectRoot: effectiveCwd, tools: 'all' });
+            if (result.stdout) appendConsole(result.stdout, 'default');
+            if (result.stderr) appendConsole(result.stderr, 'warning');
+            if (result.success) {
+                appendConsole('✓ Project initialized. Run diagnostics to verify.', 'success');
+                // Re-run diagnostics to refresh the panel
+                runDiagnostics();
+            } else {
+                appendConsole('✗ Initialization failed. Check the output above.', 'error');
+            }
+        } catch (err) {
+            appendConsole(`✗ Init error: ${err.message}`, 'error');
+        } finally {
+            setRunning(false);
+            setCurrentAction(null);
+        }
+    };
+
     // ── Render ──
+
+    // Empty state: no active workspace selected
+    if (!selectedProject) {
+        return (
+            <div className="h-full flex flex-col items-center justify-center bg-[#020617] text-slate-300 selection:bg-indigo-500/30 px-8">
+                <div className="inline-flex items-center justify-center h-20 w-20 rounded-2xl bg-amber-500/10 border border-amber-500/20 mb-6">
+                    <Zap size={36} className="text-amber-400/60" />
+                </div>
+                <h1 className="text-2xl font-black tracking-tight text-white mb-2">
+                    ⚡ Project Stardust
+                </h1>
+                <p className="text-sm text-slate-500 max-w-md text-center leading-relaxed">
+                    The blueprints for your codebase.
+                </p>
+                <div className="mt-8 rounded-2xl border border-amber-500/10 bg-amber-500/[0.03] px-6 py-5 max-w-md text-center">
+                    <FolderOpen size={28} className="text-amber-400/40 mx-auto mb-3" />
+                    <p className="text-sm text-slate-400 font-medium mb-1">No active workspace selected</p>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                        Select a project from the sidebar to start using OpenSpec through the Stardust workflow. Once a workspace is active, you can run diagnostics, propose changes, validate specs, and apply or archive them.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="h-full flex flex-col bg-[#020617] text-slate-300 selection:bg-indigo-500/30">
@@ -240,7 +300,7 @@ export default function Stardust({ selectedProject }) {
                                 failText="Unknown"
                             />
                             <DiagRow
-                                label="openspec/project.md"
+                                label="openspec/config.yaml"
                                 ok={diagnostics?.projectRootFound}
                                 okText="Found"
                                 failText="Not found"
@@ -258,6 +318,37 @@ export default function Stardust({ selectedProject }) {
                                 {e}
                             </div>
                         ))}
+
+                        {/* Verbose debug toggle */}
+                        {diagnostics?._debug && (
+                            <div className="space-y-2">
+                                <label className="flex items-center gap-2 cursor-pointer select-none relative">
+                                    <input
+                                        type="checkbox"
+                                        checked={verbose}
+                                        onChange={(e) => setVerbose(e.target.checked)}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="h-4 w-7 rounded-full bg-white/10 peer-checked:bg-cyan-500/30 border border-white/10 peer-checked:border-cyan-500/50 transition-colors"></div>
+                                    <div className="absolute h-3 w-3 rounded-full bg-slate-400 peer-checked:bg-cyan-400 transition-transform peer-checked:translate-x-3"></div>
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Verbose Debug</span>
+                                </label>
+                                {verbose && (
+                                    <div className="rounded-xl bg-black/40 border border-white/5 p-3 space-y-2 font-mono text-[11px]">
+                                        <div className="text-slate-400">Binary: <span className="text-cyan-300">{diagnostics.binary}</span></div>
+                                        <div className="text-slate-400">Version exit code: <span className={diagnostics._debug.versionExitCode === 0 ? 'text-emerald-400' : 'text-red-400'}>{diagnostics._debug.versionExitCode ?? 'N/A'}</span></div>
+                                        <div>
+                                            <div className="text-slate-500 mb-1">Raw stdout:</div>
+                                            <pre className="text-emerald-300/70 whitespace-pre-wrap break-all">{diagnostics._debug.versionRawStdout || '(empty)'}</pre>
+                                        </div>
+                                        <div>
+                                            <div className="text-slate-500 mb-1">Raw stderr:</div>
+                                            <pre className="text-amber-300/70 whitespace-pre-wrap break-all">{diagnostics._debug.versionRawStderr || '(empty)'}</pre>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Action buttons */}
                         <div className="flex flex-wrap items-center gap-2">
@@ -287,6 +378,20 @@ export default function Stardust({ selectedProject }) {
                                     Install Now
                                 </button>
                             )}
+                            {diagnostics && diagnostics.installed && !diagnostics.projectRootFound && (
+                                <button
+                                    onClick={handleInit}
+                                    disabled={running}
+                                    className="flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-emerald-300 transition-all hover:border-emerald-400/50 hover:bg-emerald-500/20 hover:text-white disabled:opacity-50"
+                                >
+                                    {running && currentAction === 'init' ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                        <Play size={14} />
+                                    )}
+                                    Initialize Project
+                                </button>
+                            )}
                         </div>
                     </div>
                 </CollapsibleSection>
@@ -294,51 +399,18 @@ export default function Stardust({ selectedProject }) {
                 {/* ── Command Input Area ── */}
                 <CollapsibleSection title="Commands" icon={Terminal}>
                     <div className="space-y-4">
-                        {/* Text inputs */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* Change ID input */}
+                        <div className="grid grid-cols-1 gap-3">
                             <InputField
-                                label="Change ID"
+                                label="Change / Spec Name"
                                 value={changeId}
                                 onChange={setChangeId}
                                 placeholder="e.g. add-auth-middleware"
                             />
-                            <InputField
-                                label="Spec Path"
-                                value={specPath}
-                                onChange={setSpecPath}
-                                placeholder="e.g. openspec/specs/auth.md"
-                            />
-                        </div>
-                        <div className="grid grid-cols-1 gap-3">
-                            <InputField
-                                label="Title"
-                                value={title}
-                                onChange={setTitle}
-                                placeholder="Brief title for the proposed change"
-                            />
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Description</label>
-                                <textarea
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    placeholder="Detailed description of the change..."
-                                    rows={2}
-                                    className="w-full rounded-xl bg-black/35 border border-white/10 px-4 py-2 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-colors resize-none"
-                                />
-                            </div>
                         </div>
 
                         {/* Workflow action buttons */}
                         <div className="flex flex-wrap items-center gap-2">
-                            <ActionButton
-                                icon={Play}
-                                label="Propose"
-                                color="indigo"
-                                loading={running && currentAction === 'propose'}
-                                disabled={running || !title || !description || !specPath}
-                                onClick={() => runAction('propose')}
-                            />
-                            <span className="text-slate-600 text-xs">➜</span>
                             <ActionButton
                                 icon={FileCheck}
                                 label="Validate"
@@ -347,16 +419,6 @@ export default function Stardust({ selectedProject }) {
                                 disabled={running || !changeId}
                                 onClick={() => runAction('validate')}
                             />
-                            <span className="text-slate-600 text-xs">➜</span>
-                            <ActionButton
-                                icon={Rocket}
-                                label="Apply"
-                                color="emerald"
-                                loading={running && currentAction === 'apply'}
-                                disabled={running || !changeId}
-                                onClick={() => runAction('apply')}
-                            />
-                            <span className="text-slate-600 text-xs">➜</span>
                             <ActionButton
                                 icon={Archive}
                                 label="Archive"
@@ -365,42 +427,18 @@ export default function Stardust({ selectedProject }) {
                                 disabled={running || !changeId}
                                 onClick={() => runAction('archive')}
                             />
-                        </div>
-
-                        {/* Extra actions row */}
-                        <div className="flex flex-wrap items-center gap-2">
                             <ActionButton
                                 icon={RefreshCw}
                                 label="List Changes"
-                                color="slate"
-                                size="sm"
+                                color="indigo"
                                 loading={running && currentAction === 'list'}
                                 disabled={running}
                                 onClick={() => runAction('list')}
                             />
                         </div>
 
-                        {/* Options row */}
-                        <div className="flex flex-wrap items-center gap-4 pt-1 border-t border-white/5">
-                            {/* Dry-run toggle */}
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                                <div className="relative">
-                                    <input
-                                        type="checkbox"
-                                        checked={dryRun}
-                                        onChange={(e) => setDryRun(e.target.checked)}
-                                        className="sr-only peer"
-                                    />
-                                    <div className="h-5 w-9 rounded-full bg-white/10 peer-checked:bg-amber-500/30 border border-white/10 peer-checked:border-amber-500/50 transition-colors"></div>
-                                    <div className="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-slate-400 peer-checked:bg-amber-400 transition-transform peer-checked:translate-x-4"></div>
-                                </div>
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                                    Dry Run {dryRun ? 'ON' : 'OFF'}
-                                </span>
-                            </label>
-
-                            {/* Working directory */}
-                            <div className="flex items-center gap-2">
+                        {/* Working directory */}
+                        <div className="flex items-center gap-2 pt-1 border-t border-white/5">
                                 <FolderOpen size={12} className="text-slate-500" />
                                 <input
                                     type="text"
@@ -410,7 +448,6 @@ export default function Stardust({ selectedProject }) {
                                     className="flex-1 min-w-[200px] rounded-lg bg-black/35 border border-white/10 px-3 py-1.5 text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 transition-colors font-mono"
                                 />
                             </div>
-                        </div>
                     </div>
                 </CollapsibleSection>
 
@@ -421,12 +458,21 @@ export default function Stardust({ selectedProject }) {
                             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                                 {consoleLines.length > 0 ? `${consoleLines.length} lines` : 'No output yet'}
                             </span>
-                            <button
-                                onClick={clearConsole}
-                                className="text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:text-slate-400 transition-colors"
-                            >
-                                Clear
-                            </button>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={copyConsole}
+                                    disabled={consoleLines.length === 0}
+                                    className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-cyan-300 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                    Copy
+                                </button>
+                                <button
+                                    onClick={clearConsole}
+                                    className="text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:text-slate-400 transition-colors"
+                                >
+                                    Clear
+                                </button>
+                            </div>
                         </div>
                         <div className="rounded-xl bg-black/50 border border-white/5 p-4 h-80 overflow-y-auto custom-scrollbar font-mono">
                             {consoleLines.length === 0 ? (

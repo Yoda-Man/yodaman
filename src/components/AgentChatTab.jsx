@@ -247,12 +247,25 @@ export default function AgentChatTab({ selectedProject }) {
 
   useEffect(() => {
     if (!selectedProject) {
-      setMessages([])
+      // Load from localStorage as fallback before clearing
+      const saved = parseStoredJson(`yodaman:messages:${selectedProject?.id || 'default'}`, [])
+      if (saved.length > 0) setMessages(saved)
       return
     }
+    // Try to load from localStorage first for instant restore
+    const saved = parseStoredJson(`yodaman:messages:${selectedProject.id}`, [])
+    if (saved.length > 0) setMessages(saved)
     loadHistory()
     loadGitContext()
   }, [selectedProject?.id, selectedProject?.path])
+
+  // Persist messages to localStorage whenever they change
+  useEffect(() => {
+    if (!selectedProject?.id) return
+    try {
+      localStorage.setItem(`yodaman:messages:${selectedProject.id}`, JSON.stringify(messages))
+    } catch (_) { /* localStorage quota exceeded — ignore */ }
+  }, [messages, selectedProject?.id])
 
   useEffect(() => {
     api.getPlugins()

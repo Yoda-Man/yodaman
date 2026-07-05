@@ -1145,6 +1145,7 @@ router.post('/logs/client-error', (req, res) => {
 });
 
 router.get('/desktop/diagnostics', (req, res) => {
+    const healthState = req.app ? req.app.get('healthState') : {};
     res.json({
         runtime: {
             pid: process.pid,
@@ -1163,7 +1164,13 @@ router.get('/desktop/diagnostics', (req, res) => {
             total: agentEngine.getTasks().length,
             pendingApprovals: agentEngine.getPendingApprovals().length
         },
-        plugins: toolBox.getPolicy().plugins
+        plugins: toolBox.getPolicy().plugins,
+        dependencies: {
+            ollama: healthState.ollama || null,
+            ctx: healthState.ctx || null,
+            graphify: healthState.graphify || null,
+            openspec: healthState.openspec || null,
+        }
     });
 });
 
@@ -1482,6 +1489,7 @@ router.get('/health', async (req, res) => {
         graphify: { ok: null, message: 'runtime not initialized' },
         ollama: { ok: null, message: 'runtime not initialized' },
         ctx: { ok: null, message: 'runtime not initialized' },
+        openspec: { ok: null, message: 'runtime not initialized' },
         config: { ok: null, message: 'runtime not initialized' },
         projects: 0,
         indexed: 0,
@@ -1520,6 +1528,7 @@ router.get('/health', async (req, res) => {
             graphify: enrich(checks.graphify),
             ollama: enrich(checks.ollama),
             ctx: enrich(checks.ctx),
+            openspec: enrich(checks.openspec),
             config: enrich(checks.config)
         },
         services: { ollama: ollamaRunning },
@@ -1593,6 +1602,26 @@ router.post('/health/install', (req, res) => {
             break;
         }
 
+        case 'openspec': {
+            const installScript = 'npm install -g @fission-ai/openspec@latest';
+
+            logger.info('health_install_started', { component, command: installScript });
+
+            execFile('/bin/sh', ['-c', installScript], { timeout: 120000 }, (err, stdout) => {
+                if (err) {
+                    res.json({
+                        ok: false,
+                        component,
+                        message: `Installation failed: ${err.message}. Install manually: npm install -g @fission-ai/openspec@latest`,
+                        stdout: stdout || ''
+                    });
+                    return;
+                }
+                res.json({ ok: true, component, message: 'OpenSpec installed. Restart the runtime.' });
+            });
+            break;
+        }
+
         default:
             res.status(400).json({ ok: false, message: `Unknown component: ${component}` });
     }
@@ -1627,23 +1656,11 @@ router.post('/stardust/run', async (req, res) => {
             case 'diagnose':
                 result = await stardustWrapper.diagnose(opts.cwd);
                 break;
-            case 'propose':
-                if (!title || !description || !specPath) {
-                    return res.status(400).json({ error: 'propose requires title, description, and specPath' });
-                }
-                result = await stardustWrapper.propose(title, description, specPath, { ...opts, dryRun });
-                break;
             case 'validate':
                 if (!changeId) {
                     return res.status(400).json({ error: 'validate requires changeId' });
                 }
-                result = await stardustWrapper.validate(changeId, { ...opts, strict: strict !== false });
-                break;
-            case 'apply':
-                if (!changeId) {
-                    return res.status(400).json({ error: 'apply requires changeId' });
-                }
-                result = await stardustWrapper.apply(changeId, { ...opts, dryRun: dryRun !== false });
+                result = await stardustWrapper.validate(changeId, opts);
                 break;
             case 'archive':
                 if (!changeId) {
@@ -1652,7 +1669,13 @@ router.post('/stardust/run', async (req, res) => {
                 result = await stardustWrapper.archive(changeId, opts);
                 break;
             case 'list':
-                result = await stardustWrapper.list(opts);
+                result = await stardustWrapper.list({ specs: req.body.specs, cwd: opts.cwd });
+                break;
+            case 'init':
+                if (!projectRoot) {
+                    return res.status(400).json({ error: 'init requires projectRoot' });
+                }
+                result = await stardustWrapper.init(projectRoot, { tools: req.body.tools || 'all' });
                 break;
             case 'install':
                 result = await stardustWrapper.install();
@@ -1666,6 +1689,9 @@ router.post('/stardust/run', async (req, res) => {
             stdout: result.stdout,
             stderr: result.stderr,
             exitCode: result.code,
+            // Include full diagnose result when action is 'diagnose'
+            ...(action === 'diagnose' && result._debug ? { diagnostics: result } : {}),
+            ...(action === 'diagnose' && !result._debug ? { diagnostics: result } : {}),
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
