@@ -9,11 +9,12 @@ describe('App.jsx tab persistence contract', () => {
 
         // All tabs should use style display for show/hide, not conditional rendering
         expect(text).toContain("display: activeTab === 'chat' ? 'contents' : 'none'");
-        expect(text).toContain("display: activeTab === 'search' ? 'contents' : 'none'");
         expect(text).toContain("display: activeTab === 'graph' ? 'contents' : 'none'");
         expect(text).toContain("display: activeTab === 'dashboard' ? 'contents' : 'none'");
         expect(text).toContain("display: activeTab === 'stardust' ? 'contents' : 'none'");
         expect(text).toContain("display: activeTab === 'plugins' ? 'contents' : 'none'");
+        expect(text).toContain("window.addEventListener('yodaman:view-in-vr'");
+        expect(text).toContain('<HolocronVrModal');
     });
 
     test('tab wrappers do not use flex-1 or h-full classes that cause layout issues', () => {
@@ -28,7 +29,7 @@ describe('App.jsx tab persistence contract', () => {
         const wrapperPattern = /<div style=\{\{display: activeTab === '[^']+' \? 'contents' : 'none'\}\}>/g;
         const matches = tabContent.match(wrapperPattern);
         expect(matches).not.toBeNull();
-        expect(matches.length).toBe(6);
+        expect(matches.length).toBe(5);
     });
 
     test('does not use conditional render pattern for tabs', () => {
@@ -40,7 +41,7 @@ describe('App.jsx tab persistence contract', () => {
 
         // Each tab component should appear without the && pattern before it
         expect(tabContent).toContain('<AgentChatTab');
-        expect(tabContent).toContain('<SearchWindow');
+        expect(tabContent).not.toContain('<SearchWindow');
         expect(tabContent).toContain('<GraphStudio');
         expect(tabContent).toContain('<Dashboard');
         expect(tabContent).toContain('<Stardust');

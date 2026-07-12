@@ -317,7 +317,7 @@ describe('RestController Integration', () => {
 
     test('POST /plugins/:name/open invokes a loaded plugin for the selected workspace', async () => {
         const toolBox = require('../../backend/infrastructure/ToolBox');
-        const execute = jest.fn(async ({ _action, project }) => ({ _action, project }));
+        const execute = jest.fn(async ({ _action, project }) => ({ opened: true, _action, project }));
         toolBox.plugins.set('holocron-vr', {
             name: 'holocron-vr',
             permissions: [],

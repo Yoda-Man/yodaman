@@ -1010,7 +1010,26 @@ router.post('/plugins/:name/open', async (req, res) => {
     }
 
     try {
+        logger.info('plugin_open_requested', {
+            plugin: name,
+            project: req.body?.project,
+            diagnostics: req.body?.diagnostics,
+            userAction: 'open_plugin'
+        });
         const result = await plugin.execute({ _action: 'open', project: req.body?.project });
+        if (!result?.opened) {
+            const error = new Error('Plugin completed without opening a viewer. The installed plugin does not implement the open action.');
+            logger.error('plugin_open_not_confirmed', error, {
+                plugin: name,
+                project: req.body?.project,
+                diagnostics: req.body?.diagnostics,
+                result,
+                userAction: 'open_plugin',
+                severity: 'high'
+            });
+            return res.status(501).json({ error: error.message, code: 'plugin_open_not_implemented', result });
+        }
+        logger.info('plugin_open_confirmed', { plugin: name, project: req.body?.project, diagnostics: req.body?.diagnostics });
         res.json({ ok: true, name, project: req.body?.project, result });
     } catch (err) {
         logger.error('plugin_open_failed', err, {

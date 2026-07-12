@@ -17,6 +17,7 @@ import {
     Loader2,
     Clipboard,
     ClipboardCheck,
+    BarChart3,
 } from 'lucide-react';
 import { api } from '../api/api';
 
@@ -80,6 +81,7 @@ export default function Stardust({ selectedProject }) {
     const [cwd, setCwd] = useState('');
     const [running, setRunning] = useState(false);
     const [currentAction, setCurrentAction] = useState(null);
+    const [actionRuns, setActionRuns] = useState([]);
 
     // Console output
     const [consoleLines, setConsoleLines] = useState([]);
@@ -178,6 +180,8 @@ export default function Stardust({ selectedProject }) {
             } else {
                 appendConsole(`✗ ${action} failed (exit code: ${result.exitCode})`, 'error');
             }
+
+            setActionRuns(prev => [...prev.slice(-11), { action: extra.specs ? 'list specs' : action, success: result.success, at: Date.now() }]);
 
             return result;
         } catch (err) {
@@ -435,6 +439,14 @@ export default function Stardust({ selectedProject }) {
                                 disabled={running}
                                 onClick={() => runAction('list')}
                             />
+                            <ActionButton
+                                icon={FileCheck}
+                                label="List Specs"
+                                color="emerald"
+                                loading={running && currentAction === 'list'}
+                                disabled={running}
+                                onClick={() => runAction('list', { specs: true })}
+                            />
                         </div>
 
                         {/* Working directory */}
@@ -444,10 +456,40 @@ export default function Stardust({ selectedProject }) {
                                     type="text"
                                     value={cwd}
                                     onChange={(e) => setCwd(e.target.value)}
-                                    placeholder={selectedProject?.path || process.cwd?.() || 'Workspace root'}
+                                    placeholder={selectedProject?.path || 'Workspace root'}
                                     className="flex-1 min-w-[200px] rounded-lg bg-black/35 border border-white/10 px-3 py-1.5 text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 transition-colors font-mono"
                                 />
                             </div>
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="OpenSpec Insights" icon={BarChart3}>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        <div className="rounded-xl border border-white/5 bg-black/25 p-4">
+                            <div className="mb-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Workflow readiness</div>
+                            <div className="space-y-3">
+                                {[
+                                    ['CLI installed', diagnostics?.installed],
+                                    ['Project initialized', diagnostics?.projectRootFound],
+                                    ['Ready to list, validate and archive', diagnostics?.installed && diagnostics?.projectRootFound],
+                                ].map(([label, ready]) => (
+                                    <div key={label} className="grid grid-cols-[170px_1fr_36px] items-center gap-3 text-[11px]">
+                                        <span className="truncate text-slate-400">{label}</span>
+                                        <div className="h-2 overflow-hidden rounded-full bg-white/5"><div className={`h-full rounded-full ${ready ? 'bg-emerald-400' : 'bg-slate-700'}`} style={{width: ready ? '100%' : '15%'}} /></div>
+                                        <span className={ready ? 'text-emerald-300' : 'text-slate-600'}>{ready ? 'Yes' : 'No'}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="rounded-xl border border-white/5 bg-black/25 p-4">
+                            <div className="mb-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Recent command outcomes</div>
+                            {actionRuns.length ? (
+                                <div className="flex h-24 items-end gap-2">
+                                    {actionRuns.map((run, index) => <div key={`${run.at}-${index}`} className={`min-w-0 flex-1 rounded-t ${run.success ? 'bg-emerald-400/70' : 'bg-red-400/70'}`} style={{height: run.success ? '85%' : '40%'}} title={`${run.action}: ${run.success ? 'passed' : 'failed'}`} />)}
+                                </div>
+                            ) : <div className="flex h-24 items-center justify-center text-xs italic text-slate-600">Run an OpenSpec command to build this chart.</div>}
+                            <div className="mt-3 flex gap-4 text-[10px] text-slate-500"><span><b className="text-emerald-400">●</b> Passed</span><span><b className="text-red-400">●</b> Failed</span></div>
+                        </div>
                     </div>
                 </CollapsibleSection>
 

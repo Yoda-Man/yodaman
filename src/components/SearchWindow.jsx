@@ -1,9 +1,8 @@
-import { useState } from 'react'
-import { Search, FileCode, Hash, ExternalLink, Filter, Loader2, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Search, FileCode, Hash, ExternalLink, Loader2, ChevronUp } from 'lucide-react'
 import { api } from '../api/api'
 
-export default function SearchWindow({ selectedProject }) {
-    const [query, setQuery] = useState('')
+export default function SearchWindow({ selectedProject, searchRequest, onSearchingChange }) {
     const [results, setResults] = useState([])
     const [isSearching, setIsSearching] = useState(false)
     const [stats, setStats] = useState(null)
@@ -11,16 +10,19 @@ export default function SearchWindow({ selectedProject }) {
     const [hasSearched, setHasSearched] = useState(false)
     const [expandedResults, setExpandedResults] = useState({})
 
-    const handleSearch = async (e) => {
-        if (e) e.preventDefault()
-        if (!query.trim() || isSearching) return
+    useEffect(() => {
+        const query = String(searchRequest?.query || '').trim()
+        if (!query || !searchRequest?.id) return
+
+        let active = true
 
         setIsSearching(true)
+        onSearchingChange?.(true)
         setHasSearched(true)
         setError('')
-        try {
-            const data = await api.search(query, selectedProject?.path || selectedProject?.name)
-            
+
+        api.search(query, selectedProject?.path || selectedProject?.name).then(data => {
+            if (!active) return
             if (data.isText) {
                 setResults([])
                 setStats(null)
@@ -28,7 +30,8 @@ export default function SearchWindow({ selectedProject }) {
                 setResults(Array.isArray(data) ? data : (data.results || []))
                 setStats({ count: Array.isArray(data) ? data.length : (data.results || []).length, time: '240ms' })
             }
-        } catch (err) {
+        }).catch(err => {
+            if (!active) return
             console.error('Search failed:', err)
             setResults([])
             setStats(null)
@@ -44,60 +47,25 @@ export default function SearchWindow({ selectedProject }) {
                     project: selectedProject?.path || selectedProject?.name
                 }
             })
-        } finally {
+        }).finally(() => {
+            if (!active) return
             setIsSearching(false)
+            onSearchingChange?.(false)
+        })
+
+        return () => {
+            active = false
+            onSearchingChange?.(false)
         }
-    }
+    }, [searchRequest?.id])
 
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
-            {/* Search Header */}
-            <div className="p-8 border-b border-white/5 bg-white/[0.01]">
-                <div className="max-w-4xl mx-auto space-y-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-2xl font-outfit font-black text-white tracking-tight">Code Search</h2>
-                            <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Pattern discovery engine</p>
-                        </div>
-                        {selectedProject && (
-                            <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-                                <Filter size={12} className="text-indigo-400" />
-                                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Scoped to: {selectedProject.name}</span>
-                            </div>
-                        )}
-                    </div>
-
-                    <form onSubmit={handleSearch} className="relative group">
-                        <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
-                            <Search size={20} className="text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
-                        </div>
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search for functions, variables, or patterns..."
-                            className="w-full bg-slate-900/50 border border-white/10 rounded-[24px] py-4 pl-14 pr-32 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium"
-                        />
-                        <button 
-                            type="submit"
-                            disabled={isSearching || !query.trim()}
-                            className="absolute right-3 top-2.5 bottom-2.5 px-6 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-[18px] text-xs font-black uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(79,70,229,0.3)] flex items-center gap-2"
-                        >
-                            {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                            {isSearching ? 'Scanning' : 'Search'}
-                        </button>
-                    </form>
-                    {error && (
-                        <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-                            {error}
-                        </div>
-                    )}
-                </div>
-            </div>
-
             {/* Results Area */}
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                 <div className="max-w-4xl mx-auto space-y-6">
+                    {isSearching && <div className="flex items-center justify-center gap-3 py-20 text-sm text-indigo-300"><Loader2 size={18} className="animate-spin" />Searching {selectedProject?.name}…</div>}
+                    {error && <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</div>}
                     {!isSearching && results.length === 0 && hasSearched && (
                         <div className="py-20 text-center">
                             <p className="text-slate-500 font-medium">{error ? 'Search could not complete.' : 'No matches found for your query.'}</p>

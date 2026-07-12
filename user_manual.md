@@ -1,6 +1,6 @@
 # YodaMan User Manual
 
-Version: 0.3.4
+Version: 0.3.7
 
 YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, mandatory Graphify knowledge graph, plugin system, and local runtime API.
 

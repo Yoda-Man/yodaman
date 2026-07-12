@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, File, Mic, Send, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, File, Filter, MessageSquare, Mic, Search, Send, Trash2, X } from 'lucide-react'
 import { api } from '../api/api'
 import { VoiceAgentBridge, readVoiceAgentSettings, speakAgentResponse, writeVoiceAgentSettings } from '../../frontend/voiceAgentBridge.js'
 import FileUploader from '../../frontend/FileUploader.jsx'
 import GitPanel from './GitPanel'
+import SearchWindow from './SearchWindow'
 
 const INITIAL_SECTIONS = {
   current: true,
@@ -35,6 +36,14 @@ function parseStoredJson(key, fallback) {
   } catch {
     return fallback
   }
+}
+
+function normalizeMessages(items) {
+  return (Array.isArray(items) ? items : []).map(item => ({
+    ...item,
+    role: normalizeRole(item.role),
+    timestamp: item.timestamp ? new Date(item.timestamp) : new Date()
+  }))
 }
 
 function fileRefUrl(ref) {
@@ -236,6 +245,11 @@ export default function AgentChatTab({ selectedProject }) {
   const [preset, setPreset] = useState('')
   const [queryMode, setQueryMode] = useState('code')
   const [holocronAvailable, setHolocronAvailable] = useState(false)
+  const [vrStatus, setVrStatus] = useState(null)
+  const [isOpeningVr, setIsOpeningVr] = useState(false)
+  const [workspaceView, setWorkspaceView] = useState('chat')
+  const [searchRequest, setSearchRequest] = useState({ id: 0, query: '' })
+  const [isSearchPending, setIsSearchPending] = useState(false)
   const messagesEndRef = useRef(null)
   const voiceBridgeRef = useRef(null)
 
@@ -248,12 +262,12 @@ export default function AgentChatTab({ selectedProject }) {
   useEffect(() => {
     if (!selectedProject) {
       // Load from localStorage as fallback before clearing
-      const saved = parseStoredJson(`yodaman:messages:${selectedProject?.id || 'default'}`, [])
+      const saved = normalizeMessages(parseStoredJson(`yodaman:messages:${selectedProject?.id || 'default'}`, []))
       if (saved.length > 0) setMessages(saved)
       return
     }
     // Try to load from localStorage first for instant restore
-    const saved = parseStoredJson(`yodaman:messages:${selectedProject.id}`, [])
+    const saved = normalizeMessages(parseStoredJson(`yodaman:messages:${selectedProject.id}`, []))
     if (saved.length > 0) setMessages(saved)
     loadHistory()
     loadGitContext()
@@ -302,11 +316,8 @@ export default function AgentChatTab({ selectedProject }) {
   async function loadHistory() {
     try {
       const history = await api.getSessions(selectedProject.id)
-      setMessages(history.map(item => ({
-        ...item,
-        role: normalizeRole(item.role),
-        timestamp: new Date(item.timestamp)
-      })))
+      const restored = normalizeMessages(history)
+      if (restored.length > 0) setMessages(restored)
     } catch (err) {
       setError(err.message)
     }
@@ -359,11 +370,11 @@ export default function AgentChatTab({ selectedProject }) {
       },
       onAutoSubmit: ({ text }) => {
         setInterimTranscript('')
-        sendAgentMessage(text, { usedVoice: true })
+        submitWorkspaceInput(text, { usedVoice: true })
       },
       onCommand: command => {
         setInterimTranscript('')
-        sendAgentMessage(command.query, {
+        submitWorkspaceInput(command.query, {
           usedVoice: true,
           commandContext: {
             ...command.context,
@@ -397,25 +408,50 @@ export default function AgentChatTab({ selectedProject }) {
     window.open(fileRefUrl(ref), '_blank', 'noopener,noreferrer')
   }
 
-  function viewInVr(refs) {
-    window.dispatchEvent(new CustomEvent('yodaman:view-in-vr', { detail: { refs, selectedProject } }))
+  function viewInVr(refs, diagnostics) {
+    window.dispatchEvent(new CustomEvent('yodaman:view-in-vr', { detail: { refs, selectedProject, diagnostics } }))
   }
 
   async function openProjectInVr() {
+    if (isOpeningVr) return
+    const diagnosticId = `vr-${Date.now().toString(36)}`
+    setIsOpeningVr(true)
     try {
       setError('')
-      await api.openPlugin('holocron-vr', selectedProject.path)
-      viewInVr([])
+      setVrStatus({ type: 'info', message: `Checking VR runtime… (${diagnosticId})` })
+      const webxrSupported = Boolean(window.isSecureContext && navigator.xr)
+      const immersiveSupported = webxrSupported
+        ? await navigator.xr.isSessionSupported('immersive-vr').catch(() => false)
+        : false
+      const result = await api.openPlugin('holocron-vr', selectedProject.path, {
+        diagnosticId,
+        webxrSupported,
+        immersiveSupported
+      })
+      if (!result?.result?.opened) {
+        throw new Error(result?.result?.message || 'Holocron VR did not confirm that its viewer opened')
+      }
+      viewInVr([], { diagnosticId, webxrSupported, immersiveSupported })
+      setVrStatus({
+        type: immersiveSupported ? 'success' : 'warning',
+        message: immersiveSupported
+          ? `VR viewer opened. WebXR is ready; put on the headset and select Enter VR. (${diagnosticId})`
+          : `Viewer opened in desktop mode. No immersive VR headset is available to this browser. Check the headset connection and WebXR permissions. (${diagnosticId})`
+      })
     } catch (err) {
-      setError(err.message)
-      api.reportClientError({
+      const message = `VR launch failed: ${err.message} (${diagnosticId})`
+      setError(message)
+      setVrStatus({ type: 'error', message })
+      await api.reportClientError({
         message: err.message || 'Failed to open Holocron VR',
         stack: err.stack,
         userAction: 'open_project_in_vr',
         component: 'AgentChatTab',
         severity: 'high',
-        context: { project: selectedProject.path }
+        context: { project: selectedProject.path, diagnosticId, secureContext: window.isSecureContext, webxrAvailable: Boolean(navigator.xr) }
       })
+    } finally {
+      setIsOpeningVr(false)
     }
   }
 
@@ -503,7 +539,22 @@ export default function AgentChatTab({ selectedProject }) {
 
   async function sendMessage(event) {
     event.preventDefault()
-    await sendAgentMessage()
+    await submitWorkspaceInput()
+  }
+
+  async function submitWorkspaceInput(text = inputText, options = {}) {
+    const query = String(text || '').trim()
+    if (!query || isSending || isSearchPending) return
+
+    if (workspaceView === 'search') {
+      setSearchRequest(current => ({ id: current.id + 1, query }))
+      setInputText('')
+      setInterimTranscript('')
+      setUsedVoiceForDraft(false)
+      return
+    }
+
+    await sendAgentMessage(query, options)
   }
 
   if (!selectedProject) {
@@ -525,7 +576,10 @@ export default function AgentChatTab({ selectedProject }) {
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
-                <h1 className="truncate text-base font-black text-white">Agent Chat</h1>
+                <div className="flex gap-1 rounded-lg border border-white/5 bg-slate-800/50 p-0.5">
+                  <button type="button" onClick={() => setWorkspaceView('chat')} className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${workspaceView === 'chat' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`}><MessageSquare size={12} />Chat</button>
+                  <button type="button" onClick={() => setWorkspaceView('search')} className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${workspaceView === 'search' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`}><Search size={12} />Search</button>
+                </div>
                 <div className="flex gap-1 bg-slate-800/50 rounded-lg p-0.5 border border-white/5">
                   <button type="button" className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-md transition-all ${queryMode==='code'?'bg-indigo-500/20 text-indigo-200':'text-slate-500 hover:text-slate-300'}`} onClick={async()=>{try{await api.setMode('code',selectedProject?.id);setQueryMode('code');}catch(e){console.error('Mode switch failed:',e)}}}>Code</button>
                   <button type="button" className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-md transition-all ${queryMode==='doc'?'bg-indigo-500/20 text-indigo-200':'text-slate-500 hover:text-slate-300'}`} onClick={async()=>{try{await api.setMode('doc',selectedProject?.id);setQueryMode('doc');}catch(e){console.error('Mode switch failed:',e)}}}>Docs</button>
@@ -535,15 +589,19 @@ export default function AgentChatTab({ selectedProject }) {
             </div>
             <div className="flex items-center gap-2">
               {holocronAvailable ? (
-                <button onClick={openProjectInVr} className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cyan-200 hover:bg-cyan-400/20" title="Load workspace in Holocron VR">Load in VR</button>
+                <button onClick={openProjectInVr} disabled={isOpeningVr} className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cyan-200 hover:bg-cyan-400/20 disabled:cursor-wait disabled:opacity-60" title="Load workspace in Holocron VR">{isOpeningVr ? 'Checking VR…' : 'Load in VR'}</button>
               ) : null}
-              <button onClick={()=>{setMessages([]);api.clearSessions(selectedProject.id).catch(()=>{});}} className="rounded-full border border-rose-400/20 bg-rose-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-rose-200 hover:bg-rose-400/20" title="Clear conversation">🗑 Clear</button>
+              <div className="flex items-center gap-1.5 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-indigo-200"><Filter size={11} />Scoped to: {selectedProject.name}</div>
+              <button onClick={()=>{setMessages([]);localStorage.removeItem(`yodaman:messages:${selectedProject.id}`);api.clearSessions(selectedProject.id).catch(()=>{});}} className="rounded-full border border-rose-400/20 bg-rose-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-rose-200 hover:bg-rose-400/20" title="Clear conversation">🗑 Clear</button>
               <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-200">SSE Ready</div>
             </div>
           </div>
         </header>
 
-        <div className="custom-scrollbar flex-1 space-y-7 overflow-y-auto px-6 py-6">
+        <div className={`${workspaceView === 'search' ? 'flex' : 'hidden'} min-h-0 flex-1`}>
+          <SearchWindow selectedProject={selectedProject} searchRequest={searchRequest} onSearchingChange={setIsSearchPending} />
+        </div>
+        <div className={`${workspaceView === 'chat' ? 'block' : 'hidden'} custom-scrollbar min-h-0 flex-1 space-y-7 overflow-y-auto px-6 py-6`}>
           {messages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-center text-sm text-[var(--text-secondary)]">
               Ask YodaMan to inspect, explain, or change this workspace.
@@ -560,9 +618,10 @@ export default function AgentChatTab({ selectedProject }) {
         </div>
 
         <form onSubmit={sendMessage} className="border-t border-[var(--border-color)] bg-slate-950/70 p-5">
+          {vrStatus ? <div role="status" className={`mb-3 rounded-lg border px-3 py-2 text-xs ${vrStatus.type === 'error' ? 'border-rose-400/20 bg-rose-400/10 text-rose-100' : vrStatus.type === 'success' ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100' : 'border-amber-400/20 bg-amber-400/10 text-amber-100'}`}>{vrStatus.message}</div> : null}
           {error ? <div className="mb-3 rounded-lg border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-xs text-rose-100">{error}</div> : null}
 
-          <div className="mb-3 flex items-center gap-2">
+          {workspaceView === 'chat' ? <div className="mb-3 flex items-center gap-2">
             <select
               value={preset}
               onChange={e => {
@@ -580,7 +639,7 @@ export default function AgentChatTab({ selectedProject }) {
                 <option key={p.label} value={p.label}>{p.label}</option>
               ))}
             </select>
-          </div>
+          </div> : null}
 
           <div className="rounded-lg border border-[var(--border-color)] bg-slate-900/80 p-3 focus-within:border-indigo-400/50">
             {isListening ? (
@@ -597,9 +656,9 @@ export default function AgentChatTab({ selectedProject }) {
             <textarea
               value={inputText}
               onChange={event => setInputText(event.target.value)}
-              disabled={isSending}
+              disabled={isSending || isSearchPending}
               rows={3}
-              placeholder="Give YodaMan an agentic task..."
+              placeholder={workspaceView === 'search' ? 'Search this workspace...' : 'Give YodaMan an agentic task...'}
               className="max-h-44 min-h-[84px] w-full resize-y bg-transparent text-sm leading-6 text-slate-100 outline-none placeholder:text-slate-600"
             />
             {interimTranscript && !isListening ? <div className="mt-2 text-xs italic text-slate-500">{interimTranscript}</div> : null}
@@ -611,16 +670,16 @@ export default function AgentChatTab({ selectedProject }) {
             ) : null}
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2" style={{minHeight:'36px'}}>
-                <FileUploader files={attachedFiles} onFilesChange={setAttachedFiles} disabled={isSending} />
+                <FileUploader files={attachedFiles} onFilesChange={setAttachedFiles} disabled={isSending || isSearchPending} />
                 {usedVoiceForDraft ? <span className="text-sm" title="Voice input used">🎤</span> : null}
               </div>
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => startVoiceInput(false)} className="flex h-9 w-9 items-center justify-center rounded-md border text-slate-300 hover:text-white border-white/10 bg-white/[0.03]" title="Voice input" style={isListening?{borderColor:'rgba(244,63,94,0.4)',background:'rgba(244,63,94,0.15)',animation:'pulse 1s ease-in-out infinite'}:{}}>
                   <Mic size={16} />
                 </button>
-                <button type="submit" disabled={isSending || !inputText.trim()} className="inline-flex items-center gap-2 rounded-md bg-indigo-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40">
-                  <Send size={16} />
-                  Send
+                <button type="submit" disabled={isSending || isSearchPending || !inputText.trim()} className="inline-flex items-center gap-2 rounded-md bg-indigo-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40">
+                  {workspaceView === 'search' ? <Search size={16} /> : <Send size={16} />}
+                  {isSearchPending ? 'Searching' : workspaceView === 'search' ? 'Search' : 'Send'}
                 </button>
               </div>
             </div>

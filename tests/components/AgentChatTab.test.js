@@ -42,7 +42,10 @@ describe('AgentChatTab component contract', () => {
 
         expect(text).toContain("plugin.name === 'holocron-vr'");
         expect(text).toContain('Load in VR');
-        expect(text).toContain("api.openPlugin('holocron-vr', selectedProject.path)");
+        expect(text).toContain("api.openPlugin('holocron-vr', selectedProject.path");
+        expect(text).toContain("navigator.xr.isSessionSupported('immersive-vr')");
+        expect(text).toContain('diagnosticId');
+        expect(text).not.toContain('>Agent Chat</h1>');
     });
 
     test('sends task context to the agent SSE endpoint', () => {
@@ -57,5 +60,26 @@ describe('AgentChatTab component contract', () => {
 
         expect(text).toContain("import AgentChatTab from './components/AgentChatTab'");
         expect(text).toContain("<AgentChatTab selectedProject={selectedProject} />");
+    });
+
+    test('consolidates scoped search and restores durable local history', () => {
+        const text = read(componentPath);
+
+        expect(text).toContain("import SearchWindow from './SearchWindow'");
+        expect(text).toContain('Scoped to: {selectedProject.name}');
+        expect(text).toContain('searchRequest={searchRequest}');
+        expect(text).toContain('normalizeMessages');
+        expect(text).toContain('if (restored.length > 0) setMessages(restored)');
+    });
+
+    test('routes the shared voice-capable composer through semantic search in search mode', () => {
+        const text = read(componentPath);
+
+        expect(text).toContain("workspaceView === 'search'");
+        expect(text).toContain('submitWorkspaceInput');
+        expect(text).toContain('setSearchRequest');
+        expect(text).toContain('onAutoSubmit: ({ text }) =>');
+        expect(text).toContain("workspaceView === 'search' ? 'Search this workspace...' : 'Give YodaMan an agentic task...'");
+        expect(text).not.toContain("workspaceView === 'chat' ? <form");
     });
 });

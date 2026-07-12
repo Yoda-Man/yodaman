@@ -2,7 +2,7 @@
 
 YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime.
 
-![Version](https://img.shields.io/badge/Version-0.3.5-gold)
+![Version](https://img.shields.io/badge/Version-0.3.7-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -16,7 +16,7 @@ YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It con
 - **Choose query intent**: Switch between Code and Docs modes for more relevant answers.
 - **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
 
-## Version 0.3.5 — UX Fixes
+## Version 0.3.7 — Persistent Chat, Scoped Search & OpenSpec Insights
 
 - **Tab state preserved**: Switching tabs no longer resets search results, chat, or any other view
 - **Chat history persisted**: Conversations survive tab switches and app restarts via localStorage

@@ -28,4 +28,13 @@ describe('SearchWindow component contract', () => {
         const viewButtonRegex = /onClick\s*=\s*\{[^}]*setExpandedResults[^}]*\}/s;
         expect(viewButtonRegex.test(text)).toBe(true);
     });
+
+    test('uses the shared chat composer request and has no duplicate search input', () => {
+        const text = fs.readFileSync(componentPath, 'utf8');
+
+        expect(text).toContain('searchRequest');
+        expect(text).toContain('onSearchingChange');
+        expect(text).not.toContain('<form onSubmit={handleSearch}');
+        expect(text).not.toContain('Search for functions, variables, or patterns...');
+    });
 });

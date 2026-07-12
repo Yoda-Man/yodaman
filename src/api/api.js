@@ -99,8 +99,8 @@ export const api = {
         return request(`${API_BASE}/plugins`);
     },
 
-    async openPlugin(name, project) {
-        return request(`${API_BASE}/plugins/${encodeURIComponent(name)}/open`, jsonOptions('POST', { project }));
+    async openPlugin(name, project, diagnostics = {}) {
+        return request(`${API_BASE}/plugins/${encodeURIComponent(name)}/open`, jsonOptions('POST', { project, diagnostics }));
     },
 
     async uploadPlugin(file) {
@@ -305,7 +305,7 @@ export const api = {
         return request(url);
     },
 
-    async stardustRun({ action, changeId, title, description, specPath, projectRoot, dryRun, strict }) {
+    async stardustRun({ action, changeId, title, description, specPath, projectRoot, dryRun, strict, specs, tools }) {
         return request(`${API_BASE}/stardust/run`, jsonOptions('POST', {
             action,
             changeId,
@@ -315,6 +315,8 @@ export const api = {
             projectRoot,
             dryRun,
             strict,
+            specs,
+            tools,
         }));
     },
 };

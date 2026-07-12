@@ -2,7 +2,14 @@
 
 All notable changes to the YodaMan project are documented here.
 
-## [0.3.5] - 2026-07-05
+## [0.3.7] - 2026-07-11
+
+- Consolidated project-scoped semantic search into the Chat workspace.
+- Preserved and normalized chat history across tab changes and app restarts.
+- Added OpenSpec readiness and command-outcome charts plus separate change/spec listing in Stardust.
+- Fixed Stardust forwarding for OpenSpec `specs` and `tools` options.
+
+## [0.3.6] - 2026-07-05
 
 ### 🧩 UX Fixes & State Persistence
 - **Tab state preserved**: All tabs now stay mounted when switching — chat, search, graph results, dashboard, stardust, and plugins no longer reset.
