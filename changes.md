@@ -2,12 +2,13 @@
 
 All notable changes to the YodaMan project are documented here.
 
-## [0.3.7] - 2026-07-11
+## [0.3.7] - 2026-07-12
 
 - Consolidated project-scoped semantic search into the Chat workspace.
-- Preserved and normalized chat history across tab changes and app restarts.
 - Added OpenSpec readiness and command-outcome charts plus separate change/spec listing in Stardust.
 - Fixed Stardust forwarding for OpenSpec `specs` and `tools` options.
+- Introduced VRViewer and UIPanel modules for 3D visualization and interactive UI controls.
+- Enhanced SearchWindow with shared search request handling and improved error recovery.
 
 ## [0.3.6] - 2026-07-05
 

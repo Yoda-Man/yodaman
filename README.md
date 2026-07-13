@@ -16,13 +16,6 @@ YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It con
 - **Choose query intent**: Switch between Code and Docs modes for more relevant answers.
 - **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
 
-## Version 0.3.7 — Persistent Chat, Scoped Search & OpenSpec Insights
-
-- **Tab state preserved**: Switching tabs no longer resets search results, chat, or any other view
-- **Chat history persisted**: Conversations survive tab switches and app restarts via localStorage
-- **Search view fixed**: Expand/collapse toggle shows full file path and line details
-- **Health dashboard**: OpenSpec now visible in system health diagnostics
-
 ## Core Pillars
 
 ### Local-first intelligence
