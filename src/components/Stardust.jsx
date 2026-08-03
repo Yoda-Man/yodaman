@@ -645,6 +645,7 @@ function CommandsTab({
                     <div className="flex flex-wrap items-center gap-2">
                         <ActionButton icon={FileCheck} label="Validate" color="cyan" loading={running && currentAction === 'validate'} disabled={running || !changeId} onClick={() => runAction('validate')} />
                         <ActionButton icon={Archive} label="Archive" color="amber" loading={running && currentAction === 'archive'} disabled={running || !changeId} onClick={() => runAction('archive')} />
+                        <ActionButton icon={Play} label="Propose" color="emerald" loading={running && currentAction === 'propose'} disabled={running || !changeId} onClick={() => runAction('propose')} />
                         <ActionButton icon={RefreshCw} label="List Changes" color="indigo" loading={running && currentAction === 'list'} disabled={running} onClick={() => runAction('list')} />
                         <ActionButton icon={FileCheck} label="List Specs" color="emerald" loading={running && currentAction === 'list'} disabled={running} onClick={() => runAction('list', { specs: true })} />
                     </div>

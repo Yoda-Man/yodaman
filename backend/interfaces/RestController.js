@@ -229,6 +229,48 @@ function isLocalRequest(req) {
     return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 }
 
+/**
+ * Create an OpenSpec change proposal.
+ * Mirrors ToolBox.specPropose so the UI and agent use the same logic.
+ */
+async function proposeChange(projectRoot, changeName, description) {
+    const changeDir = path.join(projectRoot, 'openspec', 'changes', changeName);
+    if (!fs.existsSync(changeDir)) fs.mkdirSync(changeDir, { recursive: true });
+
+    const proposalPath = path.join(changeDir, 'proposal.md');
+    const designPath = path.join(changeDir, 'design.md');
+    const tasksPath = path.join(changeDir, 'tasks.md');
+
+    let created = [];
+    if (!fs.existsSync(proposalPath)) {
+        fs.writeFileSync(proposalPath, `# ${changeName}\n\n${description || 'Proposed change.'}\n`);
+        created.push('proposal.md');
+    }
+    if (!fs.existsSync(designPath)) {
+        fs.writeFileSync(designPath, `# Design: ${changeName}\n\n## Approach\n\n## Tradeoffs\n\n## Affected modules\n`);
+        created.push('design.md');
+    }
+    if (!fs.existsSync(tasksPath)) {
+        fs.writeFileSync(tasksPath, `# Tasks: ${changeName}\n\n- [ ] Implement the change\n- [ ] Add tests\n- [ ] Validate against specs\n`);
+        created.push('tasks.md');
+    }
+
+    const alreadyExisted = ['proposal.md', 'design.md', 'tasks.md'].filter(f => !created.includes(f));
+    const msg = created.length > 0
+        ? `Change "${changeName}" proposed. Created: ${created.join(', ')}.`
+        : `Change "${changeName}" already exists (${alreadyExisted.join(', ')}). Use validate to check it.`;
+
+    return {
+        success: true,
+        stdout: msg,
+        stderr: alreadyExisted.length > 0 ? `Files already exist: ${alreadyExisted.join(', ')}` : '',
+        code: 0,
+        changeName,
+        created,
+        alreadyExisted,
+    };
+}
+
 function isPairingRequiredByDefault() {
     const settings = require('../infrastructure/SettingsProvider');
     return settings.get('requirePairingToken');
@@ -1837,6 +1879,12 @@ router.post('/stardust/run', async (req, res) => {
                 break;
             case 'install':
                 result = await stardustWrapper.install();
+                break;
+            case 'propose':
+                if (!changeId) {
+                    return res.status(400).json({ error: 'propose requires changeId' });
+                }
+                result = await proposeChange(opts.cwd, changeId, description || '');
                 break;
             default:
                 return res.status(400).json({ error: `Unknown stardust action: ${action}` });
