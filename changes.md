@@ -26,6 +26,13 @@ Three new Stardust tabs that make the "Context Expert + Graphify + OpenSpec comp
 
 - **CodeTrooper test no longer hangs**: default `excludeDirs` now skips `release`, `graphify-out`, `coverage`, and `downloads`. Test uses a 4-file fixture instead of scanning the entire 6.2GB project tree. Full suite runs in 1.5s instead of 4m39s.
 
+### 🤖 Agent-Driven OpenSpec
+- **Agent tools**: `specPropose`, `specValidate`, `specArchive` registered in ToolBox.js. The Yoda-Agent can now propose, validate, and archive OpenSpec changes autonomously, following the full Propose → Validate → Apply → Archive workflow described in the MCP prompt.
+- **Agent prompt**: AgentReasoningEngine and DefaultCodingSkill updated with OpenSpec workflow instructions — plan before coding, use `specPropose` for significant features.
+- **Stardust Commands tab**: Propose button alongside Validate, Archive, List Changes, and List Specs. Creates `openspec/changes/<name>/` with proposal.md, design.md, and tasks.md backed by the new `propose` action in `POST /api/stardust/run`.
+- **PipelineStrip**: persistent cross-tab pipeline bar showing Context Expert → Graphify → OpenSpec readiness state on every Stardust sub-tab.
+- **7-tab Stardust**: Board, Drift, Compose, Trust, Trace, Diagnostics, Commands.
+
 ### 📚 Documentation Rewrite
 - **`docs/api/api.md`**: complete rewrite — all 66 routes documented (was ~33) across 10 new sections.
 - **`docs/architecture/architecture.md`**: complete rewrite — added backend/services, backend/stardust, all 20 infrastructure modules, 9 v0.3.8 services, accurate component list.

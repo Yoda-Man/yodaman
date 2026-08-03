@@ -42,6 +42,15 @@ Three new tabs that make the "Context Expert + Graphify + OpenSpec compose" clai
 - **Dockerfile**: added missing `@fission-ai/openspec`.
 - **`user_manual.md`**: added prerequisites, `npm run dev`, new Stardust 7-tab layout.
 
+### Added — Agent-driven OpenSpec workflow
+
+- **Agent tools**: `specPropose`, `specValidate`, `specArchive` added to ToolBox.js (tools #12-14). The agent can now create OpenSpec change proposals, validate them against specs, and archive completed changes — following the full Propose → Validate → Apply → Archive workflow.
+- **Agent system prompt**: updated in AgentReasoningEngine.js to instruct the agent to plan before coding and use specPropose for significant features. DefaultCodingSkill.js includes OpenSpec workflow guidance with specDrift pre-check.
+- **Stardust Commands tab**: Propose button alongside Validate, Archive, List Changes, and List Specs. Creates `openspec/changes/<name>/` with proposal.md, design.md, and tasks.md.
+- **PipelineStrip**: persistent cross-tab bar showing Context Expert → Graphify → OpenSpec pipeline state with live readiness dots.
+- **Stardust Diagnostics tab**: in-app OpenSpec version check, project status, and one-click install/init.
+- **7-tab Stardust layout**: Board, Drift, Compose, Trust, Trace, Diagnostics, Commands.
+
 ### Added — earlier in 0.3.8 cycle
 
 ## [0.3.8] - 2026-08-01
