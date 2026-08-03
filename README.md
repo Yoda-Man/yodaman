@@ -1,6 +1,6 @@
 # YodaMan
 
-YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime.
+YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime — with a real-time Stardust OpenSpec dashboard, cross-tool composition views, and agent-driven spec workflows.
 
 ![Version](https://img.shields.io/badge/Version-0.3.9-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -12,7 +12,10 @@ YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It con
 - **See relationships, not fragments**: Graphify builds mandatory knowledge graphs that connect code, docs, diagrams, and architectural concepts.
 - **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and approval gates for file changes.
 - **Work where you already are**: Web UI, desktop app, CLI, VS Code extension, and mobile companion all talk to the same runtime.
-- **Extend the assistant**: Add JavaScript plugins for custom tools. Three pre-installed plugins (CodeTrooper, Droid-Sweep, Grand Inquisitor) plus community plugins like Lightsaber.
+- **Extend the assistant**: Add JavaScript plugins for custom tools. Ships with 7 plugins: CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, Graphify, Holocron VR, and the plugin registry.
+- **Drive specs with the agent**: The agent can propose, validate, and archive OpenSpec changes through `specPropose`, `specValidate`, and `specArchive` tools — following a structured Propose → Apply → Archive workflow.
+- **See every tool's view of a file**: The Compose tab cross-references any file across OpenSpec (specs), Graphify (structure), and Context Expert (relevance) in three columns.
+- **Understand search rankings**: The Trace tab shows why each result ranked where it did — semantic × 0.6 + proximity × 0.25 + centrality × 0.15 per result.
 - **Choose query intent**: Switch between Code and Docs modes for more relevant answers.
 - **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
 
@@ -98,10 +101,11 @@ The same dependency checks run at startup, appear in the Dashboard health panel 
 ```
 yodaman/
 ├── backend/                    # Express runtime
-│   ├── core/                   # Agent engine, queue service
-│   ├── infrastructure/         # ToolBox, Graphify, ContextEngine, Logger
-│   ├── interfaces/             # REST controller (all API routes)
+│   ├── core/                   # Agent engine, queue service, coding skill
+│   ├── infrastructure/         # ToolBox, Graphify, ContextEngine, Logger, GraphFacts, ImpactAnalyzer, etc.
+│   ├── interfaces/             # REST controller (all API routes, ~2300 lines)
 │   ├── services/               # Git, search, chat, file upload
+│   ├── stardust/               # SpecDrift, StardustWrapper (CLI), StardustLive (WebSocket)
 │   └── utils/                  # Doc preprocessing, query classification
 ├── bin/                        # CLI entrypoint (yodaman)
 ├── dist/                       # Built frontend
@@ -112,6 +116,9 @@ yodaman/
 ├── scripts/                    # Build and release scripts
 ├── shared/                     # Shared protocol/types for external clients
 ├── src/                        # React UI source
+│   ├── components/             # 30 UI components (Stardust, AgentChat, GraphStudio, etc.)
+│   ├── hooks/                  # useHealthCheck, useStardustLive, useStardustPipeline
+│   └── api/                    # Frontend HTTP client
 ├── tests/                      # Jest test suites
 ├── website/                    # Public website + downloads
 ├── server.js                   # Express entry point
@@ -125,11 +132,25 @@ Copy `config.example.json` to `config.json` and add your workspace paths:
 
 ```json
 {
-  "watchedDirectories": ["/path/to/your/project"]
+  "watchedDirectories": ["/path/to/your/project"],
+  "removedDirectories": []
 }
 ```
 
 All developer settings (plugin uploads, unrestricted plugins, agent commands) are managed through Settings → Developer Settings in the UI.
+
+## Stardust Dashboard
+
+The **Stardust** tab is a real-time OpenSpec dashboard with 7 views:
+- **Board** — live change cards with task progress, spec diff, validate/archive workflow
+- **Drift** — architecture drift detection (specs vs knowledge graph)
+- **Compose** — file-centric cross-reference across OpenSpec, Graphify, and Context Expert
+- **Trust** — unified health dashboard with per-tool status and WorkspaceReadiness verdict
+- **Trace** — search ranking transparency with per-result scoring breakdown
+- **Diagnostics** — OpenSpec install check, version, project init
+- **Commands** — Propose, Validate, Archive, List Changes, List Specs with console output
+
+The agent has four OpenSpec tools: `specPropose`, `specValidate`, `specArchive`, and `specDrift`.
 
 ## Clients
 
