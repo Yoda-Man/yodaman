@@ -2,7 +2,7 @@
 
 This is a static product website for the YodaMan ecosystem.
 
-The site tracks the `0.3.8` release and highlights the shared runtime, mandatory Ollama-only Graphify graph layer, desktop, VS Code, and mobile publishing paths.
+The site tracks the `0.3.9` release and highlights the shared runtime, mandatory Ollama-only Graphify graph layer, desktop, VS Code, and mobile publishing paths.
 
 Open locally:
 
