@@ -1,3 +1,7 @@
+## 0.3.9 - 2026-08-03
+
+- Synchronized with core v0.3.9
+
 # Changelog
 
 ## 0.3.8

@@ -23,6 +23,7 @@ const graphFacts = require('../infrastructure/GraphFacts');
 const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
 const specDrift = require('../stardust/SpecDrift');
 const stardustWrapper = require('../stardust/StardustWrapper');
+const stardustLive = require('../stardust/StardustLive');
 
 const multer = require('multer');
 
@@ -1850,6 +1851,127 @@ router.post('/stardust/run', async (req, res) => {
             ...(action === 'diagnose' && !result._debug ? { diagnostics: result } : {}),
         });
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Stardust Live — real-time dashboard REST fallbacks
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/stardust/board — change-board snapshot.
+ * Query: ?projectRoot=<absolute path>
+ * Returns the same typed Snapshot the WebSocket pushes on connect.
+ */
+router.get('/stardust/board', (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const snapshot = stardustLive.getSnapshot(projectRoot);
+        res.json(snapshot);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * GET /api/stardust/deltas/:name — operation-grouped spec deltas for a change.
+ * Query: ?projectRoot=<absolute path>
+ */
+router.get('/stardust/deltas/:name', (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const deltas = stardustLive.getDeltas(projectRoot, req.params.name);
+        res.json({ change: req.params.name, deltas });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * PUT /api/stardust/validation/:name — store last validation result for a change.
+ * Body: { status: 'ok' | 'warn' | 'error' }
+ */
+router.put('/stardust/validation/:name', (req, res) => {
+    try {
+        const { status } = req.body;
+        if (!['ok', 'warn', 'error'].includes(status)) {
+            return res.status(400).json({ error: 'status must be ok, warn, or error' });
+        }
+        stardustLive.setValidationStatus(req.params.name, status);
+        res.json({ ok: true, change: req.params.name, validation: status });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Stardust Compose — cross-reference view combining all three tools
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/stardust/compose — file-centric cross-reference.
+ * Query: ?projectRoot=<path>&file=<repo-relative path>
+ *
+ * Aggregates data from all three mandatory tools for a single file:
+ *   - OpenSpec: which specs mention this file (intent)
+ *   - Graphify: dependents, centrality, cluster, blast radius (structure)
+ *   - Context Expert: semantic search rank snippet (context)
+ */
+router.get('/stardust/compose', (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const targetFile = req.query.file;
+
+        if (!targetFile) {
+            return res.status(400).json({ error: 'file query parameter is required' });
+        }
+
+        const result = {
+            file: targetFile,
+            available: false,
+            openspec: { mentionedIn: [], specCount: 0 },
+            graphify: { dependents: 0, centrality: 0, blastRadius: 0, nearestDependents: [], coveredByTests: false, testFiles: [] },
+            contextExpert: { note: 'Use /api/search with the file name for semantic context' },
+        };
+
+        // ── OpenSpec: which specs mention this file ──
+        try {
+            const specs = specDrift.readSpecs(projectRoot);
+            result.openspec.specCount = specs.length;
+            for (const spec of specs) {
+                const refs = specDrift.extractReferences(spec.text);
+                if (refs.some(r => targetFile.includes(r) || r.includes(targetFile))) {
+                    result.openspec.mentionedIn.push({ spec: spec.id, file: spec.file });
+                }
+            }
+        } catch (_) { /* OpenSpec unavailable */ }
+
+        // ── Graphify: structural metrics ──
+        try {
+            const graph = graphFacts.load(projectRoot);
+            if (graph) {
+                const relFile = path.relative(projectRoot, targetFile).split(path.sep).join('/');
+                const dependents = graph.dependedOnBy.get(relFile);
+                result.graphify.dependents = dependents ? dependents.size : 0;
+                result.graphify.centrality = graph.degree?.get(relFile) || 0;
+
+                // Blast radius (reuse ImpactAnalyzer)
+                try {
+                    const impact = impactAnalyzer.analyzeFile(projectRoot, targetFile, { depth: 2 });
+                    result.graphify.blastRadius = impact?.impactedCount || 0;
+                    result.graphify.nearestDependents = (impact?.dependents || []).slice(0, 5).map(d => d.file);
+                    result.graphify.coveredByTests = impact?.hasTestCoverage || false;
+                    result.graphify.testFiles = impact?.testFiles || [];
+                } catch (_) { /* impact analysis not applicable */ }
+
+                result.available = true;
+            }
+        } catch (_) { /* Graphify unavailable */ }
+
+        res.json(result);
+    } catch (err) {
+        logger.error('stardust_compose_failed', err, { requestId: req.id });
         res.status(500).json({ error: err.message });
     }
 });

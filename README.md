@@ -2,7 +2,7 @@
 
 YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime.
 
-![Version](https://img.shields.io/badge/Version-0.3.8-gold)
+![Version](https://img.shields.io/badge/Version-0.3.9-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -51,10 +51,8 @@ Built-in tools cover file reads, controlled writes, exact patching, command exec
 
 ```bash
 git clone https://github.com/Yoda-Man/yodaman.git
-cd yodaman
-npm install
+cd yodaman/core
 sh setup.sh
-npm start
 ```
 
 The runtime listens on `http://localhost:3090`. For the desktop app:

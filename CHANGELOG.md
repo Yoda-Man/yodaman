@@ -2,6 +2,48 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.3.9] - 2026-08-03
+
+### Added — Stardust real-time dashboard
+
+The Stardust tab is now a full real-time OpenSpec dashboard, borrowing and adapting patterns from opsx-ui (RayIci/opsx-ui, MIT):
+
+- **Change Board**: card-based navigation with task progress bars, validation health icons, and "updated X ago" timestamps. Each change card is clickable — selecting one opens a side-by-side spec diff viewer.
+- **Spec Diff**: operation-grouped deltas (ADDED/MODIFIED/REMOVED/RENAMED) with colour-coded badges, left-border accents, and a Proposed / Side-by-side view toggle.
+- **Activity Feed**: slide-over drawer showing live file events from `openspec/` — created, modified, removed — with icons and timestamps. Pushed over WebSocket in real time.
+- **Architecture Drift Panel**: first-class UI for SpecDrift — stale spec references and undocumented modules shown with severity colouring and dependency counts.
+- **WebSocket + chokidar backend**: `StardustLive` watches the `openspec/` directory, pushes snapshots and activity events to all connected clients, and provides REST fallbacks (`GET /api/stardust/board`, `GET /api/stardust/deltas/:name`, `PUT /api/stardust/validation/:name`).
+- **Live store**: `useStardustLive` hook using React's `useSyncExternalStore` for optimal batching with auto-reconnect and REST seeding.
+
+### Added — Three-tool composition GUI
+
+Three new tabs that make the "Context Expert + Graphify + OpenSpec compose" claim tangible:
+
+- **Compose tab**: file-centric cross-reference. Enter any repo path to see what OpenSpec specs describe it, its Graphify structural position (dependents, centrality, blast radius, test coverage), and how Context Expert ranks it. Backed by `GET /api/stardust/compose`.
+- **Trust tab**: unified health dashboard. Per-tool status cards (Context Expert index, Graphify graph, OpenSpec CLI), overall WorkspaceReadiness verdict, and degraded/pending detail panels. Pulls from `/api/health` and `/api/readiness`.
+- **SearchTrace tab**: transparent ranking explanation. Every search result shows its semantic × 0.6 + proximity × 0.25 + centrality × 0.15 breakdown with colour-coded bars.
+
+### Fixed
+
+- **Plugin `minYodaManVersion` corrected**: `core/plugins/plugin.json`, `Holocron VR/plugin.json`, `Holocron VR/dist/plugin.json`, and `lightsaber/plugin.json` all had `minYodaManVersion: "1.0.0"` — a fictional version that would prevent plugin loading. Corrected to `0.3.8` (core/Holocron VR) and `0.3.0` (lightsaber).
+- **Lightsaber plugin version**: `plugin.json` said `1.0.0` but `package.json` is `0.3.0` — corrected.
+- **CodeTrooper test hang**: default `excludeDirs` now includes `release`, `graphify-out`, `coverage`, and `downloads`. Test uses a 4-file fixture instead of scanning the entire 6.2GB project tree. Full suite runs in 1.5s instead of hanging for 4m39s.
+- **Stale `yodaman-0.2.2.tgz`** deleted and gitignored.
+- **Holocron VR release zips** gitignored (`*.zip`).
+
+### Changed — Documentation
+
+- **`docs/api/api.md`**: complete rewrite — all 66 routes documented (was ~33). Added 10 new sections: Git API, Plugins API, Stardust Live, Health & Readiness, Sessions, Settings, Upload, and more.
+- **`docs/architecture/architecture.md`**: complete rewrite — added backend/services, backend/stardust, backend/utils, all 20 infrastructure modules, 9 v0.3.8 services, accurate frontend component list, StardustLive and new Stardust components.
+- **Version references**: `Management-Overview.md` bumped from 0.3.0 to 0.3.8, `AGENT.md` stale claim removed, `publishing.md` and `PUBLISHING.md` vsix versions updated, `setup.md` bumped, `runbooks.md` expanded with `yodaman doctor` and health/readiness endpoints.
+- **Lightsaber README**: test-coverage action docs updated to reflect v0.3.8 graph-based behaviour.
+- **Holocron VR docs**: version numbers corrected from fictional 1.0.0 to actual 0.5.1.
+- **core/README.md**: fixed monorepo path, removed duplicate npm install.
+- **Dockerfile**: added missing `@fission-ai/openspec`.
+- **`user_manual.md`**: added prerequisites, `npm run dev`, new Stardust 7-tab layout.
+
+### Added — earlier in 0.3.8 cycle
+
 ## [0.3.8] - 2026-08-01
 
 ### Added — architecture drift detection
