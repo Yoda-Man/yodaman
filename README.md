@@ -51,10 +51,8 @@ Built-in tools cover file reads, controlled writes, exact patching, command exec
 
 ```bash
 git clone https://github.com/Yoda-Man/yodaman.git
-cd yodaman
-npm install
+cd yodaman/core
 sh setup.sh
-npm start
 ```
 
 The runtime listens on `http://localhost:3090`. For the desktop app:

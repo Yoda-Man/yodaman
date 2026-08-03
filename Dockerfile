@@ -22,7 +22,7 @@ COPY public ./public
 COPY plugins ./plugins
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-pip \
-    && npm install -g @contextexpert/cli \
+    && npm install -g @contextexpert/cli @fission-ai/openspec@latest \
     && python3 -m pip install --break-system-packages graphifyy \
     && rm -rf /var/lib/apt/lists/*
 COPY server.js start.js package.json config.example.json ./
