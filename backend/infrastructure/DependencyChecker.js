@@ -220,11 +220,11 @@ const SERVICES = {
         executable: 'ctx',
         versionArgs: ['--version'],
         runningCheck: null,
-        installUrl: 'npm install -g @context-expert/cli',
+        installUrl: 'npm install -g @contextexpert/cli',
         installHint: {
-            darwin: 'npm install -g @context-expert/cli',
-            linux: 'npm install -g @context-expert/cli',
-            win32: 'npm install -g @context-expert/cli',
+            darwin: 'npm install -g @contextexpert/cli',
+            linux: 'npm install -g @contextexpert/cli',
+            win32: 'npm install -g @contextexpert/cli',
         },
     },
     graphify: {

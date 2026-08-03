@@ -18,6 +18,10 @@ const pairingService = require('../infrastructure/PairingService');
 const logger = require('../infrastructure/Logger');
 const graphifyService = require('../infrastructure/GraphifyService');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
+const workspaceReadiness = require('../infrastructure/WorkspaceReadiness');
+const graphFacts = require('../infrastructure/GraphFacts');
+const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
+const specDrift = require('../stardust/SpecDrift');
 const stardustWrapper = require('../stardust/StardustWrapper');
 
 const multer = require('multer');
@@ -598,7 +602,7 @@ router.post('/ask', async (req, res) => {
         try {
             const timeoutMs = Number(process.env.YODAMAN_CTX_ASK_TIMEOUT_MS || 12000);
             const { output } = await contextEngine.execute(['ask', '--', augmentedQuestion], { timeoutMs });
-            answer = output.trim();
+            answer = contextEngine.stripCliNoise(output);
         } catch (ctxErr) {
             logger.warn('ask_ctx_fallback_started', {
                 requestId: req.id,
@@ -1095,7 +1099,7 @@ router.get('/status', async (req, res) => {
             llm: { model: 'Not Available', provider: 'none' },
             ok: false,
             error: err.message,
-            hint: 'Install ctx: npm install -g @context-expert/cli'
+            hint: 'Install ctx: npm install -g @contextexpert/cli'
         });
     }
 });
@@ -1495,10 +1499,15 @@ router.post('/ctx/config', async (req, res) => {
 //  HEALTH & SELF-HEALING ENDPOINTS
 // ─────────────────────────────────────────────────────────────────────────
 
+// Last reported "<status>:<degraded keys>" signature, used to log health
+// transitions once instead of on every poll.
+let lastHealthSignature = null;
+
 /**
  * GET /api/health — Full health report.
  *
- * Returns status of every dependency the runtime needs. The Electron
+ * Returns status of every dependency the runtime needs, plus `degraded` and
+ * `pending` arrays naming the checks that need attention. The Electron
  * recovery page polls this on load to render the diagnostic dashboard.
  */
 router.get('/health', async (req, res) => {
@@ -1529,29 +1538,62 @@ router.get('/health', async (req, res) => {
         return { ...c, ok, version: c.version || null };
     };
 
+    const reportedChecks = {
+        node: {
+            ok: true,
+            version: process.version,
+            message: `${process.version} on ${process.platform} ${process.arch}`
+        },
+        runtime: {
+            ok: true,
+            version: null,
+            message: `PID ${process.pid}, listening on port ${req.app?.get('port') || 3090}`
+        },
+        graphify: enrich(checks.graphify),
+        ollama: enrich(checks.ollama),
+        ctx: enrich(checks.ctx),
+        openspec: enrich(checks.openspec),
+        config: enrich(checks.config)
+    };
+
+    // Report the state we actually observed. Previously this always said
+    // "degraded" once startup finished, which hid genuine failures behind a
+    // permanent warning and gave the diagnostics page nothing to act on.
+    const degraded = Object.entries(reportedChecks)
+        .filter(([, check]) => check && check.ok === false)
+        .map(([name]) => name);
+    const pending = Object.entries(reportedChecks)
+        .filter(([, check]) => check && check.ok === null)
+        .map(([name]) => name);
+
+    const status = !checks.started
+        ? 'starting'
+        : degraded.length > 0 ? 'degraded' : 'ok';
+
+    // The diagnostics page polls this endpoint on a timer, so only log when the
+    // picture actually changes — otherwise the runtime log fills with repeats.
+    const signature = `${status}:${degraded.join(',')}`;
+    if (signature !== lastHealthSignature) {
+        lastHealthSignature = signature;
+        if (status === 'degraded') {
+            logger.warn('health_report_degraded', { degraded, pending });
+        } else {
+            logger.info('health_report_changed', { status, pending });
+        }
+    }
+
     res.json({
-        status: checks.started ? 'degraded' : 'starting',
+        status,
         started: checks.started,
         uptimeSeconds: Math.round(process.uptime()),
-        checks: {
-            node: {
-                ok: true,
-                version: process.version,
-                message: `${process.version} on ${process.platform} ${process.arch}`
-            },
-            runtime: {
-                ok: true,
-                version: null,
-                message: `PID ${process.pid}, listening on port ${req.app?.get('port') || 3090}`
-            },
-            graphify: enrich(checks.graphify),
-            ollama: enrich(checks.ollama),
-            ctx: enrich(checks.ctx),
-            openspec: enrich(checks.openspec),
-            config: enrich(checks.config)
-        },
+        checks: reportedChecks,
+        degraded,
+        pending,
         services: { ollama: ollamaRunning },
         projects: { total: checks.projects, indexed: checks.indexed, synced: checks.syncComplete },
+        // One trust verdict per workspace, so a client never has to reconcile
+        // index staleness against graph build state itself.
+        readiness: workspaceReadiness.forWorkspaces(config.watchedDirectories || []),
         memory: process.memoryUsage(),
         platform: { hostname: os.hostname(), release: os.release(), arch: os.arch() },
         tasks: {
@@ -1560,6 +1602,27 @@ router.get('/health', async (req, res) => {
         },
         plugins: toolBox.getPolicy().plugins
     });
+});
+
+/**
+ * GET /api/readiness — Can this workspace's answers be trusted right now?
+ *
+ * Query: ?projectId=<absolute path>  (omit for every watched workspace)
+ *
+ * Collapses Context Expert index state and the Graphify build state into one
+ * verdict, so a client does not have to reconcile them itself.
+ */
+router.get('/readiness', (req, res) => {
+    try {
+        const projectId = req.query.projectId;
+        if (projectId) {
+            return res.json(workspaceReadiness.forWorkspace(projectId));
+        }
+        return res.json(workspaceReadiness.forWorkspaces(config.watchedDirectories || []));
+    } catch (err) {
+        logger.error('readiness_check_failed', err, { requestId: req.id });
+        return jsonError(res, 500, err.message, 'readiness_failed');
+    }
 });
 
 /**
@@ -1600,9 +1663,8 @@ router.post('/health/install', (req, res) => {
         }
 
         case 'ctx': {
-            const installScript = process.platform === 'darwin'
-                ? 'npm install -g @context-expert/cli'
-                : 'npm install -g @context-expert/cli';
+            // Same command on every platform — see DependencyChecker.SERVICES.ctx.
+            const installScript = 'npm install -g @contextexpert/cli';
 
             logger.info('health_install_started', { component, command: installScript });
 
@@ -1611,7 +1673,7 @@ router.post('/health/install', (req, res) => {
                     res.json({
                         ok: false,
                         component,
-                        message: `Installation failed: ${err.message}. Install manually: npm install -g @context-expert/cli`,
+                        message: `Installation failed: ${err.message}. Install manually: npm install -g @contextexpert/cli`,
                         stdout: stdout || ''
                     });
                     return;
@@ -1649,6 +1711,81 @@ router.post('/health/install', (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────
 //  Stardust — OpenSpec CLI wrapper
 // ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/stardust/drift — Does the code still match the specs?
+ *
+ * Query: ?projectRoot=<absolute path>
+ *
+ * OpenSpec holds intended architecture; Graphify holds actual. This diffs them:
+ * specs citing files that no longer exist, and load-bearing modules no spec
+ * describes. Requires both an initialized OpenSpec and a built graph, and says
+ * which is missing rather than failing.
+ */
+router.get('/stardust/drift', (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const report = specDrift.detectDrift(projectRoot, {
+            minDependents: Number(req.query.minDependents) || 2
+        });
+        return res.json({ ...report, summary: specDrift.formatDrift(report) });
+    } catch (err) {
+        logger.error('spec_drift_failed', err, { requestId: req.id });
+        return jsonError(res, 500, err.message, 'spec_drift_failed');
+    }
+});
+
+/**
+ * GET /api/stardust/context — Graph-grounded context for authoring a change.
+ *
+ * Query: ?projectRoot=<path>&files=a.js,b.js
+ *
+ * A spec written without the graph invents module names and under-counts
+ * impact. This supplies the real blast radius for each file the change touches,
+ * plus the architectural hubs, so a proposal cites modules that exist.
+ */
+router.get('/stardust/context', (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const files = String(req.query.files || '')
+            .split(',')
+            .map(file => file.trim())
+            .filter(Boolean)
+            .slice(0, 25);
+
+        const facts = graphFacts.load(projectRoot);
+        if (!facts) {
+            return res.json({
+                available: false,
+                reason: 'no knowledge graph has been built for this workspace yet',
+                hint: 'Run Sync Repository, then request context again.'
+            });
+        }
+
+        return res.json({
+            available: true,
+            projectRoot,
+            graph: { files: facts.files.size, nodes: facts.nodeCount, links: facts.linkCount },
+            // Named so a spec author can cite real modules instead of guessing.
+            architecturalHubs: graphFacts.centralFiles(projectRoot, { limit: 10, facts }),
+            targets: files.map(file => {
+                const impact = impactAnalyzer.analyzeFile(projectRoot, file);
+                return {
+                    file,
+                    inGraph: impact.available,
+                    impactedCount: impact.impactedCount ?? null,
+                    coveringTests: impact.coveringTests ?? [],
+                    risk: impact.risk ?? null,
+                    dependents: impact.topDependents ?? [],
+                    summary: impactAnalyzer.summarize(impact)
+                };
+            })
+        });
+    } catch (err) {
+        logger.error('stardust_context_failed', err, { requestId: req.id });
+        return jsonError(res, 500, err.message, 'stardust_context_failed');
+    }
+});
 
 router.get('/stardust/diagnose', async (req, res) => {
     try {

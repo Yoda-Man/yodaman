@@ -454,6 +454,7 @@ function diagnosticsPage({ title, message, status, logs = '' }) {
         <tr><td class="check-name"><span class="check-icon check-pending">⟳</span> Graphify</td><td class="check-pending">checking…</td><td></td></tr>
         <tr><td class="check-name"><span class="check-icon check-pending">⟳</span> Ollama</td><td class="check-pending">checking…</td><td class="check-action" id="action-ollama"></td></tr>
         <tr><td class="check-name"><span class="check-icon check-pending">⟳</span> Context Expert (ctx)</td><td class="check-pending">checking…</td><td class="check-action" id="action-ctx"></td></tr>
+        <tr><td class="check-name"><span class="check-icon check-pending">⟳</span> OpenSpec</td><td class="check-pending">checking…</td><td class="check-action" id="action-openspec"></td></tr>
         <tr><td class="check-name"><span class="check-icon check-pending">⟳</span> Config</td><td class="check-pending">checking…</td><td></td></tr>
         <tr><td class="check-name"><span class="check-icon check-pending">⟳</span> Runtime</td><td class="check-pending">checking…</td><td></td></tr>
       </tbody>
@@ -539,7 +540,9 @@ function diagnosticsPage({ title, message, status, logs = '' }) {
 
     function updateTable(checks, status) {
       const rows = document.querySelectorAll('#checks-body tr');
-      const checkKeys = ['node', 'graphify', 'ollama', 'ctx', 'config', 'runtime'];
+      // Must stay in the same order as the #checks-body rows above —
+      // updateTable pairs each key with the row at the same index.
+      const checkKeys = ['node', 'graphify', 'ollama', 'ctx', 'openspec', 'config', 'runtime'];
 
       // Runtime check: if runtime is started, it's OK
       if (checks && !checks.runtime) {
@@ -556,13 +559,16 @@ function diagnosticsPage({ title, message, status, logs = '' }) {
         // Status text
         cells[1].innerHTML = statusLabel(ok, ch.message);
 
-        // Action buttons (Ollama and ctx only)
+        // Action buttons — only for components /api/health/install can repair
         if (key === 'ollama' && ok === false) {
           const actionCell = document.getElementById('action-ollama');
           if (actionCell) { actionCell.innerHTML = ''; actionCell.appendChild(makeInstallBtn('ollama')); }
         } else if (key === 'ctx' && ok === false) {
           const actionCell = document.getElementById('action-ctx');
           if (actionCell) { actionCell.innerHTML = ''; actionCell.appendChild(makeInstallBtn('ctx', 'ctx CLI')); }
+        } else if (key === 'openspec' && ok === false) {
+          const actionCell = document.getElementById('action-openspec');
+          if (actionCell) { actionCell.innerHTML = ''; actionCell.appendChild(makeInstallBtn('openspec', 'OpenSpec')); }
         }
       });
 

@@ -88,6 +88,16 @@ else
     python3 -m pip install --user graphifyy || python3 -m pip install --user --break-system-packages graphifyy
 fi
 
+# 7. Check for OpenSpec (required by the Stardust spec-driven workflow)
+echo -ne "🔍 Checking OpenSpec... "
+if check_cmd openspec; then
+    echo -e "${GREEN}OK ($(openspec --version 2>/dev/null || echo installed))${NC}"
+else
+    echo -e "${YELLOW}Missing${NC}"
+    echo -e "📦 Installing @fission-ai/openspec globally..."
+    npm install -g @fission-ai/openspec@latest
+fi
+
 echo -e "${BLUE}------------------------------------------------${NC}"
 echo -e "🔍 Finalizing YodaMan Installation..."
 

@@ -26,7 +26,7 @@
         <header>
             <h1>YodaMan Manual</h1>
             <p class="lead">Local-first workspace intelligence with chat, search, mandatory Graphify knowledge graphs, supervised agent automation, plugins, desktop controls, VS Code commands, and mobile pairing.</p>
-            <p class="version">Version 0.3.4</p>
+            <p class="version">Version 0.3.8</p>
         </header>
 
         <h2>1. Setup</h2>
@@ -83,6 +83,7 @@ npm start</code></pre>
             <li><strong>Stardust</strong>: OpenSpec CLI wrapper for spec-driven development. Propose, validate, apply, and archive changes. Includes diagnostics, version checks, and one-click OpenSpec installation.</li>
             <li id="plugins"><strong>Plugins</strong>: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, and delete non-mandatory plugin files.</li>
             <li><strong>Graph doctor</strong>: Run <code>yodaman doctor --graph</code> to check active graphs, persisted freshness, orphaned nodes, and the most dependency-heavy file.</li>
+            <li><strong>Dependency doctor</strong>: Run <code>yodaman doctor</code> to check Ollama, Context Expert (<code>ctx</code>), Graphify, and OpenSpec. Each tool reports its version, resolved path, and reachability, and anything missing lists the install command for your platform. Add <code>--json</code> for machine-readable output; the command exits non-zero when a dependency is missing or unreachable.</li>
         </ul>
 
         <h2>4. Desktop app</h2>
@@ -116,6 +117,7 @@ npm start</code></pre>
 
         <h2>8. Troubleshooting</h2>
         <ul>
+            <li><strong>Not sure what is missing</strong>: Run <code>yodaman doctor</code> for a full dependency report with per-tool install commands.</li>
             <li><strong>Context Expert not found</strong>: Install <code>@contextexpert/cli</code> and confirm <code>ctx --version</code> works.</li>
             <li><strong>Graphify not found</strong>: Install <code>graphifyy</code>, confirm <code>graphify --help</code> works, or set <code>YODAMAN_GRAPHIFY_BIN</code>.</li>
             <li><strong>Graph health warnings</strong>: Run <code>yodaman doctor --graph</code>, then sync the affected workspace if orphaned nodes or missing graphs are reported.</li>
@@ -124,7 +126,7 @@ npm start</code></pre>
             <li><strong>Search results are stale</strong>: Reindex the selected workspace.</li>
             <li><strong>Mobile cannot connect</strong>: Use the desktop LAN IP, confirm firewall access to port <code>3090</code>, and generate a fresh pairing link.</li>
             <li><strong>Plugin blocked</strong>: Add explicit permissions or intentionally allow unrestricted plugins.</li>
-            <li><strong>OpenSpec not found</strong>: Install <code>@fission-ai/openspec@latest</code> and confirm <code>openspec --version</code> works, or click "Install Now" in the Stardust tab.</li>
+            <li><strong>OpenSpec not found</strong>: Install <code>@fission-ai/openspec@latest</code> and confirm <code>openspec --version</code> works, or click "Install Now" in the Stardust tab or the desktop startup diagnostics screen. <code>yodaman doctor</code> and the Dashboard health panel both report OpenSpec status.</li>
             <li><strong>Crash screen</strong>: Use Copy Error to capture the message and logs.</li>
         </ul>
 
@@ -137,7 +139,7 @@ npm run lint
 npm run package</code></pre>
 
         <h2>10. Stardust &mdash; OpenSpec Integration</h2>
-        <p>YodaMan 0.3.4 integrates OpenSpec through the <strong>Stardust</strong> tab. OpenSpec provides structured spec-driven development with a propose &rarr; validate &rarr; apply &rarr; archive workflow.</p>
+        <p>YodaMan 0.3.8 integrates OpenSpec through the <strong>Stardust</strong> tab. OpenSpec provides structured spec-driven development with a propose &rarr; validate &rarr; apply &rarr; archive workflow.</p>
         <h3>Setup</h3>
         <pre><code>npm install -g @fission-ai/openspec@latest</code></pre>
         <h3>Workflow</h3>

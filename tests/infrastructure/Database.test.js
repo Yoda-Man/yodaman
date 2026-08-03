@@ -1,8 +1,28 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+// Use a throwaway database: the suite used to write into the live yodaman.db,
+// polluting real task history and failing whenever the app held the file open.
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-db-test-'));
+process.env.YODAMAN_DB_PATH = path.join(tempDir, 'test.db');
+
 const TaskStore = require('../../backend/infrastructure/TaskStore');
 const AuditLog = require('../../backend/infrastructure/AuditLog');
-const { db, useSqlite } = require('../../backend/infrastructure/Database');
+const { db, useSqlite, dbPath } = require('../../backend/infrastructure/Database');
+
+afterAll(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+});
 
 describe('Database Infrastructure (SQLite)', () => {
+    it('never touches the real yodaman.db', () => {
+        // A regression here means the suite is writing into the user's live
+        // database again — the cause of both fake task rows and lock flakes.
+        expect(dbPath).toBe(process.env.YODAMAN_DB_PATH);
+        expect(dbPath).not.toMatch(/[/\\]yodaman\.db$/);
+    });
+
     it('should initialize and support SQLite when available', () => {
         expect(typeof useSqlite).toBe('boolean');
         if (useSqlite) {

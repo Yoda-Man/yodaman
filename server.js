@@ -94,54 +94,60 @@ async function initialize() {
     try {
         await graphifyService.assertAvailable();
         healthState.graphify = { ok: true, message: 'available' };
+        logger.info('startup_dependency_ok', { dependency: 'graphify' });
     } catch (err) {
         healthState.graphify = { ok: false, message: err.message };
         logger.error('startup_graphify_unavailable', err);
     }
 
-    // 2. Ollama — check via DependencyChecker (handles PATH gaps)
-    try {
-        const ollamaCheck = await dependencyChecker.check('ollama');
-        healthState.ollama = {
-            ok: ollamaCheck.found,
-            version: ollamaCheck.version || null,
-            message: ollamaCheck.found
-                ? `v${ollamaCheck.version} at ${ollamaCheck.path}${ollamaCheck.running ? ' (running)' : ' (not running)'}`
-                : ollamaCheck.error
-        };
-    } catch (err) {
-        healthState.ollama = { ok: false, message: `Ollama check failed: ${err.message}` };
+    // 2. CLI dependencies — checked via DependencyChecker, which handles the
+    //    Electron PATH gap. `includeRunning` is set for tools that expose a
+    //    health endpoint, so the message reports reachability too.
+    const CLI_DEPENDENCIES = [
+        { name: 'ollama', label: 'Ollama', includeRunning: true },
+        { name: 'ctx', label: 'ctx', includeRunning: false },
+        { name: 'openspec', label: 'openspec', includeRunning: false }
+    ];
+
+    for (const dep of CLI_DEPENDENCIES) {
+        try {
+            const result = await dependencyChecker.check(dep.name);
+            const version = result.version ? `v${result.version}` : 'unknown version';
+            const runningSuffix = dep.includeRunning
+                ? (result.running ? ' (running)' : ' (not running)')
+                : '';
+
+            healthState[dep.name] = {
+                ok: result.found,
+                version: result.version || null,
+                message: result.found
+                    ? `${version} at ${result.path}${runningSuffix}`
+                    : result.error
+            };
+
+            if (result.found) {
+                logger.info('startup_dependency_ok', {
+                    dependency: dep.name,
+                    version: result.version || null,
+                    path: result.path,
+                    running: dep.includeRunning ? result.running : null
+                });
+            } else {
+                // Missing dependencies degrade features but never stop startup —
+                // warn (not error) so the runtime log distinguishes the two.
+                logger.warn('startup_dependency_missing', {
+                    dependency: dep.name,
+                    reason: result.error,
+                    installHint: result.installHint || result.installUrl || null
+                });
+            }
+        } catch (err) {
+            healthState[dep.name] = { ok: false, message: `${dep.label} check failed: ${err.message}` };
+            logger.error('startup_dependency_check_failed', err, { dependency: dep.name });
+        }
     }
 
-    // 3. ctx CLI — check via DependencyChecker
-    try {
-        const ctxCheck = await dependencyChecker.check('ctx');
-        healthState.ctx = {
-            ok: ctxCheck.found,
-            version: ctxCheck.version || null,
-            message: ctxCheck.found
-                ? `v${ctxCheck.version} at ${ctxCheck.path}`
-                : ctxCheck.error
-        };
-    } catch (err) {
-        healthState.ctx = { ok: false, message: `ctx check failed: ${err.message}` };
-    }
-
-    // 4. OpenSpec CLI — check via DependencyChecker
-    try {
-        const openspecCheck = await dependencyChecker.check('openspec');
-        healthState.openspec = {
-            ok: openspecCheck.found,
-            version: openspecCheck.version || null,
-            message: openspecCheck.found
-                ? `v${openspecCheck.version} at ${openspecCheck.path}`
-                : openspecCheck.error
-        };
-    } catch (err) {
-        healthState.openspec = { ok: false, message: `openspec check failed: ${err.message}` };
-    }
-
-    // 5. Config file
+    // 3. Config file
     try {
         const cfg = fs.existsSync(CONFIG_PATH)
             ? JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
@@ -149,9 +155,10 @@ async function initialize() {
         healthState.config = { ok: true, message: `loaded (${cfg.watchedDirectories?.length || 0} dirs)` };
     } catch (err) {
         healthState.config = { ok: false, message: `config load failed: ${err.message}` };
+        logger.error('startup_config_load_failed', err, { configPath: CONFIG_PATH });
     }
 
-    // 5. Project sync (ctx index) — non-fatal
+    // 4. Project sync (ctx index) — non-fatal
     try {
         const cliData = await contextEngine.executeJson(['list']);
         const cliPaths = cliData.projects.map(p => p.path);
@@ -211,6 +218,22 @@ async function initialize() {
     }
 
     healthState.started = true;
+
+    // Single summary line so a support log shows the whole dependency picture
+    // without having to correlate the individual startup entries above.
+    const DEPENDENCY_KEYS = ['graphify', 'ollama', 'ctx', 'openspec', 'config'];
+    const degraded = DEPENDENCY_KEYS.filter(key => healthState[key] && healthState[key].ok !== true);
+
+    logger.info('startup_health_summary', {
+        healthy: degraded.length === 0,
+        degraded,
+        versions: DEPENDENCY_KEYS.reduce((acc, key) => {
+            acc[key] = (healthState[key] && healthState[key].version) || null;
+            return acc;
+        }, {}),
+        projects: healthState.projects,
+        indexed: healthState.indexed
+    });
 }
 
 app.listen(PORT, async () => {

@@ -14,6 +14,10 @@ task-history.json
 audit-log.jsonl
 task-history.jsonl
 
+# Local user data — chat history and the runtime database must never be committed
+sessions.json
+yodaman.db
+
 # Desktop clients
 electron/dist/
 electron/out/

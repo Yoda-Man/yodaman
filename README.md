@@ -2,7 +2,7 @@
 
 YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime.
 
-![Version](https://img.shields.io/badge/Version-0.3.7-gold)
+![Version](https://img.shields.io/badge/Version-0.3.8-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -62,6 +62,22 @@ The runtime listens on `http://localhost:3090`. For the desktop app:
 ```bash
 npm run desktop
 ```
+
+## Health Checks
+
+Verify every required dependency — Ollama, Context Expert (`ctx`), Graphify, and OpenSpec — before starting:
+
+```bash
+yodaman doctor
+```
+
+Each tool reports its version, resolved path, and reachability, and anything missing lists the install command for your platform. The command exits non-zero when a dependency is missing or unreachable, so it can gate a script or CI step; add `--json` for machine-readable output. To check knowledge graph freshness instead:
+
+```bash
+yodaman doctor --graph
+```
+
+The same dependency checks run at startup, appear in the Dashboard health panel and `GET /api/health`, and appear on the desktop startup diagnostics screen where missing components offer a one-click install.
 
 ## Key Technologies
 

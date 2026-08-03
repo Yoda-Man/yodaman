@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, File, Filter, MessageSquare, Mic, Search, Send, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Copy, File, Filter, MessageSquare, Mic, Search, Send, Square, Terminal, Trash2, X } from 'lucide-react'
 import { api } from '../api/api'
 import { VoiceAgentBridge, readVoiceAgentSettings, speakAgentResponse, writeVoiceAgentSettings } from '../../frontend/voiceAgentBridge.js'
 import FileUploader from '../../frontend/FileUploader.jsx'
@@ -38,9 +38,16 @@ function parseStoredJson(key, fallback) {
   }
 }
 
+let messageCounter = 0
+function nextMessageId() {
+  messageCounter += 1
+  return `m${Date.now().toString(36)}-${messageCounter}`
+}
+
 function normalizeMessages(items) {
   return (Array.isArray(items) ? items : []).map(item => ({
     ...item,
+    id: item.id || nextMessageId(),
     role: normalizeRole(item.role),
     timestamp: item.timestamp ? new Date(item.timestamp) : new Date()
   }))
@@ -66,24 +73,67 @@ function extractFileReferences(content) {
   return refs
 }
 
+// Handles `inline code`, **bold**, [label](url), and bare URLs. Ordered so a
+// backtick span wins over the markers inside it — otherwise `**` inside a code
+// span would render as bold.
+const INLINE_PATTERN = /`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|(https?:\/\/[^\s)]+)/g
+
 function renderInline(text) {
   const parts = []
-  const pattern = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)|(https?:\/\/[^\s)]+)/g
   let lastIndex = 0
   let match
-  while ((match = pattern.exec(text)) !== null) {
+  INLINE_PATTERN.lastIndex = 0
+  while ((match = INLINE_PATTERN.exec(text)) !== null) {
     if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index))
-    const label = match[1] || match[3]
-    const href = match[2] || match[3]
-    parts.push(
-      <a key={`${href}-${match.index}`} href={href} target="_blank" rel="noreferrer" className="text-indigo-300 underline decoration-indigo-400/40 underline-offset-4 hover:text-indigo-100">
-        {label}
-      </a>
-    )
-    lastIndex = pattern.lastIndex
+    const key = `inline-${match.index}`
+
+    if (match[1] !== undefined) {
+      parts.push(
+        <code key={key} className="rounded border border-white/10 bg-black/30 px-1.5 py-0.5 font-mono text-[0.85em] text-indigo-100">
+          {match[1]}
+        </code>
+      )
+    } else if (match[2] !== undefined) {
+      parts.push(<strong key={key} className="font-bold text-white">{match[2]}</strong>)
+    } else {
+      const label = match[3] || match[5]
+      const href = match[4] || match[5]
+      parts.push(
+        <a key={key} href={href} target="_blank" rel="noreferrer" className="text-indigo-300 underline decoration-indigo-400/40 underline-offset-4 hover:text-indigo-100">
+          {label}
+        </a>
+      )
+    }
+    lastIndex = INLINE_PATTERN.lastIndex
   }
   if (lastIndex < text.length) parts.push(text.slice(lastIndex))
   return parts
+}
+
+function CopyButton({ value, label = 'Copy', className = '' }) {
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(String(value ?? ''))
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className={`inline-flex items-center gap-1 rounded border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-colors hover:border-indigo-400/40 hover:text-indigo-100 ${className}`}
+      title="Copy to clipboard"
+    >
+      {copied ? <Check size={11} /> : <Copy size={11} />}
+      {copied ? 'Copied' : label}
+    </button>
+  )
 }
 
 function renderMarkdown(markdown) {
@@ -105,11 +155,17 @@ function renderMarkdown(markdown) {
   }
 
   const flushCode = () => {
+    const source = code.join('\n')
     blocks.push(
-      <pre key={`code-${blocks.length}`} className="my-4 max-w-full overflow-x-auto rounded-lg border border-white/10 bg-slate-950 p-4 font-mono text-xs leading-5 text-slate-200">
-        {codeLanguage ? <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">{codeLanguage}</div> : null}
-        <code>{code.join('\n')}</code>
-      </pre>
+      <div key={`code-${blocks.length}`} className="group/code relative my-4">
+        <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover/code:opacity-100 focus-within:opacity-100">
+          <CopyButton value={source} />
+        </div>
+        <pre className="max-w-full overflow-x-auto rounded-lg border border-white/10 bg-slate-950 p-4 font-mono text-xs leading-5 text-slate-200">
+          {codeLanguage ? <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">{codeLanguage}</div> : null}
+          <code>{source}</code>
+        </pre>
+      </div>
     )
     code = []
     codeLanguage = ''
@@ -173,7 +229,172 @@ function ContextSection({ id, title, open, onToggle, children }) {
   )
 }
 
-function MessageBubble({ message, onOpenFile, onViewInVr }) {
+/**
+ * Line-level diff for a proposed file write. The agent blocks until the user
+ * approves or rejects, so this has to render even when the diff is large.
+ */
+function DiffPanel({ filePath, oldContent, newContent }) {
+  const rows = useMemo(() => {
+    const oldLines = String(oldContent ?? '').split('\n')
+    const newLines = String(newContent ?? '').split('\n')
+    const oldSet = new Set(oldLines)
+    const newSet = new Set(newLines)
+    const output = []
+
+    for (const line of oldLines) {
+      if (line.trim() && !newSet.has(line)) output.push({ kind: 'del', line })
+    }
+    for (const line of newLines) {
+      if (line.trim() && !oldSet.has(line)) output.push({ kind: 'add', line })
+    }
+    return output
+  }, [oldContent, newContent])
+
+  const added = rows.filter(r => r.kind === 'add').length
+  const removed = rows.filter(r => r.kind === 'del').length
+
+  return (
+    <div className="hud-frame hud-imperial overflow-hidden rounded-lg border border-white/10 bg-black/40 text-[11px]">
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 bg-white/5 px-3 py-2">
+        <span className="min-w-0 truncate font-mono text-slate-300" title={filePath}>{filePath}</span>
+        <span className="shrink-0 font-black uppercase tracking-widest tabular-nums">
+          <span className="text-emerald-400">+{added}</span>{' '}
+          <span className="text-rose-400">-{removed}</span>
+        </span>
+      </div>
+      <div className="custom-scrollbar max-h-60 overflow-y-auto p-3 font-mono leading-relaxed">
+        {!String(oldContent ?? '') ? <div className="italic text-slate-500">[New file]</div> : null}
+        {rows.length ? rows.map((row, index) => (
+          <div
+            key={`${row.kind}-${index}`}
+            className={`-mx-1 whitespace-pre-wrap px-1 ${row.kind === 'add' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'}`}
+          >
+            {row.kind === 'add' ? '+ ' : '- '}{row.line}
+          </div>
+        )) : <div className="italic text-slate-500">No line-level changes detected.</div>}
+      </div>
+    </div>
+  )
+}
+
+const READINESS_STYLES = {
+  ready: { label: 'Graph current', className: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' },
+  stale: { label: 'Graph stale', className: 'border-amber-400/25 bg-amber-400/10 text-amber-200' },
+  building: { label: 'Refreshing', className: 'border-indigo-400/25 bg-indigo-400/10 text-indigo-200' },
+  unindexed: { label: 'Not indexed', className: 'border-rose-400/25 bg-rose-400/10 text-rose-200' }
+}
+
+/**
+ * Whether this workspace's answers can be trusted right now. Index staleness
+ * and graph build state used to live in separate tabs, so a stale answer was
+ * indistinguishable from a correct one.
+ */
+function ReadinessBadge({ readiness }) {
+  if (!readiness?.state) return null
+  const style = READINESS_STYLES[readiness.state] || READINESS_STYLES.unindexed
+
+  return (
+    <div
+      className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${style.className}`}
+      title={readiness.action || 'Answers reflect the current source'}
+    >
+      {style.label}
+    </div>
+  )
+}
+
+const RISK_STYLES = {
+  high: { label: 'High risk', className: 'border-rose-400/30 bg-rose-500/10 text-rose-200' },
+  moderate: { label: 'Review carefully', className: 'border-amber-400/30 bg-amber-500/10 text-amber-200' },
+  low: { label: 'Low risk', className: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200' }
+}
+
+/**
+ * Graph-derived blast radius for a proposed write. This is what turns the
+ * approval gate from "does this diff look right" into "do I accept this reach".
+ */
+function ImpactPanel({ impact }) {
+  if (!impact) return null
+
+  if (!impact.available) {
+    return (
+      <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-slate-400">
+        Blast radius unavailable — {impact.reason || 'no graph data'}.
+        {' '}Build the workspace graph to see what depends on this file.
+      </div>
+    )
+  }
+
+  const risk = RISK_STYLES[impact.risk] || RISK_STYLES.low
+  const noTests = impact.testCount === 0 && impact.impactedCount > 0
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`rounded border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${risk.className}`}>
+          {risk.label}
+        </span>
+        <span className="font-mono text-[11px] text-slate-300">
+          {impact.impactedCount} dependent file{impact.impactedCount === 1 ? '' : 's'}
+        </span>
+        <span className={`font-mono text-[11px] ${noTests ? 'text-rose-300' : 'text-emerald-300'}`}>
+          {impact.testCount === 0 ? 'no covering tests' : `${impact.testCount} covering test${impact.testCount === 1 ? '' : 's'}`}
+        </span>
+        {impact.stale ? (
+          <span className="font-mono text-[11px] text-amber-300" title="The graph is older than the source — rebuild for an exact count">
+            graph stale
+          </span>
+        ) : null}
+      </div>
+
+      {impact.topDependents?.length ? (
+        <div className="text-[11px] leading-5 text-slate-400">
+          <span className="font-black uppercase tracking-widest text-slate-500">Reaches</span>{' '}
+          <span className="font-mono">{impact.topDependents.join(', ')}</span>
+          {impact.impactedCount > impact.topDependents.length
+            ? <span className="text-slate-500"> +{impact.impactedCount - impact.topDependents.length} more</span>
+            : null}
+        </div>
+      ) : null}
+
+      {noTests ? (
+        <div className="text-[11px] text-rose-300/90">
+          Nothing tests this path. Consider asking for a test alongside the change.
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * Compact trail of the tool calls behind an answer. Without this the UI sits
+ * silent while the agent runs tools, which reads as a hang.
+ */
+function StepTrail({ steps }) {
+  if (!steps?.length) return null
+
+  return (
+    <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
+      {steps.map((step, index) => (
+        <div key={`${step.tool}-${index}`} className="flex items-start gap-2 text-[10px] leading-4">
+          <Terminal size={10} className={`mt-0.5 shrink-0 ${step.done ? 'text-slate-600' : 'text-indigo-400'}`} />
+          <span className={`font-black uppercase tracking-widest ${step.done ? 'text-slate-600' : 'text-indigo-300'}`}>
+            {step.tool}
+          </span>
+          {step.done ? (
+            <span className={step.failed ? 'min-w-0 flex-1 truncate text-rose-400/80' : 'min-w-0 flex-1 truncate text-slate-600'}>
+              {step.failed ? String(step.error).slice(0, 120) : 'done'}
+            </span>
+          ) : (
+            <span className="text-slate-500">running…</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MessageBubble({ message, onOpenFile, onViewInVr, onApprove, isApprovable }) {
   const role = normalizeRole(message.role)
   const isUser = role === 'user'
   const refs = useMemo(() => extractFileReferences(message.content), [message.content])
@@ -197,6 +418,44 @@ function MessageBubble({ message, onOpenFile, onViewInVr }) {
               </div>
             ) : renderMarkdown(message.content || (message.streaming ? 'Thinking...' : ''))}
           </div>
+
+          <StepTrail steps={message.steps} />
+
+          {message.approval ? (
+            <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+              <div className="readout flex items-center gap-2 !text-amber-300">
+                Approval required — {message.approval.tool}
+              </div>
+              <ImpactPanel impact={message.approval.impact} />
+              <DiffPanel
+                filePath={message.approval.params?.filePath}
+                oldContent={message.approval.params?.oldContent}
+                newContent={message.approval.params?.newContent}
+              />
+              {isApprovable ? (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onApprove(true)}
+                    className="saber flex-1 rounded-md bg-emerald-600 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-emerald-500"
+                  >
+                    Approve change
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onApprove(false)}
+                    className="saber flex-1 rounded-md border border-rose-500/20 bg-rose-600/20 py-2 text-[10px] font-black uppercase tracking-widest text-rose-300 transition-colors hover:bg-rose-600/30"
+                  >
+                    Reject
+                  </button>
+                </div>
+              ) : (
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  {message.approval.resolved === true ? 'Approved' : message.approval.resolved === false ? 'Rejected' : 'No longer actionable'}
+                </div>
+              )}
+            </div>
+          ) : null}
           {refs.length ? (
             <div className="mt-4 flex flex-wrap gap-2 border-t border-white/10 pt-3">
               {refs.slice(0, 4).map(ref => (
@@ -224,6 +483,7 @@ function MessageBubble({ message, onOpenFile, onViewInVr }) {
         <div className={`mt-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 ${isUser ? 'justify-end' : ''}`}>
           {message.usedVoice ? <span title="Voice input">🎤</span> : null}
           <time>{message.timestamp?.toLocaleTimeString?.([], { hour: '2-digit', minute: '2-digit' }) || ''}</time>
+          {!message.streaming && message.content ? <CopyButton value={message.content} /> : null}
         </div>
       </div>
     </article>
@@ -250,6 +510,10 @@ export default function AgentChatTab({ selectedProject }) {
   const [workspaceView, setWorkspaceView] = useState('chat')
   const [searchRequest, setSearchRequest] = useState({ id: 0, query: '' })
   const [isSearchPending, setIsSearchPending] = useState(false)
+  const [pendingApproval, setPendingApproval] = useState(null)
+  const [activeTaskId, setActiveTaskId] = useState(null)
+  const [lastPrompt, setLastPrompt] = useState(null)
+  const [readiness, setReadiness] = useState(null)
   const messagesEndRef = useRef(null)
   const voiceBridgeRef = useRef(null)
 
@@ -260,25 +524,27 @@ export default function AgentChatTab({ selectedProject }) {
   }, [messages])
 
   useEffect(() => {
-    if (!selectedProject) {
-      // Load from localStorage as fallback before clearing
-      const saved = normalizeMessages(parseStoredJson(`yodaman:messages:${selectedProject?.id || 'default'}`, []))
-      if (saved.length > 0) setMessages(saved)
-      return
-    }
-    // Try to load from localStorage first for instant restore
+    if (!selectedProject) return
+    // Restore from localStorage first so the thread appears instantly, then
+    // reconcile against server-side history.
     const saved = normalizeMessages(parseStoredJson(`yodaman:messages:${selectedProject.id}`, []))
     if (saved.length > 0) setMessages(saved)
     loadHistory()
     loadGitContext()
+    loadReadiness()
   }, [selectedProject?.id, selectedProject?.path])
 
-  // Persist messages to localStorage whenever they change
+  // Persist the thread, but not on every streaming delta — serializing the
+  // whole array per token is wasted work on a long conversation.
   useEffect(() => {
     if (!selectedProject?.id) return
-    try {
-      localStorage.setItem(`yodaman:messages:${selectedProject.id}`, JSON.stringify(messages))
-    } catch (_) { /* localStorage quota exceeded — ignore */ }
+    if (messages.some(message => message.streaming)) return
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(`yodaman:messages:${selectedProject.id}`, JSON.stringify(messages))
+      } catch (_) { /* localStorage quota exceeded — ignore */ }
+    }, 300)
+    return () => window.clearTimeout(timer)
   }, [messages, selectedProject?.id])
 
   useEffect(() => {
@@ -329,6 +595,15 @@ export default function AgentChatTab({ selectedProject }) {
       setGitState(await api.getGitContext(selectedProject.path))
     } catch (err) {
       setGitState({ branch: 'Unavailable', ahead: 0, behind: 0, recentCommits: [], error: err.message })
+    }
+  }
+
+  async function loadReadiness() {
+    if (!selectedProject?.path) return
+    try {
+      setReadiness(await api.getReadiness(selectedProject.path))
+    } catch {
+      setReadiness(null)
     }
   }
 
@@ -455,36 +730,65 @@ export default function AgentChatTab({ selectedProject }) {
     }
   }
 
+  /** Update one message by id — array indices shift when history loads mid-stream. */
+  function patchMessage(id, patch) {
+    setMessages(current => current.map(message => (
+      message.id === id ? { ...message, ...(typeof patch === 'function' ? patch(message) : patch) } : message
+    )))
+  }
+
+  async function resolveApproval(approved) {
+    const approval = pendingApproval
+    if (!approval) return
+
+    setPendingApproval(null)
+    patchMessage(approval.messageId, message => ({
+      approval: { ...message.approval, resolved: approved }
+    }))
+
+    try {
+      await api.approve(approval.taskId, approved)
+    } catch (err) {
+      setError(`Could not send the approval decision: ${err.message}`)
+      setPendingApproval(approval)
+      patchMessage(approval.messageId, message => ({
+        approval: { ...message.approval, resolved: undefined }
+      }))
+    }
+  }
+
+  async function cancelActiveTask() {
+    if (!activeTaskId) return
+    try {
+      await api.cancelAgentTask(activeTaskId)
+      setPendingApproval(null)
+    } catch (err) {
+      setError(`Could not cancel the task: ${err.message}`)
+    }
+  }
+
   async function sendAgentMessage(taskOverride = inputText, { usedVoice = usedVoiceForDraft, commandContext = {} } = {}) {
     const task = String(taskOverride || '').trim()
     if (!task || !selectedProject || isSending) return
 
     const userMessage = {
+      id: nextMessageId(),
       role: 'user',
       content: task,
       timestamp: new Date(),
       usedVoice
     }
+    const assistantId = nextMessageId()
     const assistantMessage = {
+      id: assistantId,
       role: 'assistant',
       content: '',
       timestamp: new Date(),
       streaming: true,
-      processing: true
+      steps: []
     }
-    const assistantIndex = messages.length + 1
     const context = buildAgentContext(commandContext)
-
-    // Show "still working" message if no response within 10 seconds
-    let slowTimer = setTimeout(() => {
-      setMessages(current => {
-        const next = [...current]
-        if (next[assistantIndex] && !next[assistantIndex].content) {
-          next[assistantIndex] = { ...next[assistantIndex], content: '⏳ Still thinking... (slow connection or complex task)' }
-        }
-        return next
-      })
-    }, 10000)
+    setLastPrompt({ task, usedVoice, commandContext })
 
     setMessages(current => [...current, userMessage, assistantMessage])
     setInputText('')
@@ -492,37 +796,111 @@ export default function AgentChatTab({ selectedProject }) {
     setUsedVoiceForDraft(false)
     setAttachedFiles([])
     setIsSending(true)
+    setPendingApproval(null)
+    setActiveTaskId(null)
     setError('')
 
-    try {
-      clearTimeout(slowTimer)
-      await api.agentTask(task, selectedProject.path, step => {
-        if (step.type === 'final_answer') {
-          speakAgentResponse(step.answer, voiceSettings)
-        }
-        setMessages(current => {
-          const next = [...current]
-          const target = { ...next[assistantIndex] }
-          if (step.type === 'final_answer') {
-            target.content = step.answer || target.content
-            target.streaming = false
-          } else if (step.type === 'error') {
-            target.content = `${target.content}\n\nError: ${step.message}`.trim()
-            target.streaming = false
-          } else if (step.delta || step.content || step.message) {
-            target.content = `${target.content}${step.delta || step.content || step.message}`
-          }
-          next[assistantIndex] = target
-          return next
-        })
-      }, context)
-    } catch (err) {
-      clearTimeout(slowTimer)
-      setError(err.message)
-      setMessages(current => current.map((message, index) => index === assistantIndex
-        ? { ...message, content: '⚠️ ' + err.message, streaming: false }
-        : message
+    // Reassure the user if nothing has streamed back yet. Cleared as soon as
+    // any content, tool call, or approval arrives.
+    let slowTimer = window.setTimeout(() => {
+      patchMessage(assistantId, message => (
+        message.content || message.steps?.length
+          ? {}
+          : { content: '⏳ Still working — this is a slow connection or a complex task.' }
       ))
+    }, 10000)
+
+    const clearSlowTimer = () => {
+      if (slowTimer) {
+        window.clearTimeout(slowTimer)
+        slowTimer = null
+      }
+    }
+
+    try {
+      await api.agentTask(task, selectedProject.path, step => {
+        if (step.taskId) setActiveTaskId(step.taskId)
+
+        switch (step.type) {
+          case 'tool_start':
+            clearSlowTimer()
+            patchMessage(assistantId, message => ({
+              steps: [...(message.steps || []), { tool: step.tool, params: step.params, done: false }]
+            }))
+            return
+
+          case 'tool_end':
+            patchMessage(assistantId, message => {
+              const steps = [...(message.steps || [])]
+              for (let i = steps.length - 1; i >= 0; i -= 1) {
+                if (steps[i].tool === step.tool && !steps[i].done) {
+                  steps[i] = {
+                    ...steps[i],
+                    done: true,
+                    failed: Boolean(step.result?.error),
+                    error: step.result?.error
+                  }
+                  break
+                }
+              }
+              return { steps }
+            })
+            return
+
+          case 'awaiting_approval':
+            clearSlowTimer()
+            setPendingApproval({ taskId: step.taskId, messageId: assistantId, tool: step.tool })
+            patchMessage(assistantId, {
+              approval: { tool: step.tool, params: step.params, impact: step.impact, resolved: undefined }
+            })
+            return
+
+          case 'task_cancelled':
+            clearSlowTimer()
+            setPendingApproval(null)
+            patchMessage(assistantId, message => ({
+              content: `${message.content}\n\n⏹ Task cancelled.`.trim(),
+              streaming: false
+            }))
+            return
+
+          case 'final_answer':
+            clearSlowTimer()
+            speakAgentResponse(step.answer, voiceSettings)
+            patchMessage(assistantId, message => ({
+              content: step.answer || message.content,
+              streaming: false
+            }))
+            return
+
+          case 'error':
+            clearSlowTimer()
+            patchMessage(assistantId, message => ({
+              content: `${message.content}\n\nError: ${step.message}`.trim(),
+              streaming: false
+            }))
+            return
+
+          default:
+            if (step.delta || step.content) {
+              clearSlowTimer()
+              patchMessage(assistantId, message => ({
+                content: `${message.content}${step.delta || step.content}`
+              }))
+            }
+        }
+      }, context)
+
+      // The stream can end without a final_answer (cancelled task, dropped
+      // connection). Never leave a bubble stuck in the streaming state.
+      patchMessage(assistantId, message => (
+        message.streaming
+          ? { streaming: false, content: message.content || '⚠️ The agent stream ended without an answer.' }
+          : {}
+      ))
+    } catch (err) {
+      setError(err.message)
+      patchMessage(assistantId, { content: `⚠️ ${err.message}`, streaming: false })
       api.reportClientError({
         message: err.message || 'Agent chat request failed',
         stack: err.stack,
@@ -532,14 +910,47 @@ export default function AgentChatTab({ selectedProject }) {
         context: { project: selectedProject.path }
       })
     } finally {
+      clearSlowTimer()
       setIsSending(false)
+      setActiveTaskId(null)
+      setPendingApproval(null)
       loadGitContext()
+      loadReadiness()
     }
+  }
+
+  function clearConversation() {
+    if (!window.confirm('Clear this conversation? The message history for this workspace will be deleted.')) return
+    setMessages([])
+    setPendingApproval(null)
+    setLastPrompt(null)
+    setError('')
+    try {
+      localStorage.removeItem(`yodaman:messages:${selectedProject.id}`)
+    } catch (_) { /* ignore */ }
+    api.clearSessions(selectedProject.id).catch(() => { })
+  }
+
+  async function retryLastPrompt() {
+    if (!lastPrompt || isSending) return
+    setError('')
+    await sendAgentMessage(lastPrompt.task, {
+      usedVoice: lastPrompt.usedVoice,
+      commandContext: lastPrompt.commandContext
+    })
   }
 
   async function sendMessage(event) {
     event.preventDefault()
     await submitWorkspaceInput()
+  }
+
+  // Enter and Cmd/Ctrl+Enter send; Shift+Enter inserts a newline. Without this
+  // the composer had no keyboard path to send at all.
+  function handleComposerKeyDown(event) {
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    submitWorkspaceInput()
   }
 
   async function submitWorkspaceInput(text = inputText, options = {}) {
@@ -592,7 +1003,8 @@ export default function AgentChatTab({ selectedProject }) {
                 <button onClick={openProjectInVr} disabled={isOpeningVr} className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cyan-200 hover:bg-cyan-400/20 disabled:cursor-wait disabled:opacity-60" title="Load workspace in Holocron VR">{isOpeningVr ? 'Checking VR…' : 'Load in VR'}</button>
               ) : null}
               <div className="flex items-center gap-1.5 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-indigo-200"><Filter size={11} />Scoped to: {selectedProject.name}</div>
-              <button onClick={()=>{setMessages([]);localStorage.removeItem(`yodaman:messages:${selectedProject.id}`);api.clearSessions(selectedProject.id).catch(()=>{});}} className="rounded-full border border-rose-400/20 bg-rose-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-rose-200 hover:bg-rose-400/20" title="Clear conversation">🗑 Clear</button>
+              <ReadinessBadge readiness={readiness} />
+              <button onClick={clearConversation} disabled={isSending || !messages.length} className="rounded-full border border-rose-400/20 bg-rose-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-rose-200 hover:bg-rose-400/20 disabled:cursor-not-allowed disabled:opacity-40" title="Clear conversation">🗑 Clear</button>
               <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-200">SSE Ready</div>
             </div>
           </div>
@@ -606,14 +1018,25 @@ export default function AgentChatTab({ selectedProject }) {
             <div className="flex h-full items-center justify-center text-center text-sm text-[var(--text-secondary)]">
               Ask YodaMan to inspect, explain, or change this workspace.
             </div>
-          ) : messages.slice(-50).map((message, index) => (
-            <MessageBubble
-              key={`${message.timestamp?.toISOString?.() || index}-${index}`}
-              message={message}
-              onOpenFile={openFileReference}
-              onViewInVr={viewInVr}
-            />
-          ))}
+          ) : (
+            <>
+              {messages.length > 50 ? (
+                <div className="text-center text-[10px] font-black uppercase tracking-widest text-slate-600">
+                  Showing the last 50 of {messages.length} messages
+                </div>
+              ) : null}
+              {messages.slice(-50).map((message, index) => (
+                <MessageBubble
+                  key={message.id || `${message.timestamp?.toISOString?.() || index}-${index}`}
+                  message={message}
+                  onOpenFile={openFileReference}
+                  onViewInVr={viewInVr}
+                  onApprove={resolveApproval}
+                  isApprovable={pendingApproval?.messageId === message.id}
+                />
+              ))}
+            </>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -656,6 +1079,7 @@ export default function AgentChatTab({ selectedProject }) {
             <textarea
               value={inputText}
               onChange={event => setInputText(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
               disabled={isSending || isSearchPending}
               rows={3}
               placeholder={workspaceView === 'search' ? 'Search this workspace...' : 'Give YodaMan an agentic task...'}
@@ -677,12 +1101,32 @@ export default function AgentChatTab({ selectedProject }) {
                 <button type="button" onClick={() => startVoiceInput(false)} className="flex h-9 w-9 items-center justify-center rounded-md border text-slate-300 hover:text-white border-white/10 bg-white/[0.03]" title="Voice input" style={isListening?{borderColor:'rgba(244,63,94,0.4)',background:'rgba(244,63,94,0.15)',animation:'pulse 1s ease-in-out infinite'}:{}}>
                   <Mic size={16} />
                 </button>
-                <button type="submit" disabled={isSending || isSearchPending || !inputText.trim()} className="inline-flex items-center gap-2 rounded-md bg-indigo-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40">
-                  {workspaceView === 'search' ? <Search size={16} /> : <Send size={16} />}
-                  {isSearchPending ? 'Searching' : workspaceView === 'search' ? 'Search' : 'Send'}
-                </button>
+                {isSending && activeTaskId ? (
+                  <button
+                    type="button"
+                    onClick={cancelActiveTask}
+                    className="inline-flex items-center gap-2 rounded-md border border-rose-400/30 bg-rose-500/15 px-4 py-2 text-sm font-bold text-rose-200 transition-colors hover:bg-rose-500/25"
+                    title="Stop the running agent task"
+                  >
+                    <Square size={14} />
+                    Stop
+                  </button>
+                ) : (
+                  <button type="submit" disabled={isSending || isSearchPending || !inputText.trim()} className="saber inline-flex items-center gap-2 rounded-md bg-indigo-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40">
+                    {workspaceView === 'search' ? <Search size={16} /> : <Send size={16} />}
+                    {isSearchPending ? 'Searching' : workspaceView === 'search' ? 'Search' : 'Send'}
+                  </button>
+                )}
               </div>
             </div>
+          </div>
+          <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+            <span>Enter to send · Shift+Enter for a new line</span>
+            {!isSending && lastPrompt ? (
+              <button type="button" onClick={retryLastPrompt} className="text-slate-500 transition-colors hover:text-indigo-300">
+                Retry last prompt
+              </button>
+            ) : null}
           </div>
         </form>
       </main>

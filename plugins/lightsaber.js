@@ -12,6 +12,8 @@
  */
 const path = require('path');
 const fs = require('fs');
+const graphFacts = require('../backend/infrastructure/GraphFacts');
+const { isTestFile: isTestPath } = require('../backend/infrastructure/ImpactAnalyzer');
 
 // Reuse yodaman's existing gitService
 let gitService;
@@ -25,6 +27,12 @@ try {
 
 // ─── Inline scorers (no need for separate files) ────────────────────────────
 
+// The test and TODO penalties were dead weight: `analyze` only ever passed
+// changeFrequency and complexityScore, so `fd.testCoverage` was always
+// undefined — always below 50 — and every file took an identical 20-point hit
+// while `todoCount` contributed nothing at all. Two of the four advertised
+// factors did no work. Both are now supplied per file: coverage from the
+// knowledge graph, TODO counts from the scan this plugin already ran.
 function healthScore(fd) {
   const cp = Math.min(40, ((fd.changeFrequency||0)/100)*40);
   const xp = Math.min(30, ((fd.complexityScore||0)/100)*30);
@@ -39,6 +47,29 @@ function healthScore(fd) {
   else { s='critical'; c='#cc0000'; l='Critical 🔥'; }
   return { score: Math.round(score), status:s, color:c, label:l,
     penalties: { change:Math.round(cp), complexity:Math.round(xp), test:tp, todo:dop } };
+}
+
+/**
+ * Per-file TODO/FIXME/HACK counts, keyed by workspace-relative path so they line
+ * up with the git heatmap. The `find-todos` action already gathered this; the
+ * health score just never received it.
+ */
+async function countTodosByFile(execP, workspacePath) {
+  try {
+    const { stdout } = await execP(
+      `grep -rn "TODO\\|FIXME\\|HACK" --include="*.js" --include="*.ts" --include="*.jsx" --include="*.tsx" --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=build --exclude-dir=.git --exclude-dir=release --exclude-dir=coverage "${workspacePath}" 2>/dev/null | head -500`
+    );
+    const counts = {};
+    for (const line of stdout.split('\n').filter(Boolean)) {
+      const absolute = line.split(':')[0];
+      const relative = path.relative(workspacePath, absolute).split(path.sep).join('/');
+      if (relative) counts[relative] = (counts[relative] || 0) + 1;
+    }
+    return counts;
+  } catch {
+    // grep exits non-zero when nothing matches — that is a clean zero, not a failure.
+    return {};
+  }
 }
 
 function calcComplexity(content) {
@@ -137,15 +168,39 @@ module.exports = {
         catch { complexityData[f.path] = { loc:0, nestingDepth:0, cyclomaticComplexity:0, complexityScore:0 }; }
       }
 
+      // Which tests actually reach each file, from resolved graph edges. A file
+      // with no covering test is the case worth surfacing, so treat presence of
+      // any covering test as covered and absence as uncovered.
+      const coverage = graphFacts.coverageByFile(workspacePath) || new Map();
+      const todosByFile = await countTodosByFile(execP, workspacePath);
+
       const scores = {};
       for (const f of changeData.slice(0, 100)) {
         const cd = complexityData[f.path] || {};
-        scores[f.path] = healthScore({ changeFrequency: f.changeFrequency, complexityScore: cd.complexityScore });
+        const coveringTests = coverage.get(f.path) || [];
+        scores[f.path] = healthScore({
+          changeFrequency: f.changeFrequency,
+          complexityScore: cd.complexityScore,
+          testCoverage: coveringTests.length > 0 ? 100 : 0,
+          todoCount: todosByFile[f.path] || 0
+        });
+        scores[f.path].coveringTests = coveringTests.length;
+        scores[f.path].todoCount = todosByFile[f.path] || 0;
       }
+
+      const uncovered = Object.entries(scores)
+        .filter(([, health]) => health.coveringTests === 0)
+        .map(([file]) => file);
 
       const hotspots = Object.entries(scores).filter(([_,h]) => h.score < 40).map(([p,h]) => ({ path:p, score:h.score, status:h.status })).sort((a,b) => a.score - b.score);
 
-      if (action === 'find-hotspots') return { hotspots, totalFiles: changeData.length, averageHealth: Math.round(Object.values(scores).reduce((a,b)=>a+b.score,0)/Math.max(Object.keys(scores).length,1)) };
+      if (action === 'find-hotspots') return {
+        hotspots,
+        totalFiles: changeData.length,
+        uncoveredCount: uncovered.length,
+        uncoveredFiles: uncovered.slice(0, 20),
+        averageHealth: Math.round(Object.values(scores).reduce((a,b)=>a+b.score,0)/Math.max(Object.keys(scores).length,1))
+      };
       if (action === 'analyze') return { hotspots: hotspots.slice(0, 10), changeData: changeData.slice(0, 50), complexityData, scores };
 
       // report — full dump
@@ -168,7 +223,7 @@ module.exports = {
 
     // --- find-todos ---
     if (action === 'find-todos') {
-      const { stdout } = await execP(`grep -rn "TODO\\|FIXME\\|HACK" --include="*.js" --include="*.ts" --include="*.jsx" --include="*.tsx" "${workspacePath}" 2>/dev/null | head -500`);
+      const { stdout } = await execP(`grep -rn "TODO\\|FIXME\\|HACK" --include="*.js" --include="*.ts" --include="*.jsx" --include="*.tsx" --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=build --exclude-dir=.git --exclude-dir=release --exclude-dir=coverage "${workspacePath}" 2>/dev/null | head -500`);
       const lines = stdout.split('\n').filter(Boolean);
       const byFile = {}; for (const l of lines) { const f = l.split(':')[0]; byFile[f] = (byFile[f]||0)+1; }
       return { total: lines.length, byFile, lines: lines.slice(0, 100) };
@@ -176,11 +231,51 @@ module.exports = {
 
     // --- test-coverage ---
     if (action === 'test-coverage') {
+      // Counting test files against source files says nothing about whether any
+      // given file is tested — a repo with one enormous test file scores well.
+      // The graph knows which tests actually reach which sources, so report that
+      // and name the files nothing exercises.
+      const facts = graphFacts.load(workspacePath);
+      if (facts) {
+        const coverage = graphFacts.coverageByFile(workspacePath, { facts }) || new Map();
+        // Source files only — a test file covering itself is not a measurement.
+        const sources = [...facts.files].filter(f => includeFile(f) && !isTestPath(f));
+        const uncovered = sources.filter(f => !coverage.has(f));
+        const covered = sources.length - uncovered.length;
+
+        const percentCovered = sources.length ? Math.round((covered / sources.length) * 100) : 0;
+
+        return {
+          method: 'knowledge-graph',
+          sourceFiles: sources.length,
+          coveredFiles: covered,
+          uncoveredFiles: uncovered.length,
+          percentCovered,
+          // Kept so existing consumers of this plugin keep working — but it now
+          // means "percent of source files a test actually reaches" rather than
+          // the old ratio of test files to source files.
+          ratio: percentCovered,
+          // Ordered by how much of the codebase leans on each untested file.
+          leastCoveredHighTraffic: uncovered
+            .map(file => ({ file, dependents: facts.dependedOnBy.get(file)?.size || 0 }))
+            .sort((a, b) => b.dependents - a.dependents)
+            .slice(0, 15),
+          note: 'Covered means at least one test file reaches this file through resolved import edges.'
+        };
+      }
+
+      // No graph — fall back to the old ratio, labelled honestly.
       const { stdout: testStdout } = await execP(`find "${workspacePath}" -name "*.test.*" -o -name "*.spec.*" 2>/dev/null | head -200`);
       const testFiles = testStdout.split('\n').filter(Boolean);
       const { stdout: srcStdout } = await execP(`find "${workspacePath}" -name "*.js" -not -name "*.test.*" -not -name "*.spec.*" -not -path "*/node_modules/*" 2>/dev/null | head -500`);
       const srcFiles = srcStdout.split('\n').filter(Boolean);
-      return { ratio: srcFiles.length > 0 ? Math.round(testFiles.length / srcFiles.length * 100) : 0, testFiles: testFiles.length, sourceFiles: srcFiles.length };
+      return {
+        method: 'file-count-fallback',
+        note: 'No knowledge graph for this workspace. This is a ratio of test files to source files, not a measure of what is actually tested.',
+        ratio: srcFiles.length > 0 ? Math.round(testFiles.length / srcFiles.length * 100) : 0,
+        testFiles: testFiles.length,
+        sourceFiles: srcFiles.length
+      };
     }
 
     // --- coupling ---

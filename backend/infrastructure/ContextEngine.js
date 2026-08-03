@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const dependencyChecker = require('./DependencyChecker');
+const { stripCliNoise } = require('./CliOutput');
 
 /**
  * ContextEngine (Infrastructure Layer)
@@ -101,4 +102,8 @@ class ContextEngine {
 }
 
 
-module.exports = new ContextEngine();
+const contextEngine = new ContextEngine();
+contextEngine.stripCliNoise = stripCliNoise;
+
+module.exports = contextEngine;
+module.exports.stripCliNoise = stripCliNoise;

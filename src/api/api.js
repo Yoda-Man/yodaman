@@ -289,6 +289,11 @@ export const api = {
         return request(`${API_BASE}/agent/approve`, jsonOptions('POST', { taskId, approved }));
     },
 
+    async getReadiness(projectId) {
+        const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+        return request(`${API_BASE}/readiness${query}`);
+    },
+
     async cancelAgentTask(taskId) {
         return request(`${API_BASE}/agent/cancel`, jsonOptions('POST', { taskId }));
     },

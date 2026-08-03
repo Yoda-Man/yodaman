@@ -21,7 +21,7 @@ export default function StatusBar() {
     const modelLabel = ollamaOk ? (ollamaVer || 'ollama') : 'n/a'
 
     return (
-        <div className="w-full bg-slate-950/80 backdrop-blur-md border-b border-white/5 text-[10px] flex items-center px-6 py-2 gap-6 select-none z-50">
+        <div className="starfield w-full bg-slate-950/80 backdrop-blur-md border-b border-white/5 text-[10px] flex items-center px-6 py-2 gap-6 select-none z-50">
             <div className="flex items-center gap-3 group">
                 <div className="relative flex items-center gap-2">
                     <img src="/logo.png" className="h-5 w-5 rounded-md shadow-[0_0_10px_rgba(99,102,241,0.5)]" alt="YodaMan" />
@@ -54,11 +54,12 @@ export default function StatusBar() {
             <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2 text-slate-500 bg-white/5 px-3 py-1 rounded-full border border-white/5">
                     <Clock size={12} className="text-slate-400" />
-                    <span className="font-mono text-[11px] text-slate-300 font-medium tracking-tight">{currentTime}</span>
+                    {/* tabular-nums stops the clock jittering as digits change width each second */}
+                    <span className="font-mono text-[11px] text-slate-300 font-medium tracking-tight tabular-nums">{currentTime}</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-slate-600 font-bold uppercase tracking-[0.2em]">Build</span>
-                    <span className="text-indigo-400/80 font-black px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20">v0.3.7</span>
+                    <span className="text-indigo-400/80 font-black px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20">v0.3.8</span>
                 </div>
             </div>
         </div>

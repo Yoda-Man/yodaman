@@ -172,8 +172,9 @@ export default function ManualWindow() {
                 <section className="mb-14">
                     <h2 className="text-2xl font-black text-white mb-5">Quick commands</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <CommandBlock title="Install and run" code={`npm install -g @contextexpert/cli\npython3 -m pip install graphifyy\nnpm install\nsh setup.sh\nnpm start`} />
+                        <CommandBlock title="Install and run" code={`npm install -g @contextexpert/cli\nnpm install -g @fission-ai/openspec@latest\npython3 -m pip install graphifyy\nnpm install\nsh setup.sh\nnpm start`} />
                         <CommandBlock title="Develop and verify" code={`npm run client\nnpm test\nnpm run build\nnpm run release:smoke`} />
+                        <CommandBlock title="Dependency health" code={`yodaman doctor\nyodaman doctor --json`} />
                         <CommandBlock title="Graphify health" code={`yodaman doctor --graph`} />
                         <CommandBlock title="Desktop builds" code={`npm run desktop\nnpm run desktop:pack\nnpm run desktop:dist`} />
                         <CommandBlock title="VS Code extension" code={`cd extensions/vscode-yodaman\nnpm install\nnpm run lint\nnpm run package`} />
@@ -184,8 +185,10 @@ export default function ManualWindow() {
                     <h2 className="text-2xl font-black text-white mb-5">Troubleshooting</h2>
                     <div className="space-y-3 text-sm text-slate-400">
                         <Trouble title="Runtime unreachable" text="Confirm port 3090 is free, then use YodaMan > Restart Managed Runtime or run yodaman from Terminal." />
+                        <Trouble title="Not sure what is missing" text="Run yodaman doctor for a full report on Ollama, ctx, Graphify, and OpenSpec, including the install command for anything missing." />
                         <Trouble title="Context Expert missing" text="Install @contextexpert/cli and verify ctx --version works in your shell." />
                         <Trouble title="Graphify missing" text="Install graphifyy, verify graphify --help works, or set YODAMAN_GRAPHIFY_BIN to the executable path." />
+                        <Trouble title="OpenSpec missing" text="Install @fission-ai/openspec@latest and verify openspec --version works, or use Install Now in the Stardust tab or the desktop diagnostics screen." />
                         <Trouble title="Graph health warnings" text="Run yodaman doctor --graph, then sync the affected workspace if orphaned nodes or missing graphs are reported." />
                         <Trouble title="Moved repository" text="Open Settings, edit the workspace path, save, then run Sync Repository." />
                         <Trouble title="Search looks stale" text="Select the workspace and run Sync Repository to queue a fresh index." />

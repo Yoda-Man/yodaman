@@ -1,6 +1,6 @@
 # YodaMan User Manual
 
-Version: 0.3.7
+Version: 0.3.8
 
 YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, mandatory Graphify knowledge graph, plugin system, and local runtime API.
 
@@ -33,11 +33,11 @@ The Express runtime is the shared contract for every client. It serves the React
 
 ### Workspaces
 
-Workspaces are absolute local folder paths. Add them by pasting a path, browsing with a native folder picker in desktop clients, using the sidebar plus button, or using the desktop menu item `Add Project Folder`. In version 0.3.2 you can edit a workspace path when a project moves, delete stale workspaces, validate workspace health, refresh the workspace list, and run `Sync Repository` to reindex the active workspace and update its Graphify graph.
+Workspaces are absolute local folder paths. Add them by pasting a path, browsing with a native folder picker in desktop clients, using the sidebar plus button, or using the desktop menu item `Add Project Folder`. You can edit a workspace path when a project moves, delete stale workspaces, validate workspace health, refresh the workspace list, and run `Sync Repository` to reindex the active workspace and update its Graphify graph.
 
 ### Graphify knowledge graph
 
-Graphify is mandatory in 0.3.2 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
+Graphify is mandatory in 0.3.8 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
 
 The Graph tab opens Graph Studio, a project-scoped visual workspace for Graphify outputs. Graph Studio embeds the generated mind-map and Vis.js canvas artifacts, shows graph freshness, renders the markdown report, and keeps graph query plus impact analysis actions close to the visualization.
 
@@ -48,6 +48,34 @@ yodaman doctor --graph
 ```
 
 The graph doctor reports active workspace graphs, persisted freshness, orphaned nodes, and the most dependency-heavy file. If orphaned nodes appear, run `Sync Repository` in the app or `POST /api/reindex` for that workspace.
+
+### Dependency health check
+
+Run `yodaman doctor` with no flags to check every required runtime dependency before starting the app:
+
+```bash
+yodaman doctor
+```
+
+The dependency doctor checks **Ollama**, **Context Expert (`ctx`)**, **Graphify**, and **OpenSpec**, reporting each tool's version, resolved path, and — for Ollama — whether its local service is responding. Anything missing is listed with the exact install command for your platform. The command exits `0` when everything is healthy and `1` when a dependency is missing or unreachable, so it can gate a script or CI step. Add `--json` for machine-readable output:
+
+```bash
+yodaman doctor --json
+```
+
+The same checks run automatically at startup, appear in the Dashboard health panel, and appear in the desktop startup diagnostics screen, where missing components offer a one-click install.
+
+### How the three dependencies work together
+
+Context Expert, Graphify and OpenSpec are each required, and YodaMan composes them rather than treating them as three separate tools:
+
+- **Approving a change shows its cost.** When Yoda-Agent proposes a file write, the approval prompt reports the blast radius from the knowledge graph: how many files depend on the target, whether any test covers that path, which dependents are nearest, and an overall risk verdict. A change that reaches five or more files with no covering test is flagged as high risk. If no graph has been built yet the diff still appears, with the blast radius marked unavailable.
+- **Search knows structure, not just text.** Code search blends Context Expert's semantic ranking with graph proximity to the file you are working in and how central each result is in the graph. Semantic relevance still dominates, so a strong textual match is never buried — structure breaks ties. Pass `activeFile` to `GET /api/search/code` to bias results toward what you are editing.
+- **Accepted changes refresh the workspace.** Once an agent task that wrote files finishes, that workspace is reindexed and its graph updated automatically — once per task, not once per file. Without this, the answer after an accepted change would be computed from stale data.
+- **One readiness signal.** The Chat header shows whether this workspace's answers can be trusted: `Graph current`, `Graph stale`, `Refreshing`, or `Not indexed`. The verdict is always the weakest layer, so nothing hides behind an average. Query it directly with `GET /api/readiness?projectId=<path>`.
+- **Architecture drift.** OpenSpec records the architecture you intended; the graph records the one you built. `GET /api/stardust/drift` compares them and reports two things: specs citing files that no longer exist (a spec that has quietly become wrong), and modules many files depend on that no spec describes. Requires both an initialized OpenSpec and a built graph, and tells you which is missing. Also available to the agent as the `specDrift` tool.
+- **Specs grounded in real modules.** Before a change is written up, `GET /api/stardust/context?projectRoot=<path>&files=a.js,b.js` returns the workspace's architectural hubs plus the blast radius and risk of each file the change touches, so a proposal cites modules that exist and states impact it can defend.
+- **Plugins share the same graph.** Droid-Sweep finds unused files from resolved import edges rather than filename guessing, and reports whether the answer came from the graph or the text-scan fallback. Lightsaber's health score now uses real per-file test coverage, and its `test-coverage` action reports the share of source files a test actually reaches, worst-and-most-depended-on first.
 
 ### Default coding skill
 
@@ -160,11 +188,16 @@ Use your desktop LAN address when pairing from a phone, for example `http://192.
 - `GET /api/plugins`, `POST /api/plugins`, `DELETE /api/plugins/:name`: Manage plugins.
 - `GET /api/agent/tasks`, `DELETE /api/agent/tasks`: Inspect or clear task history.
 - `POST /api/agent/task`, `POST /api/agent/approve`, `POST /api/agent/cancel`: Run, approve, reject, or cancel agent work.
+- `GET /api/stardust/drift`: Compare OpenSpec intent against the actual graph. Accepts `projectRoot` and `minDependents`. Returns stale spec references, undocumented modules, and `inSync`.
+- `GET /api/stardust/context`: Graph-grounded context for authoring a change. Accepts `projectRoot` and a comma-separated `files` list.
+- `GET /api/readiness`: Whether a workspace's answers are current. Pass `?projectId=<absolute path>` for one workspace, or omit it for every watched workspace. Returns `ready`, `stale`, `building`, or `unindexed`, plus the per-layer detail and a suggested action.
+- `GET /api/search/code`: Code search. Accepts `activeFile` to bias ranking toward files connected to what you are editing.
 - `GET /api/audit`, `DELETE /api/audit`: Inspect or clear audit logs.
 - `POST /api/pairing`: Create mobile pairing links.
 
 ## 8. Troubleshooting
 
+- **Something is missing but you are not sure what**: Run `yodaman doctor` for a full dependency report with per-tool install commands.
 - **Context Expert not found**: Install `@contextexpert/cli` and confirm `ctx --version` works.
 - **Graphify not found**: Install `graphifyy`, confirm `graphify --help` works, or set `YODAMAN_GRAPHIFY_BIN` to the executable path.
 - **Graph health looks wrong**: Run `yodaman doctor --graph`, then sync the affected workspace if the command reports orphaned nodes or missing graphs.
@@ -173,7 +206,7 @@ Use your desktop LAN address when pairing from a phone, for example `http://192.
 - **Search results are stale**: Select the workspace and run `Sync Repository`.
 - **Mobile cannot connect**: Use the desktop LAN IP, confirm firewall access to port `3090`, and generate a fresh pairing link.
 - **Plugin blocked**: Add explicit permissions to the plugin or intentionally allow unrestricted plugins with `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true`.
-- **OpenSpec not found**: Install `@fission-ai/openspec@latest` and confirm `openspec --version` works, or click "Install Now" in the Stardust tab.
+- **OpenSpec not found**: Install `@fission-ai/openspec@latest` and confirm `openspec --version` works, or click "Install Now" in the Stardust tab or the desktop startup diagnostics screen. `yodaman doctor` and the Dashboard health panel both report OpenSpec status.
 - **Crash screen**: Use `Copy Error` to copy the exact message and recent runtime logs.
 
 ## 9. Verification and builds
@@ -191,7 +224,7 @@ npm run package
 
 ## 10. Project Stardust — OpenSpec Integration
 
-YodaMan 0.3.4 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow.
+YodaMan 0.3.8 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow.
 
 ### Setup
 

@@ -1,9 +1,15 @@
 const contextEngine = require('../infrastructure/ContextEngine');
+const { stripCliNoise } = require('../infrastructure/CliOutput');
+const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
 const toolBox = require('../infrastructure/ToolBox');
 const taskStore = require('../infrastructure/TaskStore');
 const graphifyService = require('../infrastructure/GraphifyService');
 const logger = require('../infrastructure/Logger');
 const defaultCodingSkill = require('./DefaultCodingSkill');
+const queueService = require('./QueueService');
+
+// Tools whose success invalidates the retrieval index and the knowledge graph.
+const MUTATING_TOOLS = new Set(['writeFile']);
 
 function safeToolName(rawToolCall) {
     try {
@@ -205,6 +211,8 @@ When project graph context is provided (you will see "Graphify knowledge graph r
 
         let conversation = `${this.getSystemPrompt()}${graphContext}${uploadedFileContext}\n\nUser Task: ${task}`;
         let iteration = 0;
+        // Workspaces this task wrote to, refreshed once when the task ends.
+        const touchedWorkspaces = new Set();
         let finalAnswer = '';
 
         console.log(`[Agent] 🧠 Starting reasoning loop for task: "${task.substring(0, 50)}..."`);
@@ -222,7 +230,8 @@ When project graph context is provided (you will see "Graphify knowledge graph r
             iteration++;
             console.log(`[Agent] Iteration ${iteration}/${this.maxIterations}`);
             
-            const { output } = await contextEngine.execute(['ask', '--', conversation]);
+            const raw = await contextEngine.execute(['ask', '--', conversation]);
+            const output = stripCliNoise(raw.output);
 
             if (this.isCancelled(taskId)) {
                 const event = { type: 'task_cancelled', taskId, message: 'Task cancelled.' };
@@ -246,13 +255,32 @@ When project graph context is provided (you will see "Graphify knowledge graph r
                     if (toolCall.name === 'writeFile') {
                         const oldContent = await toolBox.getFileContent(toolCall.parameters.filePath);
                         const newContent = toolCall.parameters.content;
+
+                        // A line diff says what changed; it never says what it costs.
+                        // Attach the graph-derived blast radius so the reviewer is
+                        // making a risk decision, not just reading a diff.
+                        const impact = metadata.projectId
+                            ? impactAnalyzer.analyzeFile(metadata.projectId, toolCall.parameters.filePath)
+                            : { available: false, reason: 'no workspace selected' };
+
+                        logger.info('approval_impact_assessed', {
+                            taskId,
+                            filePath: toolCall.parameters.filePath,
+                            available: impact.available,
+                            impactedCount: impact.impactedCount ?? null,
+                            testCount: impact.testCount ?? null,
+                            risk: impact.risk ?? null,
+                            summary: impactAnalyzer.summarize(impact)
+                        });
+
                         const pendingApproval = {
                             tool: 'writeFile',
                             params: {
                                 filePath: toolCall.parameters.filePath,
                                 oldContent,
                                 newContent
-                            }
+                            },
+                            impact
                         };
 
                         this.recordTask(taskId, {
@@ -260,11 +288,12 @@ When project graph context is provided (you will see "Graphify knowledge graph r
                             pendingApproval
                         });
 
-                        const approvalEvent = { 
-                            type: 'awaiting_approval', 
-                            tool: 'writeFile', 
+                        const approvalEvent = {
+                            type: 'awaiting_approval',
+                            tool: 'writeFile',
                             taskId,
-                            params: pendingApproval.params
+                            params: pendingApproval.params,
+                            impact
                         };
                         this.recordTaskEvent(taskId, approvalEvent);
                         if (onStep) onStep(approvalEvent);
@@ -308,6 +337,13 @@ When project graph context is provided (you will see "Graphify knowledge graph r
                     const resultStr = JSON.stringify(result, null, 2);
                     conversation += `\n\nSystem (Tool Result): ${resultStr}`;
                     
+                    // An accepted write makes the ctx index and the graph stale the
+                    // moment it lands. Mark the workspace dirty and refresh once
+                    // when the task ends, rather than rebuilding per write.
+                    if (MUTATING_TOOLS.has(toolCall.name) && !result?.error && metadata.projectId) {
+                        touchedWorkspaces.add(metadata.projectId);
+                    }
+
                     const endEvent = { type: 'tool_end', taskId, tool: toolCall.name, result };
                     this.recordTaskEvent(taskId, endEvent);
                     if (onStep) onStep(endEvent);
@@ -342,7 +378,30 @@ When project graph context is provided (you will see "Graphify knowledge graph r
         this.recordTask(taskId, { status: 'completed', finalAnswer });
         this.recordTaskEvent(taskId, { type: 'final_answer', taskId, answer: finalAnswer });
         this.cancelledTasks.delete(taskId);
+        this.refreshTouchedWorkspaces(touchedWorkspaces, taskId);
         return finalAnswer;
+    }
+
+    /**
+     * Re-sync the retrieval index and knowledge graph for workspaces this task
+     * modified. Fire-and-forget: the answer is already on its way to the user,
+     * and a failed refresh must never fail the task. Without this, every
+     * accepted write silently degrades the next answer.
+     */
+    refreshTouchedWorkspaces(workspaces, taskId) {
+        for (const projectPath of workspaces) {
+            logger.info('post_write_refresh_started', { taskId, path: projectPath });
+
+            try {
+                queueService.addToQueue(projectPath);
+            } catch (err) {
+                logger.error('post_write_reindex_failed', err, { taskId, path: projectPath });
+            }
+
+            graphifyService.build(projectPath, { update: true })
+                .then(() => logger.info('post_write_graph_updated', { taskId, path: projectPath }))
+                .catch(err => logger.error('post_write_graph_failed', err, { taskId, path: projectPath }));
+        }
     }
 
     clearTasks() {

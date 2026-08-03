@@ -4,10 +4,15 @@ const path = require('path');
 let db = null;
 let useSqlite = false;
 
+// Overridable so tests can use a throwaway database. Without this the suite
+// wrote into the live `yodaman.db`, leaving fake `test-task-*` rows in the
+// user's real task history and failing whenever the app held the file open.
+// Mirrors the existing YODAMAN_CONFIG_PATH convention.
+const DB_PATH = process.env.YODAMAN_DB_PATH || path.join(__dirname, '../../yodaman.db');
+
 try {
     const { DatabaseSync } = require('node:sqlite');
-    const dbPath = path.join(__dirname, '../../yodaman.db');
-    db = new DatabaseSync(dbPath);
+    db = new DatabaseSync(DB_PATH);
     useSqlite = true;
 
     // Initialize tables
@@ -39,5 +44,6 @@ try {
 
 module.exports = {
     db,
-    useSqlite
+    useSqlite,
+    dbPath: DB_PATH
 };
