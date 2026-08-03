@@ -259,7 +259,9 @@ export default function GraphStudio({ selectedProject }) {
         {error ? <div className="mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs leading-5 text-rose-200">{error}</div> : null}
       </aside>
 
-      <main className="relative min-w-0 overflow-hidden">
+      {/* The graph is projected data, so the surface reads as a projection:
+          faint scanlines and a cyan bloom, never over the content itself. */}
+      <main className="holo-surface holo-scan relative min-w-0 overflow-hidden">
         {(mode === 'mindmap' || mode === 'visualizer') ? (
           graphReady && activeArtifactExists ? (
             <iframe

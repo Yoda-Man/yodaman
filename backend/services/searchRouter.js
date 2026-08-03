@@ -10,6 +10,7 @@ const { classifyQuery } = require('../utils/queryClassifier');
 const toolBox = require('../infrastructure/ToolBox');
 const { preprocessDocumentation, updateCtxConfig } = require('../utils/docPreprocessor');
 const logger = require('../infrastructure/Logger');
+const graphRanker = require('../infrastructure/GraphRanker');
 
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
 
@@ -44,6 +45,27 @@ function normalizeTop(top) {
   return Math.min(Math.floor(value), 50);
 }
 
+/**
+ * Blend Graphify structure into Context Expert's ranking.
+ *
+ * Reranking is advisory: any failure returns the original results untouched, so
+ * a graph problem can never break search.
+ */
+function applyGraphRanking(results, { project, activeFile, req, mode }) {
+  if (!project || !Array.isArray(results) || results.length < 2) return results;
+  try {
+    return graphRanker.rerank(project, results, { activeFile });
+  } catch (err) {
+    logger.warn('search_graph_rerank_skipped', {
+      requestId: req?.id,
+      project,
+      mode,
+      reason: err.message
+    });
+    return results;
+  }
+}
+
 function logSearchFailure(err, { req, query, project, mode }) {
   logger.error('search_failed', err, {
     requestId: req.id,
@@ -66,7 +88,7 @@ async function docSearch({ query, project, top }) {
 }
 
 router.get('/', async (req, res) => {
-  const { query, project, top = 10 } = req.query;
+  const { query, project, top = 10, activeFile } = req.query;
   if (!query) return res.status(400).send('Query is required');
   const mode = classifyQuery(query);
   const resolvedProject = resolveProjectIdentifier(project);
@@ -77,7 +99,8 @@ router.get('/', async (req, res) => {
       return res.json({ mode: 'doc', results });
     }
     // default to code search
-    const results = await toolBox.searchCode({ query, project: resolvedProject, top: normalizedTop });
+    const raw = await toolBox.searchCode({ query, project: resolvedProject, top: normalizedTop });
+    const results = applyGraphRanking(raw, { project: resolvedProject, activeFile, req, mode: 'code' });
     return res.json({ mode: 'code', results });
   } catch (err) {
     logSearchFailure(err, { req, query, project: resolvedProject, mode });
@@ -86,12 +109,13 @@ router.get('/', async (req, res) => {
 });
 
 router.get('/code', async (req, res) => {
-  const { query, project, top = 10 } = req.query;
+  const { query, project, top = 10, activeFile } = req.query;
   if (!query) return res.status(400).send('Query is required');
   const resolvedProject = resolveProjectIdentifier(project);
   const normalizedTop = normalizeTop(top);
   try {
-    const results = await toolBox.searchCode({ query, project: resolvedProject, top: normalizedTop });
+    const raw = await toolBox.searchCode({ query, project: resolvedProject, top: normalizedTop });
+    const results = applyGraphRanking(raw, { project: resolvedProject, activeFile, req, mode: 'code' });
     res.json({ mode: 'code', results });
   } catch (err) {
     logSearchFailure(err, { req, query, project: resolvedProject, mode: 'code' });

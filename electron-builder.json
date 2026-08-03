@@ -21,6 +21,8 @@
   },
   "mac": {
     "icon": "electron/assets/yodaman.icns",
+    "entitlements": "electron/entitlements.mac.plist",
+    "entitlementsInherit": "electron/entitlements.mac.plist",
     "target": [
       "dmg",
       "zip",

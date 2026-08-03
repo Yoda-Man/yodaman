@@ -99,6 +99,10 @@ export const api = {
         return request(`${API_BASE}/plugins`);
     },
 
+    async openPlugin(name, project, diagnostics = {}) {
+        return request(`${API_BASE}/plugins/${encodeURIComponent(name)}/open`, jsonOptions('POST', { project, diagnostics }));
+    },
+
     async uploadPlugin(file) {
         const formData = new FormData();
         formData.append('plugin', file);
@@ -285,11 +289,39 @@ export const api = {
         return request(`${API_BASE}/agent/approve`, jsonOptions('POST', { taskId, approved }));
     },
 
+    async getReadiness(projectId) {
+        const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+        return request(`${API_BASE}/readiness${query}`);
+    },
+
     async cancelAgentTask(taskId) {
         return request(`${API_BASE}/agent/cancel`, jsonOptions('POST', { taskId }));
     },
 
     async setMode(mode, projectId) {
         return request(`${API_BASE}/mode`, jsonOptions('POST', { mode, projectId }));
+    },
+
+    // ── Stardust (OpenSpec wrapper) ──
+
+    async stardustDiagnose(projectRoot) {
+        const url = new URL(`${API_BASE}/stardust/diagnose`, window.location.origin);
+        if (projectRoot) url.searchParams.append('projectRoot', projectRoot);
+        return request(url);
+    },
+
+    async stardustRun({ action, changeId, title, description, specPath, projectRoot, dryRun, strict, specs, tools }) {
+        return request(`${API_BASE}/stardust/run`, jsonOptions('POST', {
+            action,
+            changeId,
+            title,
+            description,
+            specPath,
+            projectRoot,
+            dryRun,
+            strict,
+            specs,
+            tools,
+        }));
     },
 };

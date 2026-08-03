@@ -16,7 +16,6 @@ const requiredFiles = [
     'backend/interfaces/RestController.js',
     'backend/infrastructure/TaskStore.js',
     'backend/infrastructure/Database.js',
-    'docs/support-handover.md',
     'extensions/vscode-yodaman/package.json',
     'extensions/vscode-yodaman/README.md',
     'apps/mobile/README.md',

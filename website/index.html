@@ -21,6 +21,7 @@
     <nav aria-label="Primary">
       <a href="#ecosystem">Ecosystem</a>
       <a href="#pillars">Pillars</a>
+      <a href="#composition">New in 0.3.8</a>
       <a href="#holocron-vr">Holocron VR</a>
       <a href="#security">Security</a>
       <a href="#install">Install</a>
@@ -32,18 +33,18 @@
   <main id="top">
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-media hero-slider" aria-label="Holocron VR plugin preview">
-        <img src="./assets/holocron-slider/hero-constellation.png" alt="Holocron VR code constellation" />
-        <img src="./assets/holocron-slider/desktop-3d.png" alt="Holocron VR desktop 3D viewport" />
-        <img src="./assets/holocron-slider/vr-mode.png" alt="Holocron VR headset view" />
-        <img src="./assets/holocron-slider/info-panel.png" alt="Holocron VR selected node info panel" />
-        <img src="./assets/holocron-slider/settings-drawer.png" alt="Holocron VR settings drawer" />
-        <img src="./assets/holocron-slider/node-detail.png" alt="Holocron VR node detail close-up" />
-        <img src="./assets/holocron-slider/voice-command.png" alt="Holocron VR voice command feedback" />
-        <img src="./assets/holocron-slider/filtering.png" alt="Holocron VR filtered constellation view" />
-        <img src="./assets/holocron-slider/performance-hud.png" alt="Holocron VR performance HUD" />
+        <img src="./assets/holocron-slider/hero-constellation.png" alt="Holocron VR code constellation" data-title="Architecture at a glance" data-caption="Vivid clusters separate related modules while high-connectivity nodes surface as bright architectural hubs." />
+        <img src="./assets/holocron-slider/desktop-3d.png" alt="Holocron VR desktop 3D viewport" data-title="Explore without a headset" data-caption="Orbit, zoom, inspect, and follow relationships in the full desktop constellation." />
+        <img src="./assets/holocron-slider/vr-mode.png" alt="Holocron VR headset view" data-title="Step inside your codebase" data-caption="WebXR places the same local Graphify map around you with spatial navigation and controller selection." />
+        <img src="./assets/holocron-slider/info-panel.png" alt="Holocron VR selected node info panel" data-title="Useful node context" data-caption="Select a node to see its kind, source location, architecture cluster, and relationship count." />
+        <img src="./assets/holocron-slider/settings-drawer.png" alt="Holocron VR settings drawer" data-title="Tune the experience" data-caption="Adjust detail thresholds, filters, voice controls, and rendering limits for your machine." />
+        <img src="./assets/holocron-slider/node-detail.png" alt="Holocron VR node detail close-up" data-title="Follow real code relationships" data-caption="Color-coded files and symbols make dependencies and neighboring technologies easy to distinguish." />
+        <img src="./assets/holocron-slider/voice-command.png" alt="Holocron VR voice command feedback" data-title="Navigate naturally" data-caption="Use local voice commands to find files, isolate tests, restore the full graph, or fly to a symbol." />
+        <img src="./assets/holocron-slider/filtering.png" alt="Holocron VR filtered constellation view" data-title="Reduce graph noise" data-caption="Hide tests, generated files, and third-party code to focus on the architecture that matters." />
+        <img src="./assets/holocron-slider/performance-hud.png" alt="Holocron VR performance HUD" data-title="Built for large graphs" data-caption="Instanced rendering and distance-based detail keep dense local knowledge graphs responsive." />
         <div class="slider-caption">
-          <strong>Holocron VR plugin</strong>
-          <span>Turn any codebase into an explorable universe. Fly through your architecture.</span>
+          <strong>Architecture at a glance</strong>
+          <span>Vivid clusters separate related modules while high-connectivity nodes surface as bright architectural hubs.</span>
         </div>
       </div>
       <div class="hero-content">
@@ -73,8 +74,8 @@
       </div>
       <div>
         <strong>Autonomy with approval</strong>
-        <span>Agents can plan and edit code while human-reviewed diffs and audit trails keep changes under
-          control</span>
+        <span>Agents can plan and edit code, but every write stops for a diff that shows its blast radius &mdash; what
+          depends on the file and whether a test covers it</span>
       </div>
     </section>
 
@@ -138,6 +139,41 @@
           <h3>Extensible tools</h3>
           <p>Built-in tools cover search, reads, controlled writes, patches, commands, and file listing. Plugins add
             custom capabilities with declared permissions.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="composition" class="section pillars-section">
+      <div class="section-heading">
+        <p class="eyebrow">New in 0.3.8</p>
+        <h2>Three required tools that actually work together</h2>
+        <p>Context Expert, Graphify, and OpenSpec are all required &mdash; so YodaMan makes them compose. Each one&rsquo;s
+          output feeds the next instead of stopping at its own tab.</p>
+      </div>
+      <div class="pillar-grid">
+        <article>
+          <h3>Know the cost before you approve</h3>
+          <p>A line diff tells you what changed, never what it costs. Every write proposal now reports its blast radius
+            from the knowledge graph: how many files depend on the target, whether any test covers that path, and the
+            nearest dependents. A change reaching five or more files with no covering test is flagged as high risk.</p>
+        </article>
+        <article>
+          <h3>Search that understands structure</h3>
+          <p>Semantic search finds files that talk like your query; the graph finds files connected to what you are
+            editing. YodaMan blends both, so results near your working file rise while unrelated matches sink. In real
+            use this moved the file being asked about from tenth place to first, and dropped a lock file out of the top
+            five.</p>
+        </article>
+        <article>
+          <h3>Accepted changes never go stale</h3>
+          <p>An approved write used to leave the index and graph behind, quietly degrading the next answer. Touched
+            workspaces are now reindexed and re-graphed when the task ends &mdash; once per task, not once per file.</p>
+        </article>
+        <article>
+          <h3>One honest trust signal</h3>
+          <p>Index freshness and graph state were separate notions in separate tabs, so a stale answer looked exactly
+            like a correct one. A single badge now reports whether this workspace is current, refreshing, stale, or not
+            yet indexed &mdash; always the weakest layer, never an average.</p>
         </article>
       </div>
     </section>
@@ -206,7 +242,7 @@
         </div>
         <div>
           <h3>Command policy</h3>
-          <p>High-risk shell patterns are blocked by policy, with structured approval work planned next.</p>
+          <p>High-risk shell patterns are blocked by policy. Every file write pauses for a structured approval showing the diff, the files that depend on it, and whether any test covers the change.</p>
         </div>
         <div>
           <h3>Pairing tokens</h3>
@@ -228,7 +264,10 @@
         <article>
           <h3>1. Prerequisites</h3>
           <pre><code># Required — Context Expert (workspace indexing &amp; search)
-npm install -g @context-expert/cli
+npm install -g @contextexpert/cli
+
+# Required — OpenSpec (spec-driven development)
+npm install -g @fission-ai/openspec@latest
 
 # Required — Graphify (knowledge graphs)
 python3 -m pip install graphifyy
@@ -263,7 +302,7 @@ brew install ollama    # macOS
           <p>Download the plugin zip, extract it into your YodaMan plugins directory, reload plugins, then open the
             Holocron VR tab from YodaMan.</p>
         </div>
-        <pre><code>unzip holocron-vr-0.5.0.zip -d ~/.yodaman/plugins/holocron-vr
+        <pre><code>unzip holocron-vr-0.5.1.zip -d ~/.yodaman/plugins/holocron-vr
 yodaman</code></pre>
       </div>
     </section>
@@ -279,22 +318,22 @@ yodaman</code></pre>
         <article>
           <h3>macOS Desktop</h3>
           <p>Apple Silicon build for macOS users who want the full local workspace experience.</p>
-          <a class="button primary" href="downloads/YodaMan-0.3.2-arm64.dmg" download>Download DMG</a>
-          <a class="button secondary" href="downloads/YodaMan-0.3.2-arm64-mac.zip" download>Download macOS ZIP</a>
+          <a class="button primary" href="downloads/YodaMan-0.3.8-arm64.dmg" download>Download DMG</a>
+          <a class="button secondary" href="downloads/YodaMan-0.3.8-arm64-mac.zip" download>Download macOS ZIP</a>
           <span>Use the ZIP option when you prefer a portable package.</span>
         </article>
         <article>
           <h3>Windows Desktop</h3>
-          <p>Windows x64 installer and portable ZIP for local-first project work.</p>
-          <a class="button primary" href="downloads/YodaMan%20Setup%200.3.2.exe" download>Download EXE</a>
-          <a class="button secondary" href="downloads/YodaMan-0.3.2-win.zip" download>Download Windows ZIP</a>
-          <span>Use the installer for guided setup or the ZIP for portable use.</span>
+          <p>Windows x64 builds are produced on a native Windows runner so the installer is packaged correctly.</p>
+          <a class="button secondary" href="https://github.com/Yoda-Man/yodaman/actions">Latest Windows build</a>
+          <span>Grab the <code>yodaman-windows-latest</code> artifact from the most recent release run. A local
+            cross-build cannot package a working Windows installer, so we do not ship one from here.</span>
         </article>
         <article>
           <h3>Linux Desktop</h3>
           <p>Linux x64 AppImage and portable ZIP for flexible desktop installation.</p>
-          <a class="button primary" href="downloads/YodaMan-0.3.2.AppImage" download>Download AppImage</a>
-          <a class="button secondary" href="downloads/yodaman-0.3.2.zip" download>Download Linux ZIP</a>
+          <a class="button primary" href="downloads/YodaMan-0.3.8.AppImage" download>Download AppImage</a>
+          <a class="button secondary" href="downloads/yodaman-0.3.8.zip" download>Download Linux ZIP</a>
           <span>Choose AppImage for a single-file launch or ZIP for portable setup.</span>
         </article>
         <article>
@@ -302,15 +341,15 @@ yodaman</code></pre>
           <p>Install YodaMan from the Marketplace or download the VSIX for editor-native agent access.</p>
           <a class="button primary"
             href="https://marketplace.visualstudio.com/items?itemName=yodaman.vscode-yodaman">View on Marketplace</a>
-          <a class="button secondary" href="downloads/vscode-yodaman-0.3.2.vsix" download>Download VSIX</a>
+          <a class="button secondary" href="downloads/vscode-yodaman-0.3.8.vsix" download>Download VSIX</a>
           <span>Use the VSIX for offline installs or internal distribution.</span>
         </article>
         <article>
           <h3>Holocron VR Plugin</h3>
           <p>Install the Graphify VR explorer plugin for desktop 3D, WebXR code constellations, Git heatmaps, time
             travel, voice commands, and agent handoff.</p>
-          <a class="button primary" href="downloads/holocron-vr-0.5.0.zip" download>Download Plugin</a>
-          <span>Version 0.5.0. Extract into your YodaMan plugins directory, then reload plugins.</span>
+          <a class="button primary" href="downloads/holocron-vr-0.5.1.zip" download>Download Plugin</a>
+          <span>Version 0.5.1. Extract into your YodaMan plugins directory, then reload plugins.</span>
         </article>
         <article>
           <h3>Android Mobile</h3>
@@ -354,6 +393,8 @@ yodaman</code></pre>
       const el = document.querySelector('.hero-slider');
       if (!el) return;
       const imgs = el.querySelectorAll('img');
+      const title = el.querySelector('.slider-caption strong');
+      const caption = el.querySelector('.slider-caption span');
       if (imgs.length < 2) return;
       let idx = 0;
       const total = imgs.length;
@@ -367,6 +408,8 @@ yodaman</code></pre>
         imgs[idx].style.opacity = '0';
         idx = (idx + 1) % total;
         imgs[idx].style.opacity = '1';
+        if (title) title.textContent = imgs[idx].dataset.title || 'Holocron VR plugin';
+        if (caption) caption.textContent = imgs[idx].dataset.caption || imgs[idx].alt;
       }
 
       setInterval(next, interval);

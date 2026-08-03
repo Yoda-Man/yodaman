@@ -18,6 +18,11 @@ const pairingService = require('../infrastructure/PairingService');
 const logger = require('../infrastructure/Logger');
 const graphifyService = require('../infrastructure/GraphifyService');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
+const workspaceReadiness = require('../infrastructure/WorkspaceReadiness');
+const graphFacts = require('../infrastructure/GraphFacts');
+const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
+const specDrift = require('../stardust/SpecDrift');
+const stardustWrapper = require('../stardust/StardustWrapper');
 
 const multer = require('multer');
 
@@ -597,7 +602,7 @@ router.post('/ask', async (req, res) => {
         try {
             const timeoutMs = Number(process.env.YODAMAN_CTX_ASK_TIMEOUT_MS || 12000);
             const { output } = await contextEngine.execute(['ask', '--', augmentedQuestion], { timeoutMs });
-            answer = output.trim();
+            answer = contextEngine.stripCliNoise(output);
         } catch (ctxErr) {
             logger.warn('ask_ctx_fallback_started', {
                 requestId: req.id,
@@ -1001,6 +1006,46 @@ router.get('/plugins/:name/status', (req, res) => {
     });
 });
 
+router.post('/plugins/:name/open', async (req, res) => {
+    const { name } = req.params;
+    const plugin = toolBox.plugins.get(name);
+    if (!plugin || toolBox.disabledPlugins.has(name)) {
+        return jsonError(res, 404, 'Plugin not found or disabled', 'plugin_not_found');
+    }
+
+    try {
+        logger.info('plugin_open_requested', {
+            plugin: name,
+            project: req.body?.project,
+            diagnostics: req.body?.diagnostics,
+            userAction: 'open_plugin'
+        });
+        const result = await plugin.execute({ _action: 'open', project: req.body?.project });
+        if (!result?.opened) {
+            const error = new Error('Plugin completed without opening a viewer. The installed plugin does not implement the open action.');
+            logger.error('plugin_open_not_confirmed', error, {
+                plugin: name,
+                project: req.body?.project,
+                diagnostics: req.body?.diagnostics,
+                result,
+                userAction: 'open_plugin',
+                severity: 'high'
+            });
+            return res.status(501).json({ error: error.message, code: 'plugin_open_not_implemented', result });
+        }
+        logger.info('plugin_open_confirmed', { plugin: name, project: req.body?.project, diagnostics: req.body?.diagnostics });
+        res.json({ ok: true, name, project: req.body?.project, result });
+    } catch (err) {
+        logger.error('plugin_open_failed', err, {
+            plugin: name,
+            project: req.body?.project,
+            userAction: 'open_plugin',
+            severity: 'high'
+        });
+        res.status(500).json({ error: err.message, code: 'plugin_open_failed' });
+    }
+});
+
 router.post('/plugins/:name/enable', (req, res) => {
     const { name } = req.params;
     if (!toolBox.plugins.has(name) && !toolBox.disabledPlugins.has(name)) {
@@ -1054,7 +1099,7 @@ router.get('/status', async (req, res) => {
             llm: { model: 'Not Available', provider: 'none' },
             ok: false,
             error: err.message,
-            hint: 'Install ctx: npm install -g @context-expert/cli'
+            hint: 'Install ctx: npm install -g @contextexpert/cli'
         });
     }
 });
@@ -1123,6 +1168,7 @@ router.post('/logs/client-error', (req, res) => {
 });
 
 router.get('/desktop/diagnostics', (req, res) => {
+    const healthState = req.app ? req.app.get('healthState') : {};
     res.json({
         runtime: {
             pid: process.pid,
@@ -1141,7 +1187,13 @@ router.get('/desktop/diagnostics', (req, res) => {
             total: agentEngine.getTasks().length,
             pendingApprovals: agentEngine.getPendingApprovals().length
         },
-        plugins: toolBox.getPolicy().plugins
+        plugins: toolBox.getPolicy().plugins,
+        dependencies: {
+            ollama: healthState.ollama || null,
+            ctx: healthState.ctx || null,
+            graphify: healthState.graphify || null,
+            openspec: healthState.openspec || null,
+        }
     });
 });
 
@@ -1447,10 +1499,15 @@ router.post('/ctx/config', async (req, res) => {
 //  HEALTH & SELF-HEALING ENDPOINTS
 // ─────────────────────────────────────────────────────────────────────────
 
+// Last reported "<status>:<degraded keys>" signature, used to log health
+// transitions once instead of on every poll.
+let lastHealthSignature = null;
+
 /**
  * GET /api/health — Full health report.
  *
- * Returns status of every dependency the runtime needs. The Electron
+ * Returns status of every dependency the runtime needs, plus `degraded` and
+ * `pending` arrays naming the checks that need attention. The Electron
  * recovery page polls this on load to render the diagnostic dashboard.
  */
 router.get('/health', async (req, res) => {
@@ -1460,6 +1517,7 @@ router.get('/health', async (req, res) => {
         graphify: { ok: null, message: 'runtime not initialized' },
         ollama: { ok: null, message: 'runtime not initialized' },
         ctx: { ok: null, message: 'runtime not initialized' },
+        openspec: { ok: null, message: 'runtime not initialized' },
         config: { ok: null, message: 'runtime not initialized' },
         projects: 0,
         indexed: 0,
@@ -1480,28 +1538,62 @@ router.get('/health', async (req, res) => {
         return { ...c, ok, version: c.version || null };
     };
 
+    const reportedChecks = {
+        node: {
+            ok: true,
+            version: process.version,
+            message: `${process.version} on ${process.platform} ${process.arch}`
+        },
+        runtime: {
+            ok: true,
+            version: null,
+            message: `PID ${process.pid}, listening on port ${req.app?.get('port') || 3090}`
+        },
+        graphify: enrich(checks.graphify),
+        ollama: enrich(checks.ollama),
+        ctx: enrich(checks.ctx),
+        openspec: enrich(checks.openspec),
+        config: enrich(checks.config)
+    };
+
+    // Report the state we actually observed. Previously this always said
+    // "degraded" once startup finished, which hid genuine failures behind a
+    // permanent warning and gave the diagnostics page nothing to act on.
+    const degraded = Object.entries(reportedChecks)
+        .filter(([, check]) => check && check.ok === false)
+        .map(([name]) => name);
+    const pending = Object.entries(reportedChecks)
+        .filter(([, check]) => check && check.ok === null)
+        .map(([name]) => name);
+
+    const status = !checks.started
+        ? 'starting'
+        : degraded.length > 0 ? 'degraded' : 'ok';
+
+    // The diagnostics page polls this endpoint on a timer, so only log when the
+    // picture actually changes — otherwise the runtime log fills with repeats.
+    const signature = `${status}:${degraded.join(',')}`;
+    if (signature !== lastHealthSignature) {
+        lastHealthSignature = signature;
+        if (status === 'degraded') {
+            logger.warn('health_report_degraded', { degraded, pending });
+        } else {
+            logger.info('health_report_changed', { status, pending });
+        }
+    }
+
     res.json({
-        status: checks.started ? 'degraded' : 'starting',
+        status,
         started: checks.started,
         uptimeSeconds: Math.round(process.uptime()),
-        checks: {
-            node: {
-                ok: true,
-                version: process.version,
-                message: `${process.version} on ${process.platform} ${process.arch}`
-            },
-            runtime: {
-                ok: true,
-                version: null,
-                message: `PID ${process.pid}, listening on port ${req.app?.get('port') || 3090}`
-            },
-            graphify: enrich(checks.graphify),
-            ollama: enrich(checks.ollama),
-            ctx: enrich(checks.ctx),
-            config: enrich(checks.config)
-        },
+        checks: reportedChecks,
+        degraded,
+        pending,
         services: { ollama: ollamaRunning },
         projects: { total: checks.projects, indexed: checks.indexed, synced: checks.syncComplete },
+        // One trust verdict per workspace, so a client never has to reconcile
+        // index staleness against graph build state itself.
+        readiness: workspaceReadiness.forWorkspaces(config.watchedDirectories || []),
         memory: process.memoryUsage(),
         platform: { hostname: os.hostname(), release: os.release(), arch: os.arch() },
         tasks: {
@@ -1510,6 +1602,27 @@ router.get('/health', async (req, res) => {
         },
         plugins: toolBox.getPolicy().plugins
     });
+});
+
+/**
+ * GET /api/readiness — Can this workspace's answers be trusted right now?
+ *
+ * Query: ?projectId=<absolute path>  (omit for every watched workspace)
+ *
+ * Collapses Context Expert index state and the Graphify build state into one
+ * verdict, so a client does not have to reconcile them itself.
+ */
+router.get('/readiness', (req, res) => {
+    try {
+        const projectId = req.query.projectId;
+        if (projectId) {
+            return res.json(workspaceReadiness.forWorkspace(projectId));
+        }
+        return res.json(workspaceReadiness.forWorkspaces(config.watchedDirectories || []));
+    } catch (err) {
+        logger.error('readiness_check_failed', err, { requestId: req.id });
+        return jsonError(res, 500, err.message, 'readiness_failed');
+    }
 });
 
 /**
@@ -1550,9 +1663,8 @@ router.post('/health/install', (req, res) => {
         }
 
         case 'ctx': {
-            const installScript = process.platform === 'darwin'
-                ? 'npm install -g @context-expert/cli'
-                : 'npm install -g @context-expert/cli';
+            // Same command on every platform — see DependencyChecker.SERVICES.ctx.
+            const installScript = 'npm install -g @contextexpert/cli';
 
             logger.info('health_install_started', { component, command: installScript });
 
@@ -1561,7 +1673,7 @@ router.post('/health/install', (req, res) => {
                     res.json({
                         ok: false,
                         component,
-                        message: `Installation failed: ${err.message}. Install manually: npm install -g @context-expert/cli`,
+                        message: `Installation failed: ${err.message}. Install manually: npm install -g @contextexpert/cli`,
                         stdout: stdout || ''
                     });
                     return;
@@ -1571,8 +1683,174 @@ router.post('/health/install', (req, res) => {
             break;
         }
 
+        case 'openspec': {
+            const installScript = 'npm install -g @fission-ai/openspec@latest';
+
+            logger.info('health_install_started', { component, command: installScript });
+
+            execFile('/bin/sh', ['-c', installScript], { timeout: 120000 }, (err, stdout) => {
+                if (err) {
+                    res.json({
+                        ok: false,
+                        component,
+                        message: `Installation failed: ${err.message}. Install manually: npm install -g @fission-ai/openspec@latest`,
+                        stdout: stdout || ''
+                    });
+                    return;
+                }
+                res.json({ ok: true, component, message: 'OpenSpec installed. Restart the runtime.' });
+            });
+            break;
+        }
+
         default:
             res.status(400).json({ ok: false, message: `Unknown component: ${component}` });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Stardust — OpenSpec CLI wrapper
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/stardust/drift — Does the code still match the specs?
+ *
+ * Query: ?projectRoot=<absolute path>
+ *
+ * OpenSpec holds intended architecture; Graphify holds actual. This diffs them:
+ * specs citing files that no longer exist, and load-bearing modules no spec
+ * describes. Requires both an initialized OpenSpec and a built graph, and says
+ * which is missing rather than failing.
+ */
+router.get('/stardust/drift', (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const report = specDrift.detectDrift(projectRoot, {
+            minDependents: Number(req.query.minDependents) || 2
+        });
+        return res.json({ ...report, summary: specDrift.formatDrift(report) });
+    } catch (err) {
+        logger.error('spec_drift_failed', err, { requestId: req.id });
+        return jsonError(res, 500, err.message, 'spec_drift_failed');
+    }
+});
+
+/**
+ * GET /api/stardust/context — Graph-grounded context for authoring a change.
+ *
+ * Query: ?projectRoot=<path>&files=a.js,b.js
+ *
+ * A spec written without the graph invents module names and under-counts
+ * impact. This supplies the real blast radius for each file the change touches,
+ * plus the architectural hubs, so a proposal cites modules that exist.
+ */
+router.get('/stardust/context', (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const files = String(req.query.files || '')
+            .split(',')
+            .map(file => file.trim())
+            .filter(Boolean)
+            .slice(0, 25);
+
+        const facts = graphFacts.load(projectRoot);
+        if (!facts) {
+            return res.json({
+                available: false,
+                reason: 'no knowledge graph has been built for this workspace yet',
+                hint: 'Run Sync Repository, then request context again.'
+            });
+        }
+
+        return res.json({
+            available: true,
+            projectRoot,
+            graph: { files: facts.files.size, nodes: facts.nodeCount, links: facts.linkCount },
+            // Named so a spec author can cite real modules instead of guessing.
+            architecturalHubs: graphFacts.centralFiles(projectRoot, { limit: 10, facts }),
+            targets: files.map(file => {
+                const impact = impactAnalyzer.analyzeFile(projectRoot, file);
+                return {
+                    file,
+                    inGraph: impact.available,
+                    impactedCount: impact.impactedCount ?? null,
+                    coveringTests: impact.coveringTests ?? [],
+                    risk: impact.risk ?? null,
+                    dependents: impact.topDependents ?? [],
+                    summary: impactAnalyzer.summarize(impact)
+                };
+            })
+        });
+    } catch (err) {
+        logger.error('stardust_context_failed', err, { requestId: req.id });
+        return jsonError(res, 500, err.message, 'stardust_context_failed');
+    }
+});
+
+router.get('/stardust/diagnose', async (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const result = await stardustWrapper.diagnose(projectRoot);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/stardust/run', async (req, res) => {
+    try {
+        const { action, changeId, title, description, specPath, projectRoot, dryRun, strict } = req.body || {};
+
+        if (!action) {
+            return res.status(400).json({ error: 'Missing required field: action' });
+        }
+
+        let result;
+        const opts = { cwd: projectRoot || process.cwd() };
+
+        switch (action) {
+            case 'diagnose':
+                result = await stardustWrapper.diagnose(opts.cwd);
+                break;
+            case 'validate':
+                if (!changeId) {
+                    return res.status(400).json({ error: 'validate requires changeId' });
+                }
+                result = await stardustWrapper.validate(changeId, opts);
+                break;
+            case 'archive':
+                if (!changeId) {
+                    return res.status(400).json({ error: 'archive requires changeId' });
+                }
+                result = await stardustWrapper.archive(changeId, opts);
+                break;
+            case 'list':
+                result = await stardustWrapper.list({ specs: req.body.specs, cwd: opts.cwd });
+                break;
+            case 'init':
+                if (!projectRoot) {
+                    return res.status(400).json({ error: 'init requires projectRoot' });
+                }
+                result = await stardustWrapper.init(projectRoot, { tools: req.body.tools || 'all' });
+                break;
+            case 'install':
+                result = await stardustWrapper.install();
+                break;
+            default:
+                return res.status(400).json({ error: `Unknown stardust action: ${action}` });
+        }
+
+        res.json({
+            success: result.success,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.code,
+            // Include full diagnose result when action is 'diagnose'
+            ...(action === 'diagnose' && result._debug ? { diagnostics: result } : {}),
+            ...(action === 'diagnose' && !result._debug ? { diagnostics: result } : {}),
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

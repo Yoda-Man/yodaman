@@ -220,11 +220,11 @@ const SERVICES = {
         executable: 'ctx',
         versionArgs: ['--version'],
         runningCheck: null,
-        installUrl: 'npm install -g @context-expert/cli',
+        installUrl: 'npm install -g @contextexpert/cli',
         installHint: {
-            darwin: 'npm install -g @context-expert/cli',
-            linux: 'npm install -g @context-expert/cli',
-            win32: 'npm install -g @context-expert/cli',
+            darwin: 'npm install -g @contextexpert/cli',
+            linux: 'npm install -g @contextexpert/cli',
+            win32: 'npm install -g @contextexpert/cli',
         },
     },
     graphify: {
@@ -238,6 +238,17 @@ const SERVICES = {
             darwin: 'python3 -m pip install --user graphifyy',
             linux: 'python3 -m pip install --user graphifyy',
             win32: 'py -m pip install graphifyy',
+        },
+    },
+    openspec: {
+        executable: 'openspec',
+        versionArgs: ['--version'],
+        runningCheck: null,
+        installUrl: 'npm install -g @fission-ai/openspec@latest',
+        installHint: {
+            darwin: 'npm install -g @fission-ai/openspec@latest',
+            linux: 'npm install -g @fission-ai/openspec@latest',
+            win32: 'npm install -g @fission-ai/openspec@latest',
         },
     },
 };

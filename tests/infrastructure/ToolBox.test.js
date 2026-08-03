@@ -154,6 +154,29 @@ describe('ToolBox', () => {
         }
     });
 
+    test('searchCode falls back to literal search when ctx returns no matches', async () => {
+        const originalExecuteJson = contextEngine.executeJson;
+        const searchFile = path.join(tempDir, 'plugin-registry.js');
+        fs.writeFileSync(searchFile, 'export const plugins = new Map();\n', 'utf8');
+        contextEngine.executeJson = jest.fn(async () => []);
+
+        try {
+            const results = await toolBox.searchCode({ query: 'plugins', project: tempDir, top: 5 });
+
+            expect(results).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    content: expect.stringContaining('plugins'),
+                    metadata: expect.objectContaining({
+                        path: searchFile,
+                        source: 'filesystem-fallback'
+                    })
+                })
+            ]));
+        } finally {
+            contextEngine.executeJson = originalExecuteJson;
+        }
+    });
+
     test('filesystem search fallback skips secret environment files', async () => {
         const secretFile = path.join(tempDir, '.env');
         const publicFile = path.join(tempDir, 'menu-docs.md');

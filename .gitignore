@@ -8,10 +8,15 @@ dist/
 release/
 coverage/
 config.json
+reasonix.toml
 audit-log.json
 task-history.json
 audit-log.jsonl
 task-history.jsonl
+
+# Local user data — chat history and the runtime database must never be committed
+sessions.json
+yodaman.db
 
 # Desktop clients
 electron/dist/
@@ -63,3 +68,4 @@ yodaman.db-shm
 
 # Graphify generated workspace artifacts
 graphify-out/
+yodaman-0.2.2.tgz

@@ -43,7 +43,7 @@ const featureGroups = [
         icon: GitBranch,
         title: 'Graphify',
         items: [
-            'Graphify is required in version 0.3.2 and uses Ollama local execution only for semantic extraction.',
+            'Graphify is required in version 0.3.3 and uses Ollama local execution only for semantic extraction.',
             'Graphify builds knowledge graphs for code, docs, diagrams, and architecture.',
             'Sync Repository updates the Context Expert index and the Graphify graph together.',
             'Run yodaman doctor --graph to check active graphs, freshness, orphaned nodes, and the most dependency-heavy file.',
@@ -131,10 +131,10 @@ export default function ManualWindow() {
                         YodaMan Manual
                     </h1>
                     <p className="text-lg leading-relaxed text-slate-400 max-w-3xl">
-                        YodaMan 0.3.2 is a local-first workspace intelligence system for developers. It connects the web UI, desktop app, VS Code extension, mobile companion, CLI runtime, mandatory Graphify knowledge graphs, plugins, search, chat, supervised agent workflows, and a growing ecosystem of pre-installed tools around one private local runtime.
+                        YodaMan 0.3.3 is a local-first workspace intelligence system for developers. It connects the web UI, desktop app, VS Code extension, mobile companion, CLI runtime, mandatory Graphify knowledge graphs, plugins, search, chat, supervised agent workflows, and a growing ecosystem of pre-installed tools around one private local runtime.
                     </p>
                     <div className="mt-6 flex flex-wrap items-center gap-3">
-                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.3.2</span>
+                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">Version 0.3.3</span>
                         <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-400">Local runtime</span>
                         <span className="px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest text-cyan-300">Graphify required</span>
                         <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-300">Human approved writes</span>
@@ -172,8 +172,9 @@ export default function ManualWindow() {
                 <section className="mb-14">
                     <h2 className="text-2xl font-black text-white mb-5">Quick commands</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <CommandBlock title="Install and run" code={`npm install -g @contextexpert/cli\npython3 -m pip install graphifyy\nnpm install\nsh setup.sh\nnpm start`} />
+                        <CommandBlock title="Install and run" code={`npm install -g @contextexpert/cli\nnpm install -g @fission-ai/openspec@latest\npython3 -m pip install graphifyy\nnpm install\nsh setup.sh\nnpm start`} />
                         <CommandBlock title="Develop and verify" code={`npm run client\nnpm test\nnpm run build\nnpm run release:smoke`} />
+                        <CommandBlock title="Dependency health" code={`yodaman doctor\nyodaman doctor --json`} />
                         <CommandBlock title="Graphify health" code={`yodaman doctor --graph`} />
                         <CommandBlock title="Desktop builds" code={`npm run desktop\nnpm run desktop:pack\nnpm run desktop:dist`} />
                         <CommandBlock title="VS Code extension" code={`cd extensions/vscode-yodaman\nnpm install\nnpm run lint\nnpm run package`} />
@@ -184,8 +185,10 @@ export default function ManualWindow() {
                     <h2 className="text-2xl font-black text-white mb-5">Troubleshooting</h2>
                     <div className="space-y-3 text-sm text-slate-400">
                         <Trouble title="Runtime unreachable" text="Confirm port 3090 is free, then use YodaMan > Restart Managed Runtime or run yodaman from Terminal." />
+                        <Trouble title="Not sure what is missing" text="Run yodaman doctor for a full report on Ollama, ctx, Graphify, and OpenSpec, including the install command for anything missing." />
                         <Trouble title="Context Expert missing" text="Install @contextexpert/cli and verify ctx --version works in your shell." />
                         <Trouble title="Graphify missing" text="Install graphifyy, verify graphify --help works, or set YODAMAN_GRAPHIFY_BIN to the executable path." />
+                        <Trouble title="OpenSpec missing" text="Install @fission-ai/openspec@latest and verify openspec --version works, or use Install Now in the Stardust tab or the desktop diagnostics screen." />
                         <Trouble title="Graph health warnings" text="Run yodaman doctor --graph, then sync the affected workspace if orphaned nodes or missing graphs are reported." />
                         <Trouble title="Moved repository" text="Open Settings, edit the workspace path, save, then run Sync Repository." />
                         <Trouble title="Search looks stale" text="Select the workspace and run Sync Repository to queue a fresh index." />

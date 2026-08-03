@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react'
 import ProjectList from './components/ProjectList'
 import AgentChatTab from './components/AgentChatTab'
-import SearchWindow from './components/SearchWindow'
 import Dashboard from './components/Dashboard'
 import StatusBar from './components/StatusBar'
 import SettingsModal from './components/SettingsModal'
 import LogsModal from './components/LogsModal'
 import WelcomeModal from './components/WelcomeModal'
-import ManualWindow from './components/ManualWindow'
+import Stardust from './components/Stardust'
 import PluginsWindow from './components/PluginsWindow'
 import GraphStudio from './components/GraphStudio'
-import { MessageSquare, Search, LayoutDashboard, Book, Puzzle, Settings, Terminal, GitBranch } from 'lucide-react'
+import HolocronVrModal from './components/HolocronVrModal'
+import { MessageSquare, LayoutDashboard, Puzzle, Settings, Terminal, GitBranch, Sparkles } from 'lucide-react'
 
 import { api } from './api/api'
 
@@ -19,11 +19,15 @@ export default function App() {
   const [selectedProject, setSelectedProject] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isLogsOpen, setIsLogsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('chat') // 'chat', 'search', 'dashboard', 'manual', 'plugins'
+  const [activeTab, setActiveTab] = useState('chat') // 'chat', 'graph', 'dashboard', 'plugins', 'stardust'
   const [isRefreshingProjects, setIsRefreshingProjects] = useState(false)
+  const [vrLaunch, setVrLaunch] = useState(null)
 
   useEffect(() => {
     fetchProjects()
+    const openVr = event => setVrLaunch(event.detail)
+    window.addEventListener('yodaman:view-in-vr', openVr)
+    return () => window.removeEventListener('yodaman:view-in-vr', openVr)
   }, [])
 
 
@@ -134,13 +138,6 @@ export default function App() {
                 Chat
               </button>
               <button 
-                onClick={() => setActiveTab('search')}
-                className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'search' ? 'bg-white/[0.03] text-indigo-400 border-indigo-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
-              >
-                <Search size={14} />
-                Search
-              </button>
-              <button 
                 onClick={() => setActiveTab('graph')}
                 className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'graph' ? 'bg-white/[0.03] text-cyan-300 border-cyan-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
               >
@@ -162,11 +159,11 @@ export default function App() {
                 Plugins
               </button>
               <button 
-                onClick={() => setActiveTab('manual')}
-                className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'manual' ? 'bg-white/[0.03] text-indigo-400 border-indigo-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
+                onClick={() => setActiveTab('stardust')}
+                className={`flex items-center gap-2 px-6 py-2 rounded-t-2xl border-t border-x border-white/5 transition-all font-bold text-xs uppercase tracking-widest ${activeTab === 'stardust' ? 'bg-white/[0.03] text-amber-400 border-amber-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.01]'}`}
               >
-                <Book size={14} />
-                Manual
+                <Sparkles size={14} />
+                Stardust
               </button>
             </div>
             <div className="mb-2 flex shrink-0 items-center gap-2">
@@ -190,12 +187,21 @@ export default function App() {
           </div>
 
           <div className="flex-1 overflow-y-auto bg-white/[0.01] border-t border-white/5 custom-scrollbar">
-            {activeTab === 'chat' && <AgentChatTab selectedProject={selectedProject} />}
-            {activeTab === 'search' && <SearchWindow selectedProject={selectedProject} />}
-            {activeTab === 'graph' && <GraphStudio selectedProject={selectedProject} />}
-            {activeTab === 'dashboard' && <Dashboard />}
-            {activeTab === 'manual' && <ManualWindow />}
-            {activeTab === 'plugins' && <PluginsWindow selectedProject={selectedProject} />}
+            <div style={{display: activeTab === 'chat' ? 'contents' : 'none'}}>
+              <AgentChatTab selectedProject={selectedProject} />
+            </div>
+            <div style={{display: activeTab === 'graph' ? 'contents' : 'none'}}>
+              <GraphStudio selectedProject={selectedProject} />
+            </div>
+            <div style={{display: activeTab === 'dashboard' ? 'contents' : 'none'}}>
+              <Dashboard />
+            </div>
+            <div style={{display: activeTab === 'stardust' ? 'contents' : 'none'}}>
+              <Stardust selectedProject={selectedProject} />
+            </div>
+            <div style={{display: activeTab === 'plugins' ? 'contents' : 'none'}}>
+              <PluginsWindow selectedProject={selectedProject} />
+            </div>
           </div>
 
         </div>
@@ -216,6 +222,8 @@ export default function App() {
       {isLogsOpen && (
         <LogsModal onClose={() => setIsLogsOpen(false)} />
       )}
+
+      {vrLaunch?.selectedProject && <HolocronVrModal project={vrLaunch.selectedProject} diagnostics={vrLaunch.diagnostics} onClose={() => setVrLaunch(null)} />}
 
       <WelcomeModal />
     </div>

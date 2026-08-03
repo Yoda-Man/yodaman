@@ -2,7 +2,7 @@
 
 YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime.
 
-![Version](https://img.shields.io/badge/Version-0.3.2-gold)
+![Version](https://img.shields.io/badge/Version-0.3.8-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -15,16 +15,6 @@ YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It con
 - **Extend the assistant**: Add JavaScript plugins for custom tools. Three pre-installed plugins (CodeTrooper, Droid-Sweep, Grand Inquisitor) plus community plugins like Lightsaber.
 - **Choose query intent**: Switch between Code and Docs modes for more relevant answers.
 - **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
-
-## Version 0.3.2 — What's New
-
-- **Pre-installed plugins**: CodeTrooper (line counter), Droid-Sweep (unused file finder), Grand Inquisitor (dependency scanner), Lightsaber (Git hotspot analysis)
-- **Plugin enable/disable**: Toggle any plugin on/off from Settings → Developer Settings without restarting
-- **Centralized settings**: All environment-level settings managed through the Settings API and UI
-- **Legacy plugin support**: Holocron VR and other community plugins using the `onLoad` lifecycle now work automatically
-- **Zip plugin upload**: Upload plugins as `.zip` files — extracts and validates automatically
-- **Chat improvements**: Code/Docs mode toggle, animated processing indicators, 10-second fallback for slow connections, Clear conversation button, 50-message cap
-- **Scrolling fixes**: Vertical scrollbar in chat works properly
 
 ## Core Pillars
 
@@ -53,6 +43,7 @@ Built-in tools cover file reads, controlled writes, exact patching, command exec
 - Node.js 18+
 - Python 3.10+
 - Context Expert CLI: `npm install -g @contextexpert/cli`
+- OpenSpec CLI: `npm install -g @fission-ai/openspec@latest`
 - Graphify: `pip install graphifyy`
 - Ollama (for local model execution)
 
@@ -71,6 +62,22 @@ The runtime listens on `http://localhost:3090`. For the desktop app:
 ```bash
 npm run desktop
 ```
+
+## Health Checks
+
+Verify every required dependency — Ollama, Context Expert (`ctx`), Graphify, and OpenSpec — before starting:
+
+```bash
+yodaman doctor
+```
+
+Each tool reports its version, resolved path, and reachability, and anything missing lists the install command for your platform. The command exits non-zero when a dependency is missing or unreachable, so it can gate a script or CI step; add `--json` for machine-readable output. To check knowledge graph freshness instead:
+
+```bash
+yodaman doctor --graph
+```
+
+The same dependency checks run at startup, appear in the Dashboard health panel and `GET /api/health`, and appear on the desktop startup diagnostics screen where missing components offer a one-click install.
 
 ## Key Technologies
 

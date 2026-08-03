@@ -5,6 +5,7 @@ const { exec } = require('child_process');
 const contextEngine = require('./ContextEngine');
 const auditLog = require('./AuditLog');
 const graphifyService = require('./GraphifyService');
+const specDrift = require('../stardust/SpecDrift');
 const logger = require('./Logger');
 
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
@@ -167,7 +168,8 @@ class ToolBox {
             "7. graphifyQuery(query, project): Queries the workspace knowledge graph for related code, docs, and diagram relationships.",
             "8. graphifyExplain(node, project): Explains a graph node and its neighbors.",
             "9. graphifyPath(source, target, project): Finds a graph path between two entities.",
-            "10. graphifyAffected(node, project, depth): Finds nodes likely impacted by a change to a graph entity."
+            "10. graphifyAffected(node, project, depth): Finds nodes likely impacted by a change to a graph entity.",
+            "11. specDrift(project): Compares OpenSpec intent against the actual graph — specs citing files that no longer exist, and load-bearing modules no spec describes."
         ];
 
         const pluginDocs = Array.from(this.plugins.values()).map((p, i) => {
@@ -244,8 +246,11 @@ class ToolBox {
         if (project) args.push('-p', this.resolveAllowedPath(project));
         try {
             const results = await contextEngine.executeJson(args);
-            if (Array.isArray(results)) return results;
-            if (Array.isArray(results?.results)) return results.results;
+            if (Array.isArray(results) && results.length > 0) return results;
+            if (Array.isArray(results?.results) && results.results.length > 0) return results.results;
+            if (Array.isArray(results) || Array.isArray(results?.results)) {
+                return this.searchCodeFilesystem({ query, project, top });
+            }
             if (results?.error || results?.message) {
                 throw new Error(results.error || results.message);
             }
@@ -371,6 +376,16 @@ class ToolBox {
         const projectPath = this.resolveAllowedPath(project || process.cwd());
         const impact = await graphifyService.affected(node, projectPath, { depth, relations });
         return { impact, graphPath: graphifyService.graphPath(projectPath) };
+    }
+
+    /**
+     * Architecture drift: what the specs say versus what the code does.
+     * Only possible because OpenSpec and Graphify are both mandatory.
+     */
+    async specDrift({ project, minDependents = 2 }) {
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        const report = specDrift.detectDrift(projectPath, { minDependents });
+        return { ...report, summary: specDrift.formatDrift(report) };
     }
 
     async getFileContent(filePath) {

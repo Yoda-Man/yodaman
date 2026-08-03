@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const graphifyDoctor = require('../backend/infrastructure/GraphifyDoctor');
+const dependencyDoctor = require('../backend/infrastructure/DependencyDoctor');
 
 const args = process.argv.slice(2);
 
@@ -173,9 +174,26 @@ if (args[0] === 'doctor' && args.includes('--graph')) {
     }
 }
 
+// ─── doctor (no flags) — required runtime dependency health ────────────
+// Checks the same dependency set the runtime validates at startup:
+// Ollama, Context Expert (ctx), Graphify, and OpenSpec.
 if (args[0] === 'doctor') {
-    console.error('Usage: yodaman doctor --graph');
-    process.exit(1);
+    const asJson = args.includes('--json');
+
+    dependencyDoctor.runDependencyDoctor()
+        .then(report => {
+            if (asJson) {
+                console.log(JSON.stringify(report, null, 2));
+            } else {
+                console.log(dependencyDoctor.formatDependencyReport(report));
+            }
+            process.exit(report.ok ? 0 : 1);
+        })
+        .catch(err => {
+            console.error(`Dependency health check failed: ${err.message}`);
+            process.exit(1);
+        });
+    return;
 }
 
 // The main server file is in the parent directory of this script

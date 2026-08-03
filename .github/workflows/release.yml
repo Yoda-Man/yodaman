@@ -1,0 +1,95 @@
+name: Release artifacts
+
+# Desktop artifacts are built on native runners, one per platform.
+#
+# The Windows installer specifically CANNOT be produced on macOS or Linux:
+# electron-builder needs Wine to execute the NSIS packager, and Wine's memory
+# layout assumptions fail under QEMU x86 emulation on Apple Silicon
+# ("anon_mmap_fixed: Assertion failed"). The build reaches the packaging step and
+# then dies, leaving a truncated stub .exe that looks plausible but does not
+# work. A native windows-latest runner is the only reliable way to build it.
+#
+# Trigger manually, or by pushing a v* tag.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing must not discard artifacts from the others.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS (arm64)
+            args: --mac --arm64
+            artifacts: |
+              release/*.dmg
+              release/*-mac.zip
+          - os: windows-latest
+            label: Windows (x64)
+            args: --win --x64
+            artifacts: |
+              release/*.exe
+              release/*-win.zip
+          - os: ubuntu-latest
+            label: Linux (x64)
+            args: --linux --x64
+            artifacts: |
+              release/*.AppImage
+              release/yodaman-*.zip
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Build desktop artifacts
+        run: npx electron-builder --config electron-builder.json ${{ matrix.args }}
+        env:
+          # Do not attempt to discover a signing identity on CI. Signing and
+          # notarization are a separate, credentialed step — an unsigned
+          # artifact is honest, a half-signed one is not.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Reject truncated Windows installer
+        # A stub .exe is worse than a missing one: the download link works and
+        # the installer does not. Fail loudly instead of publishing it.
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem release/*.exe | Select-Object -First 1
+          if (-not $exe) { throw "No installer was produced" }
+          $mb = [math]::Round($exe.Length / 1MB, 1)
+          Write-Host "Installer: $($exe.Name) ($mb MB)"
+          if ($exe.Length -lt 50MB) {
+            throw "Installer is only $mb MB — the payload was not embedded. Refusing to publish."
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yodaman-${{ matrix.os }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error
+          retention-days: 14

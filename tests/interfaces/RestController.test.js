@@ -225,6 +225,7 @@ describe('RestController Integration', () => {
                 graphify: { ok: false, message: 'not checked' },
                 ollama: { ok: false, message: 'not checked' },
                 ctx: { ok: false, message: 'not checked' },
+                openspec: { ok: false, message: 'not checked' },
                 config: { ok: false, message: 'not checked' },
                 projects: 0,
                 indexed: 0,
@@ -239,7 +240,12 @@ describe('RestController Integration', () => {
         expect(response.payload.checks.graphify.ok).toBeNull();
         expect(response.payload.checks.ollama.ok).toBeNull();
         expect(response.payload.checks.ctx.ok).toBeNull();
+        expect(response.payload.checks.openspec.ok).toBeNull();
         expect(response.payload.checks.config.ok).toBeNull();
+        expect(response.payload.degraded).toEqual([]);
+        expect(response.payload.pending).toEqual(
+            expect.arrayContaining(['graphify', 'ollama', 'ctx', 'openspec', 'config'])
+        );
     });
 
     test('GET /health preserves failed dependency checks after startup completes', async () => {
@@ -249,6 +255,7 @@ describe('RestController Integration', () => {
                 graphify: { ok: false, message: 'graphify not found' },
                 ollama: { ok: false, message: 'ollama not found' },
                 ctx: { ok: true, message: 'available' },
+                openspec: { ok: true, message: 'v1.5.0 at /usr/local/bin/openspec' },
                 config: { ok: true, message: 'loaded (0 dirs)' },
                 projects: 0,
                 indexed: 0,
@@ -262,7 +269,53 @@ describe('RestController Integration', () => {
         expect(response.payload.checks.graphify.ok).toBe(false);
         expect(response.payload.checks.ollama.ok).toBe(false);
         expect(response.payload.checks.ctx.ok).toBe(true);
+        expect(response.payload.checks.openspec.ok).toBe(true);
         expect(response.payload.checks.config.ok).toBe(true);
+        expect(response.payload.degraded).toEqual(['graphify', 'ollama']);
+    });
+
+    test('GET /health reports a missing openspec install as degraded', async () => {
+        const response = await invokeWithAppSettings('get', '/health', {
+            healthState: {
+                started: true,
+                graphify: { ok: true, message: 'available' },
+                ollama: { ok: true, message: 'v0.30.8 (running)' },
+                ctx: { ok: true, message: 'available' },
+                openspec: { ok: false, message: 'openspec not found' },
+                config: { ok: true, message: 'loaded (0 dirs)' },
+                projects: 0,
+                indexed: 0,
+                syncComplete: true
+            },
+            port: 3090
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.payload.status).toBe('degraded');
+        expect(response.payload.degraded).toEqual(['openspec']);
+        expect(response.payload.checks.openspec.ok).toBe(false);
+    });
+
+    test('GET /health reports ok once every dependency passes', async () => {
+        const response = await invokeWithAppSettings('get', '/health', {
+            healthState: {
+                started: true,
+                graphify: { ok: true, message: 'available' },
+                ollama: { ok: true, message: 'v0.30.8 (running)' },
+                ctx: { ok: true, message: 'v1.4.0' },
+                openspec: { ok: true, message: 'v1.5.0' },
+                config: { ok: true, message: 'loaded (1 dirs)' },
+                projects: 1,
+                indexed: 1,
+                syncComplete: true
+            },
+            port: 3090
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.payload.status).toBe('ok');
+        expect(response.payload.degraded).toEqual([]);
+        expect(response.payload.pending).toEqual([]);
     });
 
     test('GET /git endpoints expose local history, heatmap, branch, and commit diff', async () => {
@@ -312,6 +365,47 @@ describe('RestController Integration', () => {
         expect(response.statusCode).toBe(400);
         expect(response.payload).toEqual(expect.objectContaining({
             code: 'invalid_request'
+        }));
+    });
+
+    test('POST /plugins/:name/open invokes a loaded plugin for the selected workspace', async () => {
+        const toolBox = require('../../backend/infrastructure/ToolBox');
+        const execute = jest.fn(async ({ _action, project }) => ({ opened: true, _action, project }));
+        toolBox.plugins.set('holocron-vr', {
+            name: 'holocron-vr',
+            permissions: [],
+            execute
+        });
+
+        try {
+            const response = await invoke('post', '/plugins/:name/open', {
+                params: { name: 'holocron-vr' },
+                body: { project: '/workspace/yodaman' }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(execute).toHaveBeenCalledWith({
+                _action: 'open',
+                project: '/workspace/yodaman'
+            });
+            expect(response.payload).toEqual(expect.objectContaining({
+                ok: true,
+                project: '/workspace/yodaman'
+            }));
+        } finally {
+            toolBox.plugins.delete('holocron-vr');
+        }
+    });
+
+    test('POST /plugins/:name/open rejects an unavailable plugin', async () => {
+        const response = await invoke('post', '/plugins/:name/open', {
+            params: { name: 'missing-plugin' },
+            body: { project: '/workspace/yodaman' }
+        });
+
+        expect(response.statusCode).toBe(404);
+        expect(response.payload).toEqual(expect.objectContaining({
+            code: 'plugin_not_found'
         }));
     });
 
@@ -405,7 +499,9 @@ describe('RestController Integration', () => {
     test('GET /projects does not promote ctx-only temp projects into saved workspaces', async () => {
         const originalExecuteJson = contextEngine.executeJson;
         const originalConfig = fs.existsSync(configPath()) ? fs.readFileSync(configPath(), 'utf8') : undefined;
-        const anchorPath = '/Users/developer/Documents/Anchor';
+        // Portable stand-in for a registered workspace — never a real home path,
+        // which would leak the developer's username into the public repository.
+        const anchorPath = path.join(os.tmpdir(), 'yodaman-registered-Anchor');
         const tempWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-graph-studio-'));
 
         try {

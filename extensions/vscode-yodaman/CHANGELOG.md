@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.8
+
+- Align extension package version with the YodaMan `0.3.8` release.
+- Runtime health checks now include OpenSpec, so an offline or missing OpenSpec install is reported alongside Ollama, `ctx`, and Graphify.
+
 ## 0.2.2
 
 - Align extension package version with the YodaMan `0.2.2` release.
