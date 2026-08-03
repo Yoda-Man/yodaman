@@ -2,7 +2,7 @@
  * Stardust — OpenSpec dashboard with real-time change board, spec diff,
  * activity feed, architecture drift detection, and CLI commands.
  *
- * Tabs: Board (cards + diff) | Drift | Diagnostics | Commands
+ * Tabs: Board (cards + diff) | Drift | Compose | Trust | SearchTrace | Diagnostics | Commands
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -10,13 +10,16 @@ import {
     Zap, Activity, CheckCircle2, XCircle, Play, FileCheck, Archive,
     FolderOpen, Terminal, Download, RefreshCw, ChevronDown, ChevronRight,
     Loader2, Clipboard, BarChart3, LayoutGrid, GitCompare, Wrench,
-    AlertTriangle,
+    AlertTriangle, Link2, Shield, Search,
 } from 'lucide-react';
 import { api } from '../api/api';
 import { useStardustLive } from '../hooks/useStardustLive';
 import ChangeCard from './ChangeCard';
 import SpecDiff from './SpecDiff';
 import SpecDriftPanel from './SpecDriftPanel';
+import ComposePanel from './ComposePanel';
+import TrustDashboard from './TrustDashboard';
+import SearchTrace from './SearchTrace';
 import { ActivityDrawer } from './ActivityFeed';
 
 // ── Console helpers ──
@@ -206,6 +209,9 @@ export default function Stardust({ selectedProject }) {
     const tabs = [
         { id: 'board', icon: LayoutGrid, label: 'Board' },
         { id: 'drift', icon: GitCompare, label: 'Drift' },
+        { id: 'compose', icon: Link2, label: 'Compose' },
+        { id: 'trust', icon: Shield, label: 'Trust' },
+        { id: 'trace', icon: Search, label: 'Trace' },
         { id: 'diagnostics', icon: Activity, label: 'Diagnostics' },
         { id: 'commands', icon: Terminal, label: 'Commands' },
     ];
@@ -308,6 +314,27 @@ export default function Stardust({ selectedProject }) {
                 {tab === 'drift' && (
                     <div className="max-w-3xl">
                         <SpecDriftPanel projectRoot={effectiveCwd} />
+                    </div>
+                )}
+
+                {/* ── COMPOSE TAB ── */}
+                {tab === 'compose' && (
+                    <div className="max-w-4xl">
+                        <ComposePanel projectRoot={effectiveCwd} />
+                    </div>
+                )}
+
+                {/* ── TRUST TAB ── */}
+                {tab === 'trust' && (
+                    <div className="max-w-2xl">
+                        <TrustDashboard projectRoot={effectiveCwd} />
+                    </div>
+                )}
+
+                {/* ── SEARCH TRACE TAB ── */}
+                {tab === 'trace' && (
+                    <div className="max-w-3xl">
+                        <SearchTrace projectRoot={effectiveCwd} />
                     </div>
                 )}
 

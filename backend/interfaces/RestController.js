@@ -1905,6 +1905,77 @@ router.put('/stardust/validation/:name', (req, res) => {
     }
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+//  Stardust Compose — cross-reference view combining all three tools
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/stardust/compose — file-centric cross-reference.
+ * Query: ?projectRoot=<path>&file=<repo-relative path>
+ *
+ * Aggregates data from all three mandatory tools for a single file:
+ *   - OpenSpec: which specs mention this file (intent)
+ *   - Graphify: dependents, centrality, cluster, blast radius (structure)
+ *   - Context Expert: semantic search rank snippet (context)
+ */
+router.get('/stardust/compose', (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const targetFile = req.query.file;
+
+        if (!targetFile) {
+            return res.status(400).json({ error: 'file query parameter is required' });
+        }
+
+        const result = {
+            file: targetFile,
+            available: false,
+            openspec: { mentionedIn: [], specCount: 0 },
+            graphify: { dependents: 0, centrality: 0, blastRadius: 0, nearestDependents: [], coveredByTests: false, testFiles: [] },
+            contextExpert: { note: 'Use /api/search with the file name for semantic context' },
+        };
+
+        // ── OpenSpec: which specs mention this file ──
+        try {
+            const specs = specDrift.readSpecs(projectRoot);
+            result.openspec.specCount = specs.length;
+            for (const spec of specs) {
+                const refs = specDrift.extractReferences(spec.text);
+                if (refs.some(r => targetFile.includes(r) || r.includes(targetFile))) {
+                    result.openspec.mentionedIn.push({ spec: spec.id, file: spec.file });
+                }
+            }
+        } catch (_) { /* OpenSpec unavailable */ }
+
+        // ── Graphify: structural metrics ──
+        try {
+            const graph = graphFacts.load(projectRoot);
+            if (graph) {
+                const relFile = path.relative(projectRoot, targetFile).split(path.sep).join('/');
+                const dependents = graph.dependedOnBy.get(relFile);
+                result.graphify.dependents = dependents ? dependents.size : 0;
+                result.graphify.centrality = graph.degree?.get(relFile) || 0;
+
+                // Blast radius (reuse ImpactAnalyzer)
+                try {
+                    const impact = impactAnalyzer.analyzeFile(projectRoot, targetFile, { depth: 2 });
+                    result.graphify.blastRadius = impact?.impactedCount || 0;
+                    result.graphify.nearestDependents = (impact?.dependents || []).slice(0, 5).map(d => d.file);
+                    result.graphify.coveredByTests = impact?.hasTestCoverage || false;
+                    result.graphify.testFiles = impact?.testFiles || [];
+                } catch (_) { /* impact analysis not applicable */ }
+
+                result.available = true;
+            }
+        } catch (_) { /* Graphify unavailable */ }
+
+        res.json(result);
+    } catch (err) {
+        logger.error('stardust_compose_failed', err, { requestId: req.id });
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.isPairingRequiredByDefault = isPairingRequiredByDefault;
 router.arePluginUploadsEnabled = arePluginUploadsEnabled;
 router.safePluginFilename = safePluginFilename;
