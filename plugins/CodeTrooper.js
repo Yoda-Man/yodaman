@@ -17,11 +17,11 @@ module.exports = {
   permissions: ['read'],
   parameters: {
     workspacePath: { type:'string', required:true, description:'Absolute path to analyze' },
-    excludeDirs: { type:'string', default:'node_modules,dist,build,.git,.next,.venv', description:'Comma-separated dirs to skip' }
+    excludeDirs: { type:'string', default:'node_modules,dist,build,.git,.next,.venv,release,graphify-out,coverage,downloads', description:'Comma-separated dirs to skip' }
   },
   async execute(params = {}) {
     const root = path.resolve(params.workspacePath || process.cwd());
-    const skip = new Set((params.excludeDirs || 'node_modules,dist,build,.git,.next,.venv').split(',').map(s => s.trim()));
+    const skip = new Set((params.excludeDirs || 'node_modules,dist,build,.git,.next,.venv,release,graphify-out,coverage,downloads').split(',').map(s => s.trim()));
     const files = [];
     const walk = (dir, depth=0) => {
       if (depth > 10) return;
