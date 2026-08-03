@@ -6,11 +6,11 @@
  */
 
 import React, { useState } from 'react';
-import { FilePlus2, FilePenLine, FileX2, Activity, X, FolderPlus, FolderX } from 'lucide-react';
+import { FilePlus2, PenLine, FileX2, Activity, X, FolderPlus, FolderX } from 'lucide-react';
 
 const EVENT_ICONS = {
     created: FilePlus2,
-    modified: FilePenLine,
+    modified: PenLine,
     removed: FileX2,
     'directory created': FolderPlus,
     'directory removed': FolderX,

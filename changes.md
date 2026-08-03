@@ -4,6 +4,33 @@ All notable changes to the YodaMan project are documented here.
 
 > Full history, including the 0.3.0–0.3.3 releases, is in [CHANGELOG.md](CHANGELOG.md).
 
+## [0.3.9] - 2026-08-03
+
+### ⚡ Real-Time Stardust Dashboard
+The Stardust tab is now a full live OpenSpec dashboard, borrowing patterns from opsx-ui (RayIci/opsx-ui, MIT):
+- **Change Board**: card-based navigation with task progress bars, validation health icons, and live timestamps. Click any card to open a side-by-side spec diff.
+- **Spec Diff**: operation-grouped deltas (ADDED/MODIFIED/REMOVED/RENAMED) with colour-coded badges and Proposed / Side-by-side view toggle.
+- **Activity Feed**: slide-over drawer showing live file events from `openspec/` pushed over WebSocket in real time.
+- **Architecture Drift Panel**: first-class UI for SpecDrift — stale spec references and undocumented modules with severity colouring.
+- **WebSocket + chokidar backend**: `StardustLive` watches `openspec/`, pushes snapshots + activity, with REST fallbacks.
+- **Live store**: `useStardustLive` hook using React's `useSyncExternalStore` with auto-reconnect.
+
+### 🔗 Three-Tool Composition GUI
+Three new Stardust tabs that make the "Context Expert + Graphify + OpenSpec compose" claim tangible:
+- **Compose**: file-centric cross-reference. Enter any repo path to see OpenSpec specs, Graphify structure (dependents, centrality, blast radius, test coverage), and Context Expert ranking — three columns, one file.
+- **Trust**: unified health dashboard with per-tool status cards and WorkspaceReadiness verdict from `/api/health` and `/api/readiness`.
+- **SearchTrace**: transparent ranking. Every search result shows its semantic×0.6 + proximity×0.25 + centrality×0.15 breakdown with colour-coded bars.
+
+### 🐛 Bug Fixes
+- **Plugin `minYodaManVersion` corrected**: all four `plugin.json` files had `minYodaManVersion: "1.0.0"` — a fictional version preventing plugin loading. Corrected to match actual versions.
+
+- **CodeTrooper test no longer hangs**: default `excludeDirs` now skips `release`, `graphify-out`, `coverage`, and `downloads`. Test uses a 4-file fixture instead of scanning the entire 6.2GB project tree. Full suite runs in 1.5s instead of 4m39s.
+
+### 📚 Documentation Rewrite
+- **`docs/api/api.md`**: complete rewrite — all 66 routes documented (was ~33) across 10 new sections.
+- **`docs/architecture/architecture.md`**: complete rewrite — added backend/services, backend/stardust, all 20 infrastructure modules, 9 v0.3.8 services, accurate component list.
+- All version references across 12 docs updated to 0.3.9.
+
 ## [0.3.8] - 2026-08-01
 
 ### 🔭 Architecture Drift — What You Said vs What You Built
