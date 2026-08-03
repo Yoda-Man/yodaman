@@ -35,8 +35,10 @@ describe('Website downloads', () => {
 
     test('every locally-buildable platform and the extension are downloadable', () => {
         const joined = localHrefs.join(' ');
-        expect(joined).toContain(`YodaMan-${version}-arm64-mac.zip`);  // macOS portable (DMG is CI-built)
-        expect(joined).toContain(`yodaman-${version}.zip`);            // Linux portable (AppImage is CI-built)
+        expect(joined).toContain(`YodaMan-${version}-arm64.dmg`);      // macOS installer
+        expect(joined).toContain(`YodaMan-${version}-arm64-mac.zip`);  // macOS portable
+        expect(joined).toContain(`YodaMan-${version}.AppImage`);       // Linux
+        expect(joined).toContain(`yodaman-${version}.zip`);            // Linux portable
         expect(joined).toContain(`vscode-yodaman-${version}.vsix`);    // VS Code
     });
 
