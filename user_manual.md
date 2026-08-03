@@ -6,18 +6,20 @@ YodaMan is a local-first AI workspace companion for developers. It keeps project
 
 ## 1. Setup
 
+**Prerequisites**: Node.js 18+, Python 3.10+, and [Ollama](https://ollama.com) installed.
+
 Install Context Expert, OpenSpec, and Graphify, then install and start YodaMan from the project root:
 
 ```bash
 npm install -g @contextexpert/cli
 npm install -g @fission-ai/openspec@latest
 python3 -m pip install graphifyy
-npm install
+cd yodaman/core
 sh setup.sh
 npm start
 ```
 
-The runtime listens on `http://localhost:3090`. The development web UI listens on `http://localhost:5190`.
+The runtime listens on `http://localhost:3090`. For development with hot reload, use `npm run dev` which starts both the Express server and Vite dev server on `http://localhost:5190`.
 
 For desktop use:
 
