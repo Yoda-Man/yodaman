@@ -226,7 +226,12 @@ npm run package
 
 ## 10. Project Stardust — OpenSpec Integration
 
-YodaMan 0.3.8 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow.
+YodaMan 0.3.8 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow. The tab has four views:
+
+- **Board**: Real-time change overview with card-based navigation, task progress bars, validation health icons, and a side-by-side spec diff viewer. Select a change to review its proposed spec deltas grouped by operation (ADDED/MODIFIED/REMOVED/RENAMED), then validate or archive directly from the diff panel. The board updates live via WebSocket — file changes in `openspec/` push instantly.
+- **Drift**: Architecture drift detection comparing OpenSpec specs against the knowledge graph. Shows stale spec references (files cited in specs that no longer exist) and undocumented modules (load-bearing files no spec describes). Unique to YodaMan.
+- **Diagnostics**: Installation check, version, project initialization status, and one-click install/init buttons.
+- **Commands**: Direct CLI access for validate, archive, list changes, and list specs with a scrollable console output.
 
 ### Setup
 
@@ -250,5 +255,9 @@ The Stardust tab includes a Diagnostics panel that checks:
 
 ### API Endpoints
 
+- `GET /api/stardust/board?projectRoot=...` — Change-board snapshot (REST fallback for WebSocket)
+- `GET /api/stardust/deltas/:name?projectRoot=...` — Operation-grouped spec deltas for a change
+- `PUT /api/stardust/validation/:name` — Store validation result for board health icons
+- `WS /api/stardust/live?projectRoot=...` — Real-time WebSocket for board + activity feed
 - `GET /api/stardust/diagnose?projectRoot=...` — Run OpenSpec diagnostics
 - `POST /api/stardust/run` — Execute any OpenSpec workflow action

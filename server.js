@@ -1,4 +1,5 @@
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
@@ -12,6 +13,7 @@ const apiRoutes = require('./backend/interfaces/RestController');
 const logger = require('./backend/infrastructure/Logger');
 const graphifyService = require('./backend/infrastructure/GraphifyService');
 const dependencyChecker = require('./backend/infrastructure/DependencyChecker');
+const stardustLive = require('./backend/stardust/StardustLive');
 
 // ─────────────────────────────────────────────────────────────────────────
 //  HEALTH — shared state populated by initialize() and queried by
@@ -236,7 +238,10 @@ async function initialize() {
     });
 }
 
-app.listen(PORT, async () => {
+const server = http.createServer(app);
+stardustLive.attachToServer(server);
+
+server.listen(PORT, async () => {
     logger.info('runtime_started', { url: `http://localhost:${PORT}` });
     // Non-fatal: initialize() stores results in healthState, never exits.
     await initialize().catch(err => logger.error('startup_initialize_error', err));

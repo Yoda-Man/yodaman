@@ -324,4 +324,20 @@ export const api = {
             tools,
         }));
     },
+
+    async stardustBoard(projectRoot) {
+        const url = new URL(`${API_BASE}/stardust/board`, window.location.origin);
+        if (projectRoot) url.searchParams.append('projectRoot', projectRoot);
+        return request(url);
+    },
+
+    async stardustDeltas(changeName, projectRoot) {
+        const url = new URL(`${API_BASE}/stardust/deltas/${encodeURIComponent(changeName)}`, window.location.origin);
+        if (projectRoot) url.searchParams.append('projectRoot', projectRoot);
+        return request(url);
+    },
+
+    async stardustSetValidation(changeName, status) {
+        return request(`${API_BASE}/stardust/validation/${encodeURIComponent(changeName)}`, jsonOptions('PUT', { status }));
+    },
 };

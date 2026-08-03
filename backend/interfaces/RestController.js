@@ -23,6 +23,7 @@ const graphFacts = require('../infrastructure/GraphFacts');
 const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
 const specDrift = require('../stardust/SpecDrift');
 const stardustWrapper = require('../stardust/StardustWrapper');
+const stardustLive = require('../stardust/StardustLive');
 
 const multer = require('multer');
 
@@ -1849,6 +1850,56 @@ router.post('/stardust/run', async (req, res) => {
             ...(action === 'diagnose' && result._debug ? { diagnostics: result } : {}),
             ...(action === 'diagnose' && !result._debug ? { diagnostics: result } : {}),
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Stardust Live — real-time dashboard REST fallbacks
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/stardust/board — change-board snapshot.
+ * Query: ?projectRoot=<absolute path>
+ * Returns the same typed Snapshot the WebSocket pushes on connect.
+ */
+router.get('/stardust/board', (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const snapshot = stardustLive.getSnapshot(projectRoot);
+        res.json(snapshot);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * GET /api/stardust/deltas/:name — operation-grouped spec deltas for a change.
+ * Query: ?projectRoot=<absolute path>
+ */
+router.get('/stardust/deltas/:name', (req, res) => {
+    try {
+        const projectRoot = req.query.projectRoot || process.cwd();
+        const deltas = stardustLive.getDeltas(projectRoot, req.params.name);
+        res.json({ change: req.params.name, deltas });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * PUT /api/stardust/validation/:name — store last validation result for a change.
+ * Body: { status: 'ok' | 'warn' | 'error' }
+ */
+router.put('/stardust/validation/:name', (req, res) => {
+    try {
+        const { status } = req.body;
+        if (!['ok', 'warn', 'error'].includes(status)) {
+            return res.status(400).json({ error: 'status must be ok, warn, or error' });
+        }
+        stardustLive.setValidationStatus(req.params.name, status);
+        res.json({ ok: true, change: req.params.name, validation: status });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
