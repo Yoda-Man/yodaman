@@ -160,10 +160,15 @@ function rerank(projectPath, results, { activeFile, weights } = {}) {
             file,
             blended: (w.semantic * semantic) + (w.proximity * proximity) + (w.centrality * centrality),
             signal: {
+                // Normalized semantic score is reported alongside the structural
+                // signals so a caller can show why a result ranked where it did
+                // instead of restating the weights and guessing at the inputs.
+                semantic: Number(semantic.toFixed(3)),
                 centrality: Number(centrality.toFixed(3)),
                 proximity: Number(proximity.toFixed(3)),
                 hops: distances?.get(file) ?? null,
-                inGraph: degree !== undefined
+                inGraph: degree !== undefined,
+                weights: w
             }
         };
     });

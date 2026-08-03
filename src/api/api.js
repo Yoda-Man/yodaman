@@ -294,6 +294,10 @@ export const api = {
         return request(`${API_BASE}/readiness${query}`);
     },
 
+    async health() {
+        return request(`${API_BASE}/health`);
+    },
+
     async cancelAgentTask(taskId) {
         return request(`${API_BASE}/agent/cancel`, jsonOptions('POST', { taskId }));
     },
@@ -339,5 +343,49 @@ export const api = {
 
     async stardustSetValidation(changeName, status) {
         return request(`${API_BASE}/stardust/validation/${encodeURIComponent(changeName)}`, jsonOptions('PUT', { status }));
+    },
+
+    // ── Stardust cross-tool views ──
+
+    async stardustDrift(projectRoot, { minDependents } = {}) {
+        const url = new URL(`${API_BASE}/stardust/drift`, window.location.origin);
+        if (projectRoot) url.searchParams.append('projectRoot', projectRoot);
+        if (minDependents) url.searchParams.append('minDependents', String(minDependents));
+        return request(url);
+    },
+
+    async stardustCompose(projectRoot, file) {
+        const url = new URL(`${API_BASE}/stardust/compose`, window.location.origin);
+        if (projectRoot) url.searchParams.append('projectRoot', projectRoot);
+        url.searchParams.append('file', file);
+        return request(url);
+    },
+
+    async stardustSpec(projectRoot, specId) {
+        const url = new URL(`${API_BASE}/stardust/spec`, window.location.origin);
+        if (projectRoot) url.searchParams.append('projectRoot', projectRoot);
+        url.searchParams.append('spec', specId);
+        return request(url);
+    },
+
+    async stardustChangeImpact(changeName, projectRoot) {
+        const url = new URL(`${API_BASE}/stardust/change-impact/${encodeURIComponent(changeName)}`, window.location.origin);
+        if (projectRoot) url.searchParams.append('projectRoot', projectRoot);
+        return request(url);
+    },
+
+    /**
+     * Semantic search with Graphify's ranking signal attached.
+     *
+     * `activeFile` is what lets proximity contribute: without it the blend has
+     * nothing to measure distance from and falls back to semantic + centrality.
+     */
+    async searchTrace({ query, projectRoot, activeFile, top = 12 }) {
+        const url = new URL(`${API_BASE}/search/code`, window.location.origin);
+        url.searchParams.append('query', query);
+        if (projectRoot) url.searchParams.append('project', projectRoot);
+        if (activeFile) url.searchParams.append('activeFile', activeFile);
+        url.searchParams.append('top', String(top));
+        return request(url);
     },
 };

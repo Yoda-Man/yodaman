@@ -66,6 +66,18 @@ function applyGraphRanking(results, { project, activeFile, req, mode }) {
   }
 }
 
+/**
+ * Did structure actually contribute to this ordering?
+ *
+ * rerank() returns the input untouched when there is no graph, or when the graph
+ * knows none of the hits. Callers that explain ranking need to tell those cases
+ * apart from a real blend rather than presenting the weights as though they had
+ * been applied.
+ */
+function wasGraphRanked(results) {
+  return Array.isArray(results) && results.some(item => item && item.graphSignal);
+}
+
 function logSearchFailure(err, { req, query, project, mode }) {
   logger.error('search_failed', err, {
     requestId: req.id,
@@ -101,7 +113,13 @@ router.get('/', async (req, res) => {
     // default to code search
     const raw = await toolBox.searchCode({ query, project: resolvedProject, top: normalizedTop });
     const results = applyGraphRanking(raw, { project: resolvedProject, activeFile, req, mode: 'code' });
-    return res.json({ mode: 'code', results });
+    return res.json({
+      mode: 'code',
+      results,
+      graphRanked: wasGraphRanked(results),
+      weights: graphRanker.DEFAULT_WEIGHTS,
+      activeFile: activeFile || null
+    });
   } catch (err) {
     logSearchFailure(err, { req, query, project: resolvedProject, mode });
     return res.status(500).json({ error: err.message, code: 'search_failed', requestId: req.id });
@@ -116,7 +134,13 @@ router.get('/code', async (req, res) => {
   try {
     const raw = await toolBox.searchCode({ query, project: resolvedProject, top: normalizedTop });
     const results = applyGraphRanking(raw, { project: resolvedProject, activeFile, req, mode: 'code' });
-    res.json({ mode: 'code', results });
+    res.json({
+      mode: 'code',
+      results,
+      graphRanked: wasGraphRanked(results),
+      weights: graphRanker.DEFAULT_WEIGHTS,
+      activeFile: activeFile || null
+    });
   } catch (err) {
     logSearchFailure(err, { req, query, project: resolvedProject, mode: 'code' });
     res.status(500).json({ error: err.message, code: 'search_failed', requestId: req.id });

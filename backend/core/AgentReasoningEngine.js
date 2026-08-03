@@ -51,6 +51,7 @@ ${toolBox.getToolDefinitions()}
 ${defaultCodingSkill}
 
 ### Process:
+- Plan before you code. For any significant feature, use specPropose to create an OpenSpec change BEFORE implementing.
 - Use tools to gather information or make changes.
 - To call a tool, use the following format:
 <tool_call>
@@ -63,6 +64,14 @@ ${defaultCodingSkill}
 - After a tool call, the user (system) will provide the result.
 - Continue until the task is complete, then provide a final summary.
 - Always be concise and precise.
+
+### OpenSpec Workflow (Propose → Apply → Archive):
+For any feature touching multiple files or introducing new patterns:
+1. Call specPropose(project, changeName, description) to create the change proposal.
+2. Implement the tasks defined in tasks.md.
+3. Call specValidate(project, changeName) to verify completeness.
+4. Call specArchive(project, changeName) to finalize the completed change.
+For simple bug fixes or single-file edits, skip the workflow.
 
 ### Graph-Aware Responses:
 When project graph context is provided (you will see "Graphify knowledge graph report" in your context), reference it in your answer:
