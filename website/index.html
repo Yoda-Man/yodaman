@@ -21,7 +21,7 @@
     <nav aria-label="Primary">
       <a href="#ecosystem">Ecosystem</a>
       <a href="#pillars">Pillars</a>
-      <a href="#composition">New in 0.3.8</a>
+      <a href="#composition">New in 0.3.9</a>
       <a href="#holocron-vr">Holocron VR</a>
       <a href="#security">Security</a>
       <a href="#install">Install</a>
@@ -145,35 +145,26 @@
 
     <section id="composition" class="section pillars-section">
       <div class="section-heading">
-        <p class="eyebrow">New in 0.3.8</p>
-        <h2>Three required tools that actually work together</h2>
-        <p>Context Expert, Graphify, and OpenSpec are all required &mdash; so YodaMan makes them compose. Each one&rsquo;s
-          output feeds the next instead of stopping at its own tab.</p>
+        <p class="eyebrow">New in 0.3.9</p>
+        <h2>Real-time Stardust dashboard + three-tool composition</h2>
+        <p>Context Expert, Graphify, and OpenSpec are all required &mdash; so YodaMan makes them compose. The new Stardust dashboard brings a live change board, spec diffs, activity feed, and three GUI tools that prove the tools actually work together.</p>
       </div>
       <div class="pillar-grid">
         <article>
-          <h3>Know the cost before you approve</h3>
-          <p>A line diff tells you what changed, never what it costs. Every write proposal now reports its blast radius
-            from the knowledge graph: how many files depend on the target, whether any test covers that path, and the
-            nearest dependents. A change reaching five or more files with no covering test is flagged as high risk.</p>
+          <h3>Live change board + spec diff</h3>
+          <p>The Stardust tab is now a real-time OpenSpec dashboard. A card-based change board shows every active change with task progress, validation health, and live timestamps. Click any card to open a side-by-side spec diff with operation-grouped deltas (ADDED/MODIFIED/REMOVED/RENAMED) and a one-click validate/archive workflow.</p>
         </article>
         <article>
-          <h3>Search that understands structure</h3>
-          <p>Semantic search finds files that talk like your query; the graph finds files connected to what you are
-            editing. YodaMan blends both, so results near your working file rise while unrelated matches sink. In real
-            use this moved the file being asked about from tenth place to first, and dropped a lock file out of the top
-            five.</p>
+          <h3>File-centric cross-reference</h3>
+          <p>The new Compose tab answers: "what does every tool know about this file?" Enter any repo path to see which OpenSpec specs describe it, its Graphify structural position (dependents, centrality, blast radius, test coverage), and how Context Expert ranks it. Three columns, one file, no guesswork.</p>
         </article>
         <article>
-          <h3>Accepted changes never go stale</h3>
-          <p>An approved write used to leave the index and graph behind, quietly degrading the next answer. Touched
-            workspaces are now reindexed and re-graphed when the task ends &mdash; once per task, not once per file.</p>
+          <h3>Trust that updates itself</h3>
+          <p>The Trust tab shows per-tool health (Context Expert index freshness, Graphify graph state, OpenSpec CLI status) plus the overall WorkspaceReadiness verdict. A live activity feed tracks every file change in openspec/ pushed over WebSocket. Post-write reindex and regraph keep answers honest.</p>
         </article>
         <article>
-          <h3>One honest trust signal</h3>
-          <p>Index freshness and graph state were separate notions in separate tabs, so a stale answer looked exactly
-            like a correct one. A single badge now reports whether this workspace is current, refreshing, stale, or not
-            yet indexed &mdash; always the weakest layer, never an average.</p>
+          <h3>Search that explains itself</h3>
+          <p>The SearchTrace tab shows WHY each result ranked where it did. Every file gets three scores: semantic relevance from Context Expert, graph proximity to your active file, and structural centrality from Graphify. The blend (0.6 + 0.25 + 0.15) is visible per result with colour-coded bars.</p>
         </article>
       </div>
     </section>
