@@ -55,8 +55,7 @@ async function switchMode() {
     storedMode = mode;
     await extensionContext.globalState.update('yodamanMode', mode);
     if (!await ensureRuntimeAvailable()) return;
-    await getClient().setMode(mode);
-    vscode.window.showInformationMessage(`YodaMan query mode set to ${mode}`);
+    vscode.window.showInformationMessage(`YodaMan mode set to ${mode}`);
 }
 
 function getClient() { return createYodaManClient(getRuntimeUrl()); }

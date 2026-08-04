@@ -138,13 +138,6 @@ function createYodaManClient(runtimeUrl, options = {}) {
                 body: JSON.stringify(body)
             });
         },
-        // Set query mode globally (optional endpoint)
-        setMode(mode) {
-            return request('/api/mode', {
-                method: 'POST',
-                body: JSON.stringify({ mode })
-            });
-        },
         search(query, project, top) {
             const params = new URLSearchParams({ query });
             if (project) params.set('project', project);

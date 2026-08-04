@@ -8,7 +8,6 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const router = express.Router();
-const { classifyQuery } = require('../utils/queryClassifier');
 const toolBox = require('../infrastructure/ToolBox');
 const { preprocessDocumentation, updateCtxConfig } = require('../utils/docPreprocessor');
 const logger = require('../infrastructure/Logger');
