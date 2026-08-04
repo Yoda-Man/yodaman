@@ -6,7 +6,6 @@
  * CLI entry point. Reached via the "bin" field in package.json ("yodaman"),
  * so npm/npx resolves it by name and nothing in this repo imports it.
  *
- * See docs/dead-code.md for the full list of files in this category.
  */
 
 const path = require('path');

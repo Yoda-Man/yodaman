@@ -191,7 +191,6 @@ function centralFiles(projectPath, { limit = 25, facts = null } = {}) {
 // plugins/lightsaber.js respectively — which are themselves loaded by a computed
 // require() (see ToolBox.loadPlugins). Static analysis therefore reports both as
 // unused exports. They are the public surface this module exists to provide.
-// See docs/dead-code.md.
 module.exports = {
     load,
     orphanFiles,

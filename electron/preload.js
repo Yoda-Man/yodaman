@@ -5,7 +5,6 @@
  *     webPreferences: { preload: path.join(__dirname, 'preload.js') }
  * It is the only bridge exposing the yodamanDesktop API to the renderer.
  *
- * See docs/dead-code.md for the full list of files in this category.
  */
 const { contextBridge, ipcRenderer } = require('electron');
 

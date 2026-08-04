@@ -89,7 +89,6 @@ class ToolBox {
      *
      * Before deleting anything under plugins/, run:
      *     node -e "const t=require('./backend/infrastructure/ToolBox');console.log([...t.plugins.keys()])"
-     * All plugins that appear in that list are live. See docs/dead-code.md.
      */
     loadPlugins() {
         const pluginsDir = path.resolve(__dirname, '../../plugins');
