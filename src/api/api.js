@@ -302,9 +302,6 @@ export const api = {
         return request(`${API_BASE}/agent/cancel`, jsonOptions('POST', { taskId }));
     },
 
-    async setMode(mode, projectId) {
-        return request(`${API_BASE}/mode`, jsonOptions('POST', { mode, projectId }));
-    },
 
     // ── Stardust (OpenSpec wrapper) ──
 

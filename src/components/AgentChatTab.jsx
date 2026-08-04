@@ -53,9 +53,28 @@ function normalizeMessages(items) {
   }))
 }
 
-function fileRefUrl(ref) {
+function isAbsolutePath(filePath) {
+  return filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath)
+}
+
+// Search hits and agent answers cite paths relative to the workspace
+// (`graphify-out/GRAPH_REPORT.md`). Handing one of those to vscode://file
+// unresolved makes VS Code look for it at the filesystem root, so anchor
+// relative refs to the active workspace before building the URI.
+function resolveRefPath(refPath, workspaceRoot) {
+  const filePath = String(refPath || '').replace(/^\.\//, '')
+  if (!filePath || isAbsolutePath(filePath) || !workspaceRoot) return filePath
+  return `${String(workspaceRoot).replace(/[\\/]+$/, '')}/${filePath}`
+}
+
+function fileRefUrl(ref, workspaceRoot) {
+  const absolute = resolveRefPath(ref.path, workspaceRoot).replace(/\\/g, '/')
+  // vscode://file/ already supplies the leading slash of a POSIX path.
+  const encoded = encodeURI(absolute.replace(/^\/+/, ''))
+    .replace(/#/g, '%23')
+    .replace(/\?/g, '%3F')
   const line = ref.line ? `:${ref.line}` : ''
-  return `vscode://file/${encodeURI(ref.path)}${line}`
+  return `vscode://file/${encoded}${line}`
 }
 
 function extractFileReferences(content) {
@@ -561,8 +580,6 @@ export default function AgentChatTab({ selectedProject }) {
   const [sections, setSections] = useState(INITIAL_SECTIONS)
   const [error, setError] = useState('')
   const [preset, setPreset] = useState('')
-  const [queryMode, setQueryMode] = useState('code')
-  const [holocronAvailable, setHolocronAvailable] = useState(false)
   const [vrStatus, setVrStatus] = useState(null)
   const [isOpeningVr, setIsOpeningVr] = useState(false)
   const [workspaceView, setWorkspaceView] = useState('chat')
@@ -737,8 +754,12 @@ export default function AgentChatTab({ selectedProject }) {
     })
   }
 
+  // Callers hand over either a {path, line} ref (file chips) or a bare path
+  // string (the approval panel's cross-reference link).
   function openFileReference(ref) {
-    window.open(fileRefUrl(ref), '_blank', 'noopener,noreferrer')
+    const normalized = typeof ref === 'string' ? { path: ref, line: null } : ref
+    if (!normalized?.path) return
+    window.open(fileRefUrl(normalized, selectedProject?.path), '_blank', 'noopener,noreferrer')
   }
 
   function viewInVr(refs, diagnostics) {
@@ -1049,10 +1070,7 @@ export default function AgentChatTab({ selectedProject }) {
                   <button type="button" onClick={() => setWorkspaceView('chat')} className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${workspaceView === 'chat' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`}><MessageSquare size={12} />Chat</button>
                   <button type="button" onClick={() => setWorkspaceView('search')} className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${workspaceView === 'search' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`}><Search size={12} />Search</button>
                 </div>
-                <div className="flex gap-1 bg-slate-800/50 rounded-lg p-0.5 border border-white/5">
-                  <button type="button" className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-md transition-all ${queryMode==='code'?'bg-indigo-500/20 text-indigo-200':'text-slate-500 hover:text-slate-300'}`} onClick={async()=>{try{await api.setMode('code',selectedProject?.id);setQueryMode('code');}catch(e){console.error('Mode switch failed:',e)}}}>Code</button>
-                  <button type="button" className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-md transition-all ${queryMode==='doc'?'bg-indigo-500/20 text-indigo-200':'text-slate-500 hover:text-slate-300'}`} onClick={async()=>{try{await api.setMode('doc',selectedProject?.id);setQueryMode('doc');}catch(e){console.error('Mode switch failed:',e)}}}>Docs</button>
-                </div>
+
               </div>
               <p className="truncate text-xs text-[var(--text-secondary)]">{selectedProject.path}</p>
             </div>

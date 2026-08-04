@@ -206,17 +206,6 @@ describe('RestController Integration', () => {
         }));
     });
 
-    test('POST /mode validates query mode values', async () => {
-        const ok = await invoke('post', '/mode', { body: { mode: 'doc' } });
-        expect(ok.statusCode).toBe(200);
-        expect(ok.payload.mode).toBe('doc');
-
-        const rejected = await invoke('post', '/mode', { body: { mode: 'everything' } });
-        expect(rejected.statusCode).toBe(400);
-        expect(rejected.payload).toEqual(expect.objectContaining({
-            code: 'invalid_mode'
-        }));
-    });
 
     test('GET /health reports unchecked startup dependencies as pending, not failed', async () => {
         const response = await invokeWithAppSettings('get', '/health', {
@@ -361,7 +350,7 @@ describe('RestController Integration', () => {
     });
 
     test('POST /ask rejects malformed payloads before reaching ctx', async () => {
-        const response = await invoke('post', '/ask', { body: { question: '', mode: 'code' } });
+        const response = await invoke('post', '/ask', { body: { question: '' } });
         expect(response.statusCode).toBe(400);
         expect(response.payload).toEqual(expect.objectContaining({
             code: 'invalid_request'
@@ -450,7 +439,6 @@ describe('RestController Integration', () => {
                 body: {
                     question: 'menu',
                     projectId: workspace,
-                    mode: 'code'
                 }
             });
 
