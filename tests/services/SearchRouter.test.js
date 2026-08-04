@@ -63,10 +63,10 @@ describe('SearchRouter', () => {
         return res;
     }
 
-    test('routes documentation queries through preprocessing', async () => {
+    test('routes documentation queries through preprocessing and returns unified results', async () => {
         const response = await invoke('/', { query: 'how to use the api', project: '/tmp/project', top: 3 });
 
-        expect(response.payload.mode).toBe('doc');
+        expect(response.payload.results).toBeDefined();
         expect(docPreprocessor.preprocessDocumentation).toHaveBeenCalledWith('/tmp/project');
         expect(docPreprocessor.updateCtxConfig).toHaveBeenCalledWith('/tmp/project');
         expect(toolBox.searchCode).toHaveBeenCalledWith({

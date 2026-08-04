@@ -34,7 +34,6 @@ const agentEngine = require('../core/AgentReasoningEngine');
 const router = express.Router();
 const DEFAULT_CONFIG_PATH = path.join(__dirname, '../../config.json');
 const PLUGINS_DIR = path.resolve(__dirname, '../../plugins');
-const ALLOWED_MODES = new Set(['code', 'doc']);
 const DEFAULT_PLUGINS = new Set(['graphify', 'Grand-Inquisitor', 'CodeTrooper', 'Droid-Sweep', 'lightsaber']);
 
 const storage = multer.diskStorage({
@@ -192,17 +191,6 @@ async function readGitContext(dirPath) {
     };
 }
 
-function validateMode(mode, { required = false } = {}) {
-    const value = validateString(mode, 'mode', { required, max: 20 });
-    if (!value) return undefined;
-    if (!ALLOWED_MODES.has(value)) {
-        const err = new Error('mode must be one of: code, doc');
-        err.status = 400;
-        throw err;
-    }
-    return value;
-}
-
 function resolveUserPath(value, name = 'path') {
     const inputPath = validateString(value, name, { max: 4096 });
     if (inputPath.includes('\0')) {
@@ -309,17 +297,6 @@ router.use((req, res, next) => {
     }
 
     return next();
-});
-
-router.post('/mode', (req, res) => {
-    try {
-        const mode = validateMode(req.body?.mode, { required: true });
-        const projectId = validateProjectId(req.body?.projectId);
-        res.json({ ok: true, mode, projectId });
-    } catch (err) {
-        logger.warn('mode_update_rejected', { requestId: req.id, error: err.message });
-        jsonError(res, err.status || 400, err.message, 'invalid_mode');
-    }
 });
 
 router.use('/upload', fileUploadService.router);
@@ -607,12 +584,10 @@ router.delete('/sessions', (req, res) => {
 router.post('/ask', async (req, res) => {
     let question;
     let projectId;
-    let mode;
     let projectPath;
     try {
         question = validateString(req.body?.question, 'question', { max: 20000 });
         projectId = validateProjectId(req.body?.projectId);
-        mode = validateMode(req.body?.mode);
         projectPath = resolveProjectPath(projectId);
     } catch (err) {
         return jsonError(res, err.status || 400, err.message, 'invalid_request');
@@ -646,7 +621,6 @@ router.post('/ask', async (req, res) => {
                 requestId: req.id,
                 projectId,
                 projectPath,
-                mode,
                 error: ctxErr.message,
                 userAction: 'chat_ask',
                 severity: 'medium'

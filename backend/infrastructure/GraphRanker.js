@@ -1,31 +1,35 @@
 /**
- * GraphRanker — blends Context Expert's semantic ranking with Graphify structure.
+ * GraphRanker — blends Context Expert's semantic ranking with Graphify structure
+ * and OpenSpec spec coverage.
  *
- * Embedding similarity finds files that *talk like* the query. Graph structure
- * finds files that are *connected to* what you are working on. Neither is
- * sufficient alone:
+ * Three signals alone each have blind spots:
  *
  *   - Semantic-only surfaces a changelog entry above the module it describes.
  *   - Graph-only surfaces the most-imported file for every query.
+ *   - Spec-only can't find anything not already documented.
  *
- * Semantic score stays dominant so a strong textual match is never buried;
- * structure breaks ties and nudges. That matters in practice because the ctx
- * filesystem fallback returns a flat score for every hit, leaving retrieval
- * with no opinion at all about ordering.
+ * The blend makes search Stardust-powered: every result is ranked by what
+ * Context Expert knows (semantic relevance), what Graphify knows (structural
+ * proximity and centrality), and what OpenSpec knows (is this file described
+ * by the architecture?).
+ *
+ * Semantic score stays dominant so a strong textual match is never buried.
  *
  * Exports:
  *   rerank(projectPath, results, { activeFile, weights }) → reordered results
  *   buildIndex(projectPath)                               → graph lookup tables
+ *   buildSpecIndex(projectPath)                           → spec coverage lookup
  */
 
 const path = require('path');
 const graphifyService = require('./GraphifyService');
+const specDrift = require('../stardust/SpecDrift');
 const logger = require('./Logger');
 const { DEPENDENCY_RELATIONS } = require('./ImpactAnalyzer');
 
-// Semantic dominates; proximity to what you're editing matters more than raw
-// popularity, because a highly-central file is relevant to every query.
-const DEFAULT_WEIGHTS = { semantic: 0.6, proximity: 0.25, centrality: 0.15 };
+// Semantic dominates; spec coverage and proximity to what you're editing matter
+// more than raw popularity.
+const DEFAULT_WEIGHTS = { semantic: 0.50, proximity: 0.20, centrality: 0.15, specCoverage: 0.15 };
 
 // How far to walk from the active file before proximity contributes nothing.
 const MAX_PROXIMITY_HOPS = 3;
@@ -109,7 +113,26 @@ function hopDistances(index, origin, maxHops = MAX_PROXIMITY_HOPS) {
 }
 
 /**
- * Reorder search results using graph structure.
+ * Build a spec-coverage index: Set of files referenced in OpenSpec specs.
+ * Files described by specs get a ranking boost — they have recorded intent.
+ */
+function buildSpecIndex(projectPath) {
+    try {
+        const specs = specDrift.readSpecs(projectPath);
+        if (!specs || specs.length === 0) return null;
+        const covered = new Set();
+        for (const spec of specs) {
+            const refs = specDrift.extractReferences(spec.text);
+            for (const ref of refs) covered.add(ref);
+        }
+        return covered.size > 0 ? covered : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
+ * Reorder search results using graph structure and spec coverage.
  *
  * Never throws and never drops results: with no graph, or no graph coverage for
  * the hits, the input order is returned untouched.
@@ -126,6 +149,9 @@ function rerank(projectPath, results, { activeFile, weights } = {}) {
     const distances = activeRelative && index.neighbours.has(activeRelative)
         ? hopDistances(index, activeRelative)
         : null;
+
+    // Build spec-coverage index: which files are documented in OpenSpec specs.
+    const specIndex = buildSpecIndex(projectPath);
 
     // Normalize semantic scores into 0..1 so the weights mean something even
     // when the provider returns raw distances or a flat constant.
@@ -154,18 +180,19 @@ function rerank(projectPath, results, { activeFile, weights } = {}) {
 
         if (degree !== undefined) graphMatched += 1;
 
+        // Spec coverage: 1.0 if the file is cited in any OpenSpec spec, 0 otherwise.
+        const specCoverage = specIndex && specIndex.has(file) ? 1.0 : 0;
+
         return {
             item,
             position,
             file,
-            blended: (w.semantic * semantic) + (w.proximity * proximity) + (w.centrality * centrality),
+            blended: (w.semantic * semantic) + (w.proximity * proximity) + (w.centrality * centrality) + (w.specCoverage * specCoverage),
             signal: {
-                // Normalized semantic score is reported alongside the structural
-                // signals so a caller can show why a result ranked where it did
-                // instead of restating the weights and guessing at the inputs.
                 semantic: Number(semantic.toFixed(3)),
                 centrality: Number(centrality.toFixed(3)),
                 proximity: Number(proximity.toFixed(3)),
+                specCoverage: Number(specCoverage.toFixed(3)),
                 hops: distances?.get(file) ?? null,
                 inGraph: degree !== undefined,
                 weights: w
@@ -193,4 +220,4 @@ function rerank(projectPath, results, { activeFile, weights } = {}) {
     }));
 }
 
-module.exports = { rerank, buildIndex, DEFAULT_WEIGHTS, MAX_PROXIMITY_HOPS };
+module.exports = { rerank, buildIndex, buildSpecIndex, DEFAULT_WEIGHTS, MAX_PROXIMITY_HOPS };

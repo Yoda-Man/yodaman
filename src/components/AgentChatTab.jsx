@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, Copy, File, Filter, MessageSquare, Mic, Search, Send, Square, Terminal, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Copy, File, FileText, Filter, Link2, MessageSquare, Mic, Search, Send, Square, Terminal, Trash2, X } from 'lucide-react'
 import { api } from '../api/api'
 import { VoiceAgentBridge, readVoiceAgentSettings, speakAgentResponse, writeVoiceAgentSettings } from '../../frontend/voiceAgentBridge.js'
 import FileUploader from '../../frontend/FileUploader.jsx'
@@ -53,9 +53,28 @@ function normalizeMessages(items) {
   }))
 }
 
-function fileRefUrl(ref) {
+function isAbsolutePath(filePath) {
+  return filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath)
+}
+
+// Search hits and agent answers cite paths relative to the workspace
+// (`graphify-out/GRAPH_REPORT.md`). Handing one of those to vscode://file
+// unresolved makes VS Code look for it at the filesystem root, so anchor
+// relative refs to the active workspace before building the URI.
+function resolveRefPath(refPath, workspaceRoot) {
+  const filePath = String(refPath || '').replace(/^\.\//, '')
+  if (!filePath || isAbsolutePath(filePath) || !workspaceRoot) return filePath
+  return `${String(workspaceRoot).replace(/[\\/]+$/, '')}/${filePath}`
+}
+
+function fileRefUrl(ref, workspaceRoot) {
+  const absolute = resolveRefPath(ref.path, workspaceRoot).replace(/\\/g, '/')
+  // vscode://file/ already supplies the leading slash of a POSIX path.
+  const encoded = encodeURI(absolute.replace(/^\/+/, ''))
+    .replace(/#/g, '%23')
+    .replace(/\?/g, '%3F')
   const line = ref.line ? `:${ref.line}` : ''
-  return `vscode://file/${encodeURI(ref.path)}${line}`
+  return `vscode://file/${encoded}${line}`
 }
 
 function extractFileReferences(content) {
@@ -313,7 +332,10 @@ const RISK_STYLES = {
  * Graph-derived blast radius for a proposed write. This is what turns the
  * approval gate from "does this diff look right" into "do I accept this reach".
  */
-function ImpactPanel({ impact }) {
+function ImpactPanel({ impact, specImpact, filePath, onExpandCompose }) {
+  const [showDepth, setShowDepth] = useState(false)
+  const [depth, setDepth] = useState(null) // null = default 2-hop
+
   if (!impact) return null
 
   if (!impact.available) {
@@ -327,9 +349,11 @@ function ImpactPanel({ impact }) {
 
   const risk = RISK_STYLES[impact.risk] || RISK_STYLES.low
   const noTests = impact.testCount === 0 && impact.impactedCount > 0
+  const hasSpecs = specImpact?.available && specImpact.mentionedIn?.length > 0
 
   return (
     <div className="space-y-2">
+      {/* Risk badge + counts */}
       <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${risk.className}`}>
           {risk.label}
@@ -344,9 +368,25 @@ function ImpactPanel({ impact }) {
           <span className="font-mono text-[11px] text-amber-300" title="The graph is older than the source — rebuild for an exact count">
             graph stale
           </span>
-        ) : null}
+        ) : (
+          <span className="font-mono text-[11px] text-emerald-500/70">graph current</span>
+        )}
       </div>
 
+      {/* Spec awareness — which specs describe this file */}
+      {hasSpecs ? (
+        <div className="text-[11px] leading-5 text-amber-300/90">
+          <FileText size={11} className="inline mr-1 text-amber-400" />
+          <span className="font-black uppercase tracking-widest">Specs affected: </span>
+          <span className="font-mono">{specImpact.mentionedIn.join(', ')}</span>
+        </div>
+      ) : specImpact?.available ? (
+        <div className="text-[10px] text-slate-600">
+          No OpenSpec specs describe this file.
+        </div>
+      ) : null}
+
+      {/* Top dependents */}
       {impact.topDependents?.length ? (
         <div className="text-[11px] leading-5 text-slate-400">
           <span className="font-black uppercase tracking-widest text-slate-500">Reaches</span>{' '}
@@ -362,6 +402,43 @@ function ImpactPanel({ impact }) {
           Nothing tests this path. Consider asking for a test alongside the change.
         </div>
       ) : null}
+
+      {/* Depth control */}
+      <button
+        onClick={() => setShowDepth(!showDepth)}
+        className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors"
+      >
+        {showDepth ? 'Hide' : 'Adjust'} impact depth →
+      </button>
+      {showDepth && (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-slate-500">Hops:</span>
+          {[1, 2, 3, 4].map(d => (
+            <button
+              key={d}
+              onClick={() => setDepth(d)}
+              className={`rounded px-2 py-0.5 text-[10px] font-mono transition-colors ${
+                (depth || 2) === d
+                  ? 'bg-indigo-500/20 border border-indigo-500/30 text-indigo-300'
+                  : 'border border-white/5 text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Cross-reference expander */}
+      {filePath && (
+        <button
+          onClick={() => onExpandCompose?.(filePath)}
+          className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-indigo-400 hover:text-indigo-200 transition-colors"
+        >
+          <Link2 size={10} />
+          Full cross-reference (Stardust Compose)
+        </button>
+      )}
     </div>
   )
 }
@@ -426,7 +503,7 @@ function MessageBubble({ message, onOpenFile, onViewInVr, onApprove, isApprovabl
               <div className="readout flex items-center gap-2 !text-amber-300">
                 Approval required — {message.approval.tool}
               </div>
-              <ImpactPanel impact={message.approval.impact} />
+              <ImpactPanel impact={message.approval.impact} specImpact={message.approval.specImpact} filePath={message.approval.params?.filePath} onExpandCompose={onOpenFile} />
               <DiffPanel
                 filePath={message.approval.params?.filePath}
                 oldContent={message.approval.params?.oldContent}
@@ -503,8 +580,6 @@ export default function AgentChatTab({ selectedProject }) {
   const [sections, setSections] = useState(INITIAL_SECTIONS)
   const [error, setError] = useState('')
   const [preset, setPreset] = useState('')
-  const [queryMode, setQueryMode] = useState('code')
-  const [holocronAvailable, setHolocronAvailable] = useState(false)
   const [vrStatus, setVrStatus] = useState(null)
   const [isOpeningVr, setIsOpeningVr] = useState(false)
   const [workspaceView, setWorkspaceView] = useState('chat')
@@ -679,8 +754,12 @@ export default function AgentChatTab({ selectedProject }) {
     })
   }
 
+  // Callers hand over either a {path, line} ref (file chips) or a bare path
+  // string (the approval panel's cross-reference link).
   function openFileReference(ref) {
-    window.open(fileRefUrl(ref), '_blank', 'noopener,noreferrer')
+    const normalized = typeof ref === 'string' ? { path: ref, line: null } : ref
+    if (!normalized?.path) return
+    window.open(fileRefUrl(normalized, selectedProject?.path), '_blank', 'noopener,noreferrer')
   }
 
   function viewInVr(refs, diagnostics) {
@@ -991,10 +1070,7 @@ export default function AgentChatTab({ selectedProject }) {
                   <button type="button" onClick={() => setWorkspaceView('chat')} className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${workspaceView === 'chat' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`}><MessageSquare size={12} />Chat</button>
                   <button type="button" onClick={() => setWorkspaceView('search')} className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${workspaceView === 'search' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`}><Search size={12} />Search</button>
                 </div>
-                <div className="flex gap-1 bg-slate-800/50 rounded-lg p-0.5 border border-white/5">
-                  <button type="button" className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-md transition-all ${queryMode==='code'?'bg-indigo-500/20 text-indigo-200':'text-slate-500 hover:text-slate-300'}`} onClick={async()=>{try{await api.setMode('code',selectedProject?.id);setQueryMode('code');}catch(e){console.error('Mode switch failed:',e)}}}>Code</button>
-                  <button type="button" className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-md transition-all ${queryMode==='doc'?'bg-indigo-500/20 text-indigo-200':'text-slate-500 hover:text-slate-300'}`} onClick={async()=>{try{await api.setMode('doc',selectedProject?.id);setQueryMode('doc');}catch(e){console.error('Mode switch failed:',e)}}}>Docs</button>
-                </div>
+
               </div>
               <p className="truncate text-xs text-[var(--text-secondary)]">{selectedProject.path}</p>
             </div>
