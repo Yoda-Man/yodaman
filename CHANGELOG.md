@@ -29,10 +29,10 @@ Deliberately kept, because static analysis cannot see how they are reached: ever
 
 ### Changed
 
-- Website: the "New in 0.3.9" nav link and section eyebrow now read **Stardust**, so the label stops going stale every release.
+- Website: the "New in 0.4.0" nav link and section eyebrow now read **Stardust**, so the label stops going stale every release.
 - `docs/architecture/architecture.md` updated to match the deleted modules — file trees, module tables, and the mermaid graph, where `CtxService --> DocPrep` is replaced by `SearchRouter --> DocPrep` to reflect the actual caller.
 
-## [0.3.9] - 2026-08-03
+## [0.4.0] - 2026-08-03
 
 ### Added — Stardust real-time dashboard
 
