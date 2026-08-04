@@ -2,7 +2,7 @@
 
 YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime — with a real-time Stardust OpenSpec dashboard, cross-tool composition views, and agent-driven spec workflows.
 
-![Version](https://img.shields.io/badge/Version-0.4.0-gold)
+![Version](https://img.shields.io/badge/Version-0.4.1-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan

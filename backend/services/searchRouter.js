@@ -1,6 +1,8 @@
 // backend/services/searchRouter.js
 /**
- * Search Router – hybrid routing for code vs documentation queries.
+ * Search Router – Stardust-powered unified search across Context Expert,
+ * Graphify, and OpenSpec. Every search returns results from all three tools
+ * with provenance tagging and spec‑drift awareness.
  */
 const express = require('express');
 const fs = require('fs');
@@ -11,6 +13,7 @@ const toolBox = require('../infrastructure/ToolBox');
 const { preprocessDocumentation, updateCtxConfig } = require('../utils/docPreprocessor');
 const logger = require('../infrastructure/Logger');
 const graphRanker = require('../infrastructure/GraphRanker');
+const specDrift = require('../stardust/SpecDrift');
 
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
 
@@ -100,31 +103,69 @@ async function docSearch({ query, project, top }) {
 }
 
 router.get('/', async (req, res) => {
-  const { query, project, top = 10, activeFile } = req.query;
+  const { query, project, top = 15, activeFile } = req.query;
   if (!query) return res.status(400).send('Query is required');
-  const mode = classifyQuery(query);
   const resolvedProject = resolveProjectIdentifier(project);
   const normalizedTop = normalizeTop(top);
   try {
-    if (mode === 'doc') {
-      const results = await docSearch({ query, project: resolvedProject, top: normalizedTop });
-      return res.json({ mode: 'doc', results });
-    }
-    // default to code search
-    const raw = await toolBox.searchCode({ query, project: resolvedProject, top: normalizedTop });
-    const results = applyGraphRanking(raw, { project: resolvedProject, activeFile, req, mode: 'code' });
+    // Run both code and doc searches in parallel — always cover everything.
+    const [codeResults, docResults] = await Promise.all([
+      toolBox.searchCode({ query, project: resolvedProject, top: normalizedTop }).catch(() => []),
+      docSearch({ query, project: resolvedProject, top: normalizedTop }).catch(() => []),
+    ]);
+
+    // Merge with provenance tags
+    const all = [
+      ...(Array.isArray(codeResults) ? codeResults : []).map(r => ({ ...r, _source: 'code' })),
+      ...(Array.isArray(docResults) ? docResults : []).map(r => ({ ...r, _source: 'docs' })),
+    ];
+
+    // Rank the merged set through GraphRanker (now includes specCoverage)
+    const results = applyGraphRanking(all, { project: resolvedProject, activeFile, req, mode: 'unified' });
+
+    // Annotate with spec drift flags per hit
+    const annotated = annotateSpecFlags(results, resolvedProject);
+
     return res.json({
-      mode: 'code',
-      results,
+      results: annotated,
       graphRanked: wasGraphRanked(results),
       weights: graphRanker.DEFAULT_WEIGHTS,
-      activeFile: activeFile || null
+      activeFile: activeFile || null,
     });
   } catch (err) {
-    logSearchFailure(err, { req, query, project: resolvedProject, mode });
+    logSearchFailure(err, { req, query, project: resolvedProject, mode: 'unified' });
     return res.status(500).json({ error: err.message, code: 'search_failed', requestId: req.id });
   }
 });
+
+/** Annotate each search hit with spec-drift awareness. */
+function annotateSpecFlags(results, projectPath) {
+  if (!Array.isArray(results)) return results;
+  try {
+    const specs = specDrift.readSpecs(projectPath);
+    if (!specs || specs.length === 0) return results;
+
+    // Build a map: file → which specs mention it
+    const specMentions = new Map();
+    for (const spec of specs) {
+      const refs = specDrift.extractReferences(spec.text);
+      for (const ref of refs) specMentions.set(ref, (specMentions.get(ref) || new Set()).add(spec.id));
+    }
+
+    return results.map(r => {
+      const file = r?.metadata?.path || r?.path || r?.file || '';
+      const mentions = specMentions.get(file) || specMentions.get(file.split('/').pop());
+      return {
+        ...r,
+        specFlag: mentions
+          ? { covered: true, specs: [...mentions].slice(0, 3) }
+          : { covered: false }
+      };
+    });
+  } catch (_) {
+    return results;
+  }
+}
 
 router.get('/code', async (req, res) => {
   const { query, project, top = 10, activeFile } = req.query;
