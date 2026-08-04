@@ -1,6 +1,7 @@
 const contextEngine = require('../infrastructure/ContextEngine');
 const { stripCliNoise } = require('../infrastructure/CliOutput');
 const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
+const specDrift = require('../stardust/SpecDrift');
 const toolBox = require('../infrastructure/ToolBox');
 const taskStore = require('../infrastructure/TaskStore');
 const graphifyService = require('../infrastructure/GraphifyService');
@@ -272,6 +273,23 @@ When project graph context is provided (you will see "Graphify knowledge graph r
                             ? impactAnalyzer.analyzeFile(metadata.projectId, toolCall.parameters.filePath)
                             : { available: false, reason: 'no workspace selected' };
 
+                        // Goldust: add OpenSpec spec awareness to the impact.
+                        // Which specs describe this file, and would the change cause drift?
+                        let specImpact = { available: false, reason: 'no projectId' };
+                        if (metadata.projectId) {
+                            try {
+                                const specs = specDrift.readSpecs(metadata.projectId);
+                                const mentionedIn = [];
+                                for (const spec of specs) {
+                                    const refs = specDrift.extractReferences(spec.text);
+                                    if (refs.some(r => toolCall.parameters.filePath.includes(r) || r.includes(toolCall.parameters.filePath))) {
+                                        mentionedIn.push(spec.id);
+                                    }
+                                }
+                                specImpact = { available: true, specCount: specs.length, mentionedIn };
+                            } catch (_) { /* OpenSpec unavailable */ }
+                        }
+
                         logger.info('approval_impact_assessed', {
                             taskId,
                             filePath: toolCall.parameters.filePath,
@@ -289,7 +307,8 @@ When project graph context is provided (you will see "Graphify knowledge graph r
                                 oldContent,
                                 newContent
                             },
-                            impact
+                            impact,
+                            specImpact
                         };
 
                         this.recordTask(taskId, {
@@ -302,7 +321,8 @@ When project graph context is provided (you will see "Graphify knowledge graph r
                             tool: 'writeFile',
                             taskId,
                             params: pendingApproval.params,
-                            impact
+                            impact,
+                            specImpact
                         };
                         this.recordTaskEvent(taskId, approvalEvent);
                         if (onStep) onStep(approvalEvent);

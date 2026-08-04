@@ -29,6 +29,7 @@ import SpecDriftPanel from './SpecDriftPanel';
 import ComposePanel from './ComposePanel';
 import TrustDashboard from './TrustDashboard';
 import SearchTrace from './SearchTrace';
+import ImpactAnalysisTab from './ImpactAnalysisTab';
 import ChangeImpactPanel from './ChangeImpactPanel';
 import PipelineStrip from './PipelineStrip';
 import { ActivityDrawer, ActivityRail } from './ActivityFeed';
@@ -105,6 +106,7 @@ const TABS = [
     { id: 'trace', icon: Search, label: 'Trace' },
     { id: 'diagnostics', icon: Activity, label: 'Diagnostics' },
     { id: 'commands', icon: Terminal, label: 'Commands' },
+    { id: 'impact', icon: BarChart3, label: 'Impact' },
 ];
 
 export default function Stardust({ selectedProject }) {
@@ -397,6 +399,12 @@ export default function Stardust({ selectedProject }) {
                         consoleEndRef={consoleEndRef}
                         onClearConsole={() => setConsoleLines([])}
                     />
+                )}
+
+                {tab === 'impact' && (
+                    <div className="max-w-4xl">
+                        <ImpactAnalysisTab projectRoot={effectiveCwd} />
+                    </div>
                 )}
             </div>
         </div>
