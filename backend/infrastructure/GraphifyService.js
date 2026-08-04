@@ -430,7 +430,6 @@ module.exports = {
     reportPath,
     buildStatusPath,
     artifactPath,
-    artifactTypes: () => Object.keys(ARTIFACTS),
     graphifyEnvironment,
     needsArtifactRegeneration,
     enhanceArtifactHtml,

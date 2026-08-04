@@ -2,8 +2,6 @@ import { useRef, useState } from 'react'
 import { File, Loader2, Paperclip, X } from 'lucide-react'
 import { api } from '../src/api/api'
 
-const ACCEPTED_UPLOAD_TYPES = '.dart,.js,.ts,.json,.yaml,.md,.log,.txt'
-
 function displaySize(size) {
   return `${Math.max(1, Math.round(Number(size || 0) / 1024))} KB`
 }
@@ -94,5 +92,3 @@ export default function FileUploader({ files = [], onFilesChange, disabled = fal
     </div>
   )
 }
-
-export { ACCEPTED_UPLOAD_TYPES }

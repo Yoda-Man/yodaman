@@ -1,3 +1,15 @@
+/**
+ * LOAD-BEARING — GENERATED FILE. DO NOT EDIT, AND DO NOT DELETE.
+ *
+ * Produced by scripts/generate-protocol.js from shared/protocol.schema.json
+ * (npm run generate:protocol). Hand edits are silently overwritten on the next
+ * run, and tests/infrastructure/Protocol.test.js fails if this file drifts from
+ * what the generator produces.
+ *
+ * It is also part of the published package (package.json "files") and is
+ * required by shared/yodamanClient.js, so exports that look unused in-repo are
+ * public API. See docs/dead-code.md.
+ */
 const TASK_EVENT_TYPES = Object.freeze({
     TASK_STARTED: 'task_started',
     TOOL_START: 'tool_start',

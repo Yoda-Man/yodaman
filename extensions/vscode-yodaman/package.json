@@ -2,7 +2,7 @@
   "name": "vscode-yodaman",
   "displayName": "YodaMan",
   "description": "Editor-native access to the YodaMan local agent runtime.",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "publisher": "yodaman",
   "license": "MIT",
   "icon": "media/logo.png",

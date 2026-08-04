@@ -1,3 +1,17 @@
+/**
+ * LOAD-BEARING — DO NOT DELETE BECAUSE "NOTHING IMPORTS IT".
+ *
+ * Published API surface. Shipped in the npm tarball via package.json "files",
+ * and consumed from outside this package:
+ *   - extensions/vscode-yodaman/src/extension.js (via ../../../shared/)
+ *   - apps/mobile/src/api/yodamanClient.js
+ *   - third-party consumers of the published package
+ * Exports that look unused in-repo (API_PATHS, readEventStream, requestJson)
+ * are deliberate public API. Removing one is a breaking change, not a cleanup.
+ * scripts/release-smoke.js gates the release on this file being present.
+ *
+ * See docs/dead-code.md for the full list of files in this category.
+ */
 const API_PATHS = {
     status: '/api/status',
     diagnostics: '/api/desktop/diagnostics',

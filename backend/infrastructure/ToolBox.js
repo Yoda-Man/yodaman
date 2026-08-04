@@ -77,6 +77,19 @@ class ToolBox {
 
     /**
      * Dynamically loads custom tools from the plugins directory.
+     *
+     * THIS METHOD IS WHY plugins/*.js ARE LOAD-BEARING DESPITE LOOKING DEAD.
+     * Plugins are found by
+     * readdirSync() and pulled in with require(pluginPath) — a computed path, not
+     * a literal. No static import exists anywhere, so knip, IDE "unused file"
+     * hints, bundler tree-shaking, and any basename-matching scan will all report
+     * every shipped plugin as unreferenced. Deleting one on that basis silently
+     * removes a working feature; the suite will still pass, because the plugin
+     * tests require() by path too.
+     *
+     * Before deleting anything under plugins/, run:
+     *     node -e "const t=require('./backend/infrastructure/ToolBox');console.log([...t.plugins.keys()])"
+     * All plugins that appear in that list are live. See docs/dead-code.md.
      */
     loadPlugins() {
         const pluginsDir = path.resolve(__dirname, '../../plugins');

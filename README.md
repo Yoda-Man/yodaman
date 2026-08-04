@@ -2,7 +2,7 @@
 
 YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime — with a real-time Stardust OpenSpec dashboard, cross-tool composition views, and agent-driven spec workflows.
 
-![Version](https://img.shields.io/badge/Version-0.3.9-gold)
+![Version](https://img.shields.io/badge/Version-0.4.0-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -104,27 +104,39 @@ yodaman/
 │   ├── core/                   # Agent engine, queue service, coding skill
 │   ├── infrastructure/         # ToolBox, Graphify, ContextEngine, Logger, GraphFacts, ImpactAnalyzer, etc.
 │   ├── interfaces/             # REST controller (all API routes, ~2300 lines)
-│   ├── services/               # Git, search, chat, file upload
+│   ├── services/               # Git, search, file upload
 │   ├── stardust/               # SpecDrift, StardustWrapper (CLI), StardustLive (WebSocket)
 │   └── utils/                  # Doc preprocessing, query classification
 ├── bin/                        # CLI entrypoint (yodaman)
 ├── dist/                       # Built frontend
 ├── electron/                   # Desktop app shell
 ├── extensions/vscode-yodaman/  # VS Code extension
-├── frontend/                   # Shared frontend utilities
+├── frontend/                   # Shared frontend utilities + Holocron VR plugin UI
 ├── plugins/                    # Installed plugins (CodeTrooper, Droid-Sweep, etc.)
 ├── scripts/                    # Build and release scripts
 ├── shared/                     # Shared protocol/types for external clients
 ├── src/                        # React UI source
-│   ├── components/             # 30 UI components (Stardust, AgentChat, GraphStudio, etc.)
+│   ├── components/             # 26 UI components (Stardust, AgentChat, GraphStudio, etc.)
 │   ├── hooks/                  # useHealthCheck, useStardustLive, useStardustPipeline
 │   └── api/                    # Frontend HTTP client
 ├── tests/                      # Jest test suites
 ├── website/                    # Public website + downloads
+├── knip.json                   # Dead-code scan config — declares the real entry points
 ├── server.js                   # Express entry point
 ├── start.js                    # CLI launcher
 └── package.json
 ```
+
+### Before deleting anything
+
+Much of this codebase is reached without a static import: plugins are `require()`d
+from a computed path, plugin UI components are named as strings in
+`plugins/plugin.json`, and several files are entry points launched by a host
+rather than imported. Tools that build an import graph report all of it as dead.
+
+**Read [docs/dead-code.md](docs/dead-code.md) first.** Files in that category
+carry a `LOAD-BEARING` header comment; run `npx knip` with the committed
+`knip.json` rather than bare defaults.
 
 ## Configuration
 

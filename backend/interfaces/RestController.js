@@ -10,7 +10,6 @@ const contextEngine = require('../infrastructure/ContextEngine');
 const watcherService = require('../infrastructure/FileSystemWatcher');
 const toolBox = require('../infrastructure/ToolBox');
 const searchRouter = require('../services/searchRouter');
-const chatHandler = require('../services/chatHandler');
 const fileUploadService = require('../services/fileUploadService');
 const gitService = require('../services/gitService');
 const auditLog = require('../infrastructure/AuditLog');
@@ -316,7 +315,6 @@ router.post('/mode', (req, res) => {
     try {
         const mode = validateMode(req.body?.mode, { required: true });
         const projectId = validateProjectId(req.body?.projectId);
-        chatHandler.setMode(mode);
         res.json({ ok: true, mode, projectId });
     } catch (err) {
         logger.warn('mode_update_rejected', { requestId: req.id, error: err.message });
@@ -620,10 +618,6 @@ router.post('/ask', async (req, res) => {
         return jsonError(res, err.status || 400, err.message, 'invalid_request');
     }
 
-    if (mode) {
-        chatHandler.setMode(mode);
-    }
-    
     if (projectId) {
         sessionStore.saveMessage(projectId, { role: 'user', content: question, timestamp: new Date() });
     }
