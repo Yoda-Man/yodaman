@@ -2,35 +2,61 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
-## [0.4.0] - 2026-08-04
+## [0.4.1] - 2026-08-04
+
+### Added — Stardust-powered search
+
+Search now truly harnesses all three mandatory tools with a fourth signal: spec coverage from OpenSpec. The ranking formula is:
+
+> `score = semantic × 0.50 + proximity × 0.20 + centrality × 0.15 + specCoverage × 0.15`
+
+- **`GraphRanker.buildSpecIndex()`**: reads OpenSpec specs and builds a coverage set. Files cited in specs get a ranking boost (specCoverage = 1.0); undocumented files score 0. The boost moves architecturally documented files above undocumented ones with otherwise equal scores.
+- **Unified multi-source results**: `GET /api/search` now runs code and docs searches in parallel and merges them with `_source` provenance tags (`code` | `docs`). No more binary code/docs split.
+- **Per-hit spec flags**: every search result carries a `specFlag: { covered: true, specs: [...] }` annotation showing which OpenSpec specs describe the file.
+- **Default top bumped**: 10 → 15 for richer result sets.
+
+### Added — Enhanced impact analysis
+
+The chat approval gate's ImpactPanel now includes:
+
+- **Spec awareness**: shows which OpenSpec specs describe the file being modified, or "No specs describe this file."
+- **Graph freshness badge**: "graph current" / "graph stale" indicator so the reviewer knows if risk data is fresh.
+- **Configurable depth slider**: expandable 1–4 hop control inline in the approval gate.
+- **Cross-reference link**: "Full cross-reference (Stardust Compose)" button linking to the file's three-tool cross-reference.
+- **New Stardust Impact tab**: 8th tab with dedicated impact analysis tool — file path input, hop depth selector, risk verdict, dual-panel Graphify structure + OpenSpec awareness breakdown, and test coverage detail.
+- **Backend**: `specDrift` imported into `AgentReasoningEngine`; `specImpact` now included in `pendingApproval` and `approvalEvent` payloads.
+
+### Removed — Code/Docs mode toggle
+
+The Code/Docs toggle was purely cosmetic — it posted to `/api/mode` which only validated and echoed back without changing any behavior. Search, agent, and context retrieval all ignored it.
+
+- Toggle buttons removed from `AgentChatTab.jsx`
+- `queryMode` state, `api.setMode()` deleted
+- `POST /api/mode` route removed from `RestController.js`
+- `ALLOWED_MODES` constant and `validateMode()` function deleted
+- `mode` parameter cleaned from `/api/ask` endpoint
+- Dead `classifyQuery` import removed from `searchRouter.js` (unified search always returns both)
+- `yodamanClient.prototype.setMode()` removed (called removed endpoint)
+- VS Code extension `getClient().setMode()` call removed
 
 ### Removed — dead code sweep
 
-Reachability analysis over every real entry point (npm scripts, `electron-builder.extraMetadata.main`, the Vite `index.html` root, jest, `bin`, the VS Code extension `main`, the `ToolBox` plugin loader, and `plugin.json` component paths) found six unreachable modules. All are deleted:
+Reachability analysis over every real entry point found six unreachable modules:
 
-- **`backend/services/contextEngine.js`** — no importers. The live implementation is `backend/infrastructure/ContextEngine.js`; only the casing differed, which is why the duplicate survived so long.
-- **`backend/services/chatHandler.js`** — a query-mode singleton whose state was written and never read. `getMode` had no callers, and both `setMode` call sites in `RestController` already ran `validateMode()` first — and `ALLOWED_MODES` is exactly `['code', 'doc']`, identical to `setMode`'s own check, so it could never throw. The request path passes its own local `mode` onward. Removing the module and both call sites leaves the `POST /api/mode` contract byte-for-byte unchanged.
-- **`src/components/ChatWindow.jsx`** — superseded by `AgentChatTab`; nothing imported it.
-- **`src/components/ModeToggle.jsx`** — imported only by `ChatWindow`.
-- **`src/components/Chat/ModeToggle.jsx`** — no importers, and it imported a `ModeToggle.css` that does not exist, so it would have thrown on first render.
-- **`src/components/ManualWindow.jsx`** — superseded by the static `/manual.html` that `SettingsModal` and `PluginsWindow` link to.
+- **`backend/services/contextEngine.js`**, **`backend/services/chatHandler.js`** — no importers
+- **`src/components/ChatWindow.jsx`**, **`ModeToggle.jsx`**, **`Chat/ModeToggle.jsx`**, **`ManualWindow.jsx`** — superseded or never imported
 
-Three dead exports also removed: `GraphifyService.artifactTypes`, `chatHandler.getMode`, and `FileUploader.ACCEPTED_UPLOAD_TYPES` (whose value was already duplicated inline on the `accept` attribute).
-
-Deliberately kept, because static analysis cannot see how they are reached: every plugin under `plugins/` and the `frontend/UIPanel.js` / `VRViewer.js` pair (loaded by `ToolBox.loadPlugins()` via `readdirSync` + `require`, and by `plugin.json` component paths); `shared/yodamanClient.js` and the generated `yodamanProtocol.*`; the VS Code `deactivate()` lifecycle hook; the `tailwind`/`postcss` config keys; and the four `tests/fixtures/codetrooper-files/*` files, which `CodeTrooper.test.js` asserts on by count.
+Three dead exports also removed: `GraphifyService.artifactTypes`, `chatHandler.getMode`, `FileUploader.ACCEPTED_UPLOAD_TYPES`.
 
 ### Fixed
 
-- **Undeclared test dependencies**: `tests/frontend/RendererSafety.test.js` requires `@babel/parser` and `@babel/traverse`, but both resolved only transitively through jest. They are now declared in `devDependencies`, so the test no longer depends on another package's dependency tree.
-
-### Removed — unused dependencies
-
-- **`axios`** and **`wait-on`** — no references anywhere in source, scripts, CI, `Dockerfile`, or `nodemon.json`.
+- **Undeclared test dependencies**: `@babel/parser` and `@babel/traverse` now in `devDependencies`.
+- Removed unused dependencies: `axios`, `wait-on`.
 
 ### Changed
 
-- Website: the "New in 0.4.0" nav link and section eyebrow now read **Stardust**, so the label stops going stale every release.
-- `docs/architecture/architecture.md` updated to match the deleted modules — file trees, module tables, and the mermaid graph, where `CtxService --> DocPrep` is replaced by `SearchRouter --> DocPrep` to reflect the actual caller.
+- Website: "New in" nav link now reads **Stardust** so the label stops going stale.
+- `docs/architecture/architecture.md`: updated to match deleted modules.
 
 ## [0.4.0] - 2026-08-03
 
