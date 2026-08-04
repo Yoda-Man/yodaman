@@ -80,17 +80,34 @@ describe('GraphRanker', () => {
         ];
         const ranked = files(graphRanker.rerank(PROJECT, input));
 
-        // Semantic weight (0.6) must dominate centrality (0.15).
+        // Semantic weight (0.50) must dominate.
         expect(ranked[0]).toBe('README.md');
     });
 
-    test('attaches the graph signal for observability', () => {
+    test('weights default to the four-signal Stardust blend', () => {
+        expect(graphRanker.DEFAULT_WEIGHTS).toEqual({
+            semantic: 0.50,
+            proximity: 0.20,
+            centrality: 0.15,
+            specCoverage: 0.15
+        });
+    });
+
+    test('attaches the graph signal including specCoverage for observability', () => {
         const ranked = graphRanker.rerank(PROJECT, flatResults(['src/logger.js', 'README.md']), {
             activeFile: 'src/logger.js'
         });
         const logger = ranked.find(r => r.metadata.path.endsWith('logger.js'));
 
-        expect(logger.graphSignal).toEqual(expect.objectContaining({ inGraph: true, hops: 0 }));
+        expect(logger.graphSignal).toEqual(expect.objectContaining({
+            inGraph: true,
+            hops: 0,
+            semantic: expect.any(Number),
+            proximity: expect.any(Number),
+            centrality: expect.any(Number),
+            specCoverage: expect.any(Number),
+            weights: graphRanker.DEFAULT_WEIGHTS
+        }));
         expect(typeof logger.graphRank).toBe('number');
     });
 

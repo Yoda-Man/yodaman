@@ -72,7 +72,7 @@ The same checks run automatically at startup, appear in the Dashboard health pan
 Context Expert, Graphify and OpenSpec are each required, and YodaMan composes them rather than treating them as three separate tools:
 
 - **Approving a change shows its cost.** When Yoda-Agent proposes a file write, the approval prompt reports the blast radius from the knowledge graph: how many files depend on the target, whether any test covers that path, which dependents are nearest, and an overall risk verdict. A change that reaches five or more files with no covering test is flagged as high risk. If no graph has been built yet the diff still appears, with the blast radius marked unavailable.
-- **Search knows structure, not just text.** Code search blends Context Expert's semantic ranking with graph proximity to the file you are working in and how central each result is in the graph. Semantic relevance still dominates, so a strong textual match is never buried — structure breaks ties. Pass `activeFile` to `GET /api/search/code` to bias results toward what you are editing.
+- **Search is Stardust-powered.** Every search blends four signals from all three mandatory tools: Context Expert semantic relevance (weight 0.50), Graphify proximity to your active file (0.20), Graphify structural centrality (0.15), and OpenSpec spec coverage — whether the file is described in any architecture spec (0.15). Results always include both code and documentation sources with provenance tags, and each hit carries a `specFlag` showing which specs describe it. Pass `activeFile` to bias results toward what you are editing.
 - **Accepted changes refresh the workspace.** Once an agent task that wrote files finishes, that workspace is reindexed and its graph updated automatically — once per task, not once per file. Without this, the answer after an accepted change would be computed from stale data.
 - **One readiness signal.** The Chat header shows whether this workspace's answers can be trusted: `Graph current`, `Graph stale`, `Refreshing`, or `Not indexed`. The verdict is always the weakest layer, so nothing hides behind an average. Query it directly with `GET /api/readiness?projectId=<path>`.
 - **Architecture drift.** OpenSpec records the architecture you intended; the graph records the one you built. `GET /api/stardust/drift` compares them and reports two things: specs citing files that no longer exist (a spec that has quietly become wrong), and modules many files depend on that no spec describes. Requires both an initialized OpenSpec and a built graph, and tells you which is missing. Also available to the agent as the `specDrift` tool.
@@ -183,7 +183,7 @@ Use your desktop LAN address when pairing from a phone, for example `http://192.
 - `POST /api/graphify/affected`: Run impact analysis for a graph node.
 - `GET /api/graphify/map`: Read a compact architecture map summary.
 - `POST /api/graphify/tree`: Generate Graphify's D3 tree artifact.
-- `GET /api/search`: Run semantic search.
+- `GET /api/search`: Run unified Stardust-powered search across code and docs. Accepts `query`, `project`, `top` (default 15), `activeFile`. Returns merged results with `_source` provenance (`code`|`docs`), `specFlag` annotations, and `graphRank` scores with the four-signal breakdown.
 - `POST /api/ask`: Ask a question.
 - `GET /api/status`: Read Context Expert status.
 - `GET /api/desktop/diagnostics`: Read runtime, task, host, and plugin diagnostics.
@@ -232,7 +232,7 @@ YodaMan 0.4.0 integrates OpenSpec through the **Stardust** tab. OpenSpec provide
 - **Drift**: Architecture drift detection comparing OpenSpec specs against the knowledge graph. Shows stale spec references (files cited in specs that no longer exist) and undocumented modules (load-bearing files no spec describes). Unique to YodaMan.
 - **Compose**: File-centric cross-reference. Enter any repo path to see which OpenSpec specs describe it, its Graphify structural position (dependents, centrality, blast radius, test coverage), and how Context Expert ranks it — three columns, one file.
 - **Trust**: Unified health dashboard across Context Expert, Graphify, and OpenSpec with per-tool status cards and the overall WorkspaceReadiness verdict.
-- **Trace**: Search ranking transparency. Every search result shows its semantic×0.6 + proximity×0.25 + centrality×0.15 breakdown.
+- **Trace**: Search ranking transparency. Every search result shows its semantic×0.50 + proximity×0.20 + centrality×0.15 + specCoverage×0.15 breakdown with colour-coded bars for each signal and a spec coverage indicator showing which OpenSpec specs describe the file.
 - **Diagnostics**: Installation check, version, project initialization status, and one-click install/init buttons.
 - **Commands**: Direct CLI access with Propose, Validate, Archive, List Changes, and List Specs buttons plus a scrollable console output. The Propose button creates `openspec/changes/<name>/` with proposal.md, design.md, and tasks.md.
 - **Impact**: Dedicated impact analysis tool. Enter any file path to see its full blast radius with configurable hop depth (1–4), spec awareness (which OpenSpec specs describe it), test coverage mapping, and dependency chain visualization.
