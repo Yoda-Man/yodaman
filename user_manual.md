@@ -1,6 +1,6 @@
 # YodaMan User Manual
 
-Version: 0.3.9
+Version: 0.4.0
 
 YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, mandatory Graphify knowledge graph, plugin system, and local runtime API.
 
@@ -39,7 +39,7 @@ Workspaces are absolute local folder paths. Add them by pasting a path, browsing
 
 ### Graphify knowledge graph
 
-Graphify is mandatory in 0.3.9 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
+Graphify is mandatory in 0.4.0 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
 
 The Graph tab opens Graph Studio, a project-scoped visual workspace for Graphify outputs. Graph Studio embeds the generated mind-map and Vis.js canvas artifacts, shows graph freshness, renders the markdown report, and keeps graph query plus impact analysis actions close to the visualization.
 
@@ -226,12 +226,15 @@ npm run package
 
 ## 10. Project Stardust — OpenSpec Integration
 
-YodaMan 0.3.9 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow. The tab has four views:
+YodaMan 0.4.0 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow. The tab has seven views:
 
 - **Board**: Real-time change overview with card-based navigation, task progress bars, validation health icons, and a side-by-side spec diff viewer. Select a change to review its proposed spec deltas grouped by operation (ADDED/MODIFIED/REMOVED/RENAMED), then validate or archive directly from the diff panel. The board updates live via WebSocket — file changes in `openspec/` push instantly.
 - **Drift**: Architecture drift detection comparing OpenSpec specs against the knowledge graph. Shows stale spec references (files cited in specs that no longer exist) and undocumented modules (load-bearing files no spec describes). Unique to YodaMan.
+- **Compose**: File-centric cross-reference. Enter any repo path to see which OpenSpec specs describe it, its Graphify structural position (dependents, centrality, blast radius, test coverage), and how Context Expert ranks it — three columns, one file.
+- **Trust**: Unified health dashboard across Context Expert, Graphify, and OpenSpec with per-tool status cards and the overall WorkspaceReadiness verdict.
+- **Trace**: Search ranking transparency. Every search result shows its semantic×0.6 + proximity×0.25 + centrality×0.15 breakdown.
 - **Diagnostics**: Installation check, version, project initialization status, and one-click install/init buttons.
-- **Commands**: Direct CLI access for validate, archive, list changes, and list specs with a scrollable console output.
+- **Commands**: Direct CLI access with Propose, Validate, Archive, List Changes, and List Specs buttons plus a scrollable console output. The Propose button creates `openspec/changes/<name>/` with proposal.md, design.md, and tasks.md.
 
 ### Setup
 
@@ -253,11 +256,25 @@ The Stardust tab includes a Diagnostics panel that checks:
 - Current OpenSpec version
 - Whether `openspec/project.md` exists in your workspace
 
+### Agent Tools
+
+The Yoda-Agent has four OpenSpec tools available during autonomous tasks:
+
+- `specPropose(project, changeName, description)` — Creates a new change proposal under `openspec/changes/<name>/`.
+- `specValidate(project, changeName)` — Validates a change against project specs via the CLI.
+- `specArchive(project, changeName)` — Archives a completed change.
+- `specDrift(project)` — Compares OpenSpec intent against the actual knowledge graph.
+
+The agent is instructed to follow the Propose → Validate → Apply → Archive workflow for any significant feature, and to check drift before proposing new work.
+
 ### API Endpoints
 
 - `GET /api/stardust/board?projectRoot=...` — Change-board snapshot (REST fallback for WebSocket)
 - `GET /api/stardust/deltas/:name?projectRoot=...` — Operation-grouped spec deltas for a change
+- `GET /api/stardust/compose?projectRoot=...&file=...` — File-centric cross-reference (OpenSpec + Graphify + Context Expert)
+- `GET /api/stardust/spec?projectRoot=...&spec=...` — Current published spec text by ID
+- `GET /api/stardust/change-impact/:name?projectRoot=...` — Per-change graph-resolved impact analysis
 - `PUT /api/stardust/validation/:name` — Store validation result for board health icons
 - `WS /api/stardust/live?projectRoot=...` — Real-time WebSocket for board + activity feed
 - `GET /api/stardust/diagnose?projectRoot=...` — Run OpenSpec diagnostics
-- `POST /api/stardust/run` — Execute any OpenSpec workflow action
+- `POST /api/stardust/run` — Execute any OpenSpec workflow action (propose, validate, archive, list, init, install)

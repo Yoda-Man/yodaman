@@ -6,11 +6,28 @@ const schemaPath = path.join(rootDir, 'shared', 'protocol.schema.json');
 const jsOutputPath = path.join(rootDir, 'shared', 'yodamanProtocol.js');
 const tsOutputPath = path.join(rootDir, 'shared', 'yodamanProtocol.d.ts');
 
+// Emitted into both generated files. tests/infrastructure/Protocol.test.js
+// regenerates and compares byte-for-byte, so this header must come from the
+// generator — editing the output files by hand will fail that test.
+const GENERATED_HEADER = `/**
+ * LOAD-BEARING — GENERATED FILE. DO NOT EDIT, AND DO NOT DELETE.
+ *
+ * Produced by scripts/generate-protocol.js from shared/protocol.schema.json
+ * (npm run generate:protocol). Hand edits are silently overwritten on the next
+ * run, and tests/infrastructure/Protocol.test.js fails if this file drifts from
+ * what the generator produces.
+ *
+ * It is also part of the published package (package.json "files") and is
+ * required by shared/yodamanClient.js, so exports that look unused in-repo are
+ * public API. See docs/dead-code.md.
+ */
+`;
+
 function generate() {
     const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
 
     // 1. Generate JS file content
-    let jsContent = '';
+    let jsContent = GENERATED_HEADER;
     const enumNames = Object.keys(schema.enums);
 
     enumNames.forEach((enumName) => {
@@ -48,7 +65,7 @@ module.exports = {
     jsContent += `    assertTaskEvent,\n    isTaskEvent\n};\n`;
 
     // 2. Generate TS declarations (.d.ts)
-    let tsContent = '';
+    let tsContent = GENERATED_HEADER;
 
     // Map Enum Name to TS Singular Type Name
     const tsEnumTypeNameMap = {

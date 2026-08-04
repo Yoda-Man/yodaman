@@ -1,3 +1,14 @@
+/**
+ * LOAD-BEARING — DO NOT DELETE BECAUSE "NOTHING IMPORTS IT".
+ *
+ * Electron main process. Reached two ways, neither of them an import:
+ *   - npm run desktop        -> electron electron/main.js
+ *   - electron-builder.json  -> extraMetadata.main = "electron/main.js"
+ * It also loads electron/preload.js by path at runtime, so that file has no
+ * importers either.
+ *
+ * See docs/dead-code.md for the full list of files in this category.
+ */
 const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, shell, Tray } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');

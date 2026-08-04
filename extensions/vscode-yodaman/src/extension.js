@@ -1,3 +1,19 @@
+/**
+ * LOAD-BEARING — DO NOT DELETE BECAUSE "NOTHING IMPORTS IT".
+ *
+ * VS Code extension entry point. Reached via "main": "./src/extension.js" in
+ * this extension's own package.json, so nothing in the repository imports it and
+ * every "unused file" scan flags it.
+ *
+ * Note also:
+ *  - `vscode` is provided by the editor at runtime. It is intentionally NOT a
+ *    dependency; it is declared as engines.vscode instead. Do not "fix" this by
+ *    npm-installing a vscode package.
+ *  - It reaches OUT of the extension directory to ../../../shared/yodamanClient,
+ *    which is why that file has no in-package importers.
+ *
+ * See docs/dead-code.md for the full list of files in this category.
+ */
 const vscode = require('vscode');
 // Access the client singleton
 const { createYodaManClient } = require('../../../shared/yodamanClient');
@@ -680,6 +696,10 @@ function activate(context) {
     checkStatus(false);
 }
 
+// LOAD-BEARING: both of these are called BY VS CODE, never by our own code, so
+// an unused-export report will list them. `deactivate` is intentionally empty —
+// it is the documented lifecycle counterpart to `activate` and must stay
+// exported so the editor can call it on teardown.
 function deactivate() {}
 
 module.exports = {

@@ -1,4 +1,14 @@
 /**
+ * LOAD-BEARING — DO NOT DELETE BECAUSE "NOTHING IMPORTS IT".
+ *
+ * Loaded at runtime by ToolBox.loadPlugins() (backend/infrastructure/ToolBox.js),
+ * which readdirSync()s this directory and require()s each .js file. There is no
+ * static import anywhere in the codebase, so knip, IDE "unused file" hints, and
+ * any basename-matching scan will all report this file as dead. It is not.
+ *
+ * See docs/dead-code.md for the full list of files in this category.
+ */
+/**
  * Lightsaber — Git Health Map for YodaMan
  * 
  * A YodaMan tool plugin that analyzes Git history to find code hotspots.

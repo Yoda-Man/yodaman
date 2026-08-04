@@ -71,8 +71,7 @@ describe('Health self-heal coverage', () => {
             'website/index.html',
             'README.md',
             'user_manual.md',
-            'public/manual.html',
-            'src/components/ManualWindow.jsx'
+            'public/manual.html'
         ];
 
         for (const relativePath of files) {

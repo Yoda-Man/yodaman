@@ -2,7 +2,37 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
-## [0.3.9] - 2026-08-03
+## [0.4.0] - 2026-08-04
+
+### Removed — dead code sweep
+
+Reachability analysis over every real entry point (npm scripts, `electron-builder.extraMetadata.main`, the Vite `index.html` root, jest, `bin`, the VS Code extension `main`, the `ToolBox` plugin loader, and `plugin.json` component paths) found six unreachable modules. All are deleted:
+
+- **`backend/services/contextEngine.js`** — no importers. The live implementation is `backend/infrastructure/ContextEngine.js`; only the casing differed, which is why the duplicate survived so long.
+- **`backend/services/chatHandler.js`** — a query-mode singleton whose state was written and never read. `getMode` had no callers, and both `setMode` call sites in `RestController` already ran `validateMode()` first — and `ALLOWED_MODES` is exactly `['code', 'doc']`, identical to `setMode`'s own check, so it could never throw. The request path passes its own local `mode` onward. Removing the module and both call sites leaves the `POST /api/mode` contract byte-for-byte unchanged.
+- **`src/components/ChatWindow.jsx`** — superseded by `AgentChatTab`; nothing imported it.
+- **`src/components/ModeToggle.jsx`** — imported only by `ChatWindow`.
+- **`src/components/Chat/ModeToggle.jsx`** — no importers, and it imported a `ModeToggle.css` that does not exist, so it would have thrown on first render.
+- **`src/components/ManualWindow.jsx`** — superseded by the static `/manual.html` that `SettingsModal` and `PluginsWindow` link to.
+
+Three dead exports also removed: `GraphifyService.artifactTypes`, `chatHandler.getMode`, and `FileUploader.ACCEPTED_UPLOAD_TYPES` (whose value was already duplicated inline on the `accept` attribute).
+
+Deliberately kept, because static analysis cannot see how they are reached: every plugin under `plugins/` and the `frontend/UIPanel.js` / `VRViewer.js` pair (loaded by `ToolBox.loadPlugins()` via `readdirSync` + `require`, and by `plugin.json` component paths); `shared/yodamanClient.js` and the generated `yodamanProtocol.*`; the VS Code `deactivate()` lifecycle hook; the `tailwind`/`postcss` config keys; and the four `tests/fixtures/codetrooper-files/*` files, which `CodeTrooper.test.js` asserts on by count.
+
+### Fixed
+
+- **Undeclared test dependencies**: `tests/frontend/RendererSafety.test.js` requires `@babel/parser` and `@babel/traverse`, but both resolved only transitively through jest. They are now declared in `devDependencies`, so the test no longer depends on another package's dependency tree.
+
+### Removed — unused dependencies
+
+- **`axios`** and **`wait-on`** — no references anywhere in source, scripts, CI, `Dockerfile`, or `nodemon.json`.
+
+### Changed
+
+- Website: the "New in 0.4.0" nav link and section eyebrow now read **Stardust**, so the label stops going stale every release.
+- `docs/architecture/architecture.md` updated to match the deleted modules — file trees, module tables, and the mermaid graph, where `CtxService --> DocPrep` is replaced by `SearchRouter --> DocPrep` to reflect the actual caller.
+
+## [0.4.0] - 2026-08-03
 
 ### Added — Stardust real-time dashboard
 
@@ -41,6 +71,15 @@ Three new tabs that make the "Context Expert + Graphify + OpenSpec compose" clai
 - **core/README.md**: fixed monorepo path, removed duplicate npm install.
 - **Dockerfile**: added missing `@fission-ai/openspec`.
 - **`user_manual.md`**: added prerequisites, `npm run dev`, new Stardust 7-tab layout.
+
+### Added — Agent-driven OpenSpec workflow
+
+- **Agent tools**: `specPropose`, `specValidate`, `specArchive` added to ToolBox.js (tools #12-14). The agent can now create OpenSpec change proposals, validate them against specs, and archive completed changes — following the full Propose → Validate → Apply → Archive workflow.
+- **Agent system prompt**: updated in AgentReasoningEngine.js to instruct the agent to plan before coding and use specPropose for significant features. DefaultCodingSkill.js includes OpenSpec workflow guidance with specDrift pre-check.
+- **Stardust Commands tab**: Propose button alongside Validate, Archive, List Changes, and List Specs. Creates `openspec/changes/<name>/` with proposal.md, design.md, and tasks.md.
+- **PipelineStrip**: persistent cross-tab bar showing Context Expert → Graphify → OpenSpec pipeline state with live readiness dots.
+- **Stardust Diagnostics tab**: in-app OpenSpec version check, project status, and one-click install/init.
+- **7-tab Stardust layout**: Board, Drift, Compose, Trust, Trace, Diagnostics, Commands.
 
 ### Added — earlier in 0.3.8 cycle
 

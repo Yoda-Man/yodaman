@@ -6,6 +6,7 @@ const contextEngine = require('./ContextEngine');
 const auditLog = require('./AuditLog');
 const graphifyService = require('./GraphifyService');
 const specDrift = require('../stardust/SpecDrift');
+const stardustWrapper = require('../stardust/StardustWrapper');
 const logger = require('./Logger');
 
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
@@ -76,6 +77,19 @@ class ToolBox {
 
     /**
      * Dynamically loads custom tools from the plugins directory.
+     *
+     * THIS METHOD IS WHY plugins/*.js ARE LOAD-BEARING DESPITE LOOKING DEAD.
+     * Plugins are found by
+     * readdirSync() and pulled in with require(pluginPath) — a computed path, not
+     * a literal. No static import exists anywhere, so knip, IDE "unused file"
+     * hints, bundler tree-shaking, and any basename-matching scan will all report
+     * every shipped plugin as unreferenced. Deleting one on that basis silently
+     * removes a working feature; the suite will still pass, because the plugin
+     * tests require() by path too.
+     *
+     * Before deleting anything under plugins/, run:
+     *     node -e "const t=require('./backend/infrastructure/ToolBox');console.log([...t.plugins.keys()])"
+     * All plugins that appear in that list are live. See docs/dead-code.md.
      */
     loadPlugins() {
         const pluginsDir = path.resolve(__dirname, '../../plugins');
@@ -169,7 +183,10 @@ class ToolBox {
             "8. graphifyExplain(node, project): Explains a graph node and its neighbors.",
             "9. graphifyPath(source, target, project): Finds a graph path between two entities.",
             "10. graphifyAffected(node, project, depth): Finds nodes likely impacted by a change to a graph entity.",
-            "11. specDrift(project): Compares OpenSpec intent against the actual graph — specs citing files that no longer exist, and load-bearing modules no spec describes."
+            "11. specDrift(project): Compares OpenSpec intent against the actual graph — specs citing files that no longer exist, and load-bearing modules no spec describes.",
+            "12. specPropose(project, changeName, description): Creates a new OpenSpec change proposal (proposal.md, design.md, tasks.md) following the structured Propose → Apply → Archive workflow. Use this BEFORE implementing any significant feature.",
+            "13. specValidate(project, changeName): Validates an OpenSpec change against project specs — checks for completeness and convention adherence. Run this after proposing and before archiving.",
+            "14. specArchive(project, changeName): Archives a completed OpenSpec change. Use this after all tasks are implemented and validated."
         ];
 
         const pluginDocs = Array.from(this.plugins.values()).map((p, i) => {
@@ -386,6 +403,80 @@ class ToolBox {
         const projectPath = this.resolveAllowedPath(project || process.cwd());
         const report = specDrift.detectDrift(projectPath, { minDependents });
         return { ...report, summary: specDrift.formatDrift(report) };
+    }
+
+    /**
+     * OpenSpec propose — create a new change proposal.
+     * Creates proposal.md, design.md, and tasks.md under openspec/changes/<name>/.
+     */
+    async specPropose({ project, changeName, description = '' }) {
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        if (!changeName) throw new Error('changeName is required — provide a kebab-case name like "add-dark-mode"');
+
+        // Create the change directory and proposal files using the stardust workflow
+        const changeDir = path.join(projectPath, 'openspec', 'changes', changeName);
+        if (!fs.existsSync(changeDir)) fs.mkdirSync(changeDir, { recursive: true });
+
+        const proposalPath = path.join(changeDir, 'proposal.md');
+        const designPath = path.join(changeDir, 'design.md');
+        const tasksPath = path.join(changeDir, 'tasks.md');
+
+        // Only write if the files don't already exist (don't overwrite user edits)
+        if (!fs.existsSync(proposalPath)) {
+            fs.writeFileSync(proposalPath, `# ${changeName}\n\n${description || 'Proposed change.'}\n`);
+        }
+        if (!fs.existsSync(designPath)) {
+            fs.writeFileSync(designPath, `# Design: ${changeName}\n\n## Approach\n\n## Tradeoffs\n\n## Affected modules\n`);
+        }
+        if (!fs.existsSync(tasksPath)) {
+            fs.writeFileSync(tasksPath, `# Tasks: ${changeName}\n\n- [ ] Implement the change\n- [ ] Add tests\n- [ ] Validate against specs\n`);
+        }
+
+        return {
+            success: true,
+            changeName,
+            proposalPath,
+            files: ['proposal.md', 'design.md', 'tasks.md'],
+            message: `OpenSpec change "${changeName}" proposed. Review the files in openspec/changes/${changeName}/ and run specValidate when ready.`
+        };
+    }
+
+    /**
+     * OpenSpec validate — check a change against project specs.
+     */
+    async specValidate({ project, changeName }) {
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        if (!changeName) throw new Error('changeName is required');
+
+        const result = await stardustWrapper.validate(changeName, { cwd: projectPath });
+        return {
+            success: result.success,
+            changeName,
+            output: result.stdout,
+            errors: result.stderr || null,
+            message: result.success
+                ? `Change "${changeName}" passed validation.`
+                : `Validation failed for "${changeName}": ${result.stderr || 'unknown error'}`
+        };
+    }
+
+    /**
+     * OpenSpec archive — finalize a completed change.
+     */
+    async specArchive({ project, changeName }) {
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        if (!changeName) throw new Error('changeName is required');
+
+        const result = await stardustWrapper.archive(changeName, { cwd: projectPath });
+        return {
+            success: result.success,
+            changeName,
+            output: result.stdout,
+            errors: result.stderr || null,
+            message: result.success
+                ? `Change "${changeName}" has been archived.`
+                : `Archive failed for "${changeName}": ${result.stderr || 'unknown error'}`
+        };
     }
 
     async getFileContent(filePath) {

@@ -20,6 +20,7 @@ const path = require('path');
 const chokidar = require('chokidar');
 const { WebSocketServer } = require('ws');
 const specDrift = require('./SpecDrift');
+const graphifyService = require('../infrastructure/GraphifyService');
 const logger = require('../infrastructure/Logger');
 
 // ──────────────────────────────────────────────
@@ -169,15 +170,14 @@ function buildSnapshot(projectRoot) {
     // Sort newest first
     changes.sort((a, b) => b.mtimeMs - a.mtimeMs);
 
-    // Graph status
+    // Graph status, from the same freshness check the trust strip uses. A local
+    // "graph.json newer than an hour" guess disagreed with it, so the board could
+    // call a graph stale while the strip beside it called the same graph current.
     let graphStatus = 'unavailable';
     try {
-        const graphPath = path.join(projectRoot, 'graphify-out', 'graph.json');
-        if (fs.existsSync(graphPath)) {
-            const stat = fs.statSync(graphPath);
-            graphStatus = (Date.now() - stat.mtimeMs < 3600_000) ? 'current' : 'stale';
-        }
-    } catch (_) { /* unavailable */ }
+        const freshness = graphifyService.freshness(projectRoot);
+        if (freshness.graphExists) graphStatus = freshness.stale ? 'stale' : 'current';
+    } catch (_) { /* no graph, or unreadable — leave unavailable */ }
 
     return { changes, ready: true, graphStatus };
 }
@@ -238,68 +238,126 @@ function buildDeltas(projectRoot, changeName) {
 //  WebSocket plumbing
 // ──────────────────────────────────────────────
 
-/** @type {Set<import('ws').WebSocket>} */
-const clients = new Set();
+/**
+ * Connected clients, each pinned to the workspace it asked for.
+ *
+ * A single shared watcher on the server's own cwd would mean the change board
+ * and activity feed only ever came alive for one workspace, and every client
+ * would receive another workspace's file events. Watchers are therefore keyed by
+ * OpenSpec root and reference-counted: created when the first client for a
+ * workspace connects, torn down when the last one leaves.
+ *
+ * @type {Map<import('ws').WebSocket, { projectRoot: string, openspecRoot: string|null }>}
+ */
+const clients = new Map();
 
-function broadcast(msg) {
+/** @type {Map<string, { watcher: import('chokidar').FSWatcher, refs: number }>} */
+const watchers = new Map();
+
+/** Send to the clients watching one workspace — never to everyone. */
+function broadcastTo(openspecRoot, msg) {
     const payload = JSON.stringify(msg);
-    for (const ws of clients) {
-        if (ws.readyState === 1) {
-            try { ws.send(payload); } catch (_) { clients.delete(ws); }
-        }
+    for (const [ws, meta] of clients) {
+        if (meta.openspecRoot !== openspecRoot) continue;
+        if (ws.readyState !== 1) continue;
+        try { ws.send(payload); } catch (_) { clients.delete(ws); }
     }
 }
+
+/** The project root any client of this OpenSpec root is using, for snapshots. */
+function projectRootFor(openspecRoot) {
+    for (const meta of clients.values()) {
+        if (meta.openspecRoot === openspecRoot) return meta.projectRoot;
+    }
+    return path.dirname(openspecRoot);
+}
+
+function acquireWatcher(openspecRoot) {
+    const existing = watchers.get(openspecRoot);
+    if (existing) {
+        existing.refs += 1;
+        return;
+    }
+
+    const watcher = chokidar.watch(openspecRoot, {
+        ignored: /(^|[/\\])\./,
+        persistent: true,
+        ignoreInitial: true,
+        depth: 10,
+    });
+
+    watcher.on('all', (event, filePath) => {
+        const relative = path.relative(openspecRoot, filePath);
+        broadcastTo(openspecRoot, {
+            type: 'activity',
+            data: {
+                event: EVENT_NAMES[event] || 'modified',
+                path: relative,
+                detail: describeEvent(event, relative),
+                timestamp: Date.now(),
+            },
+        });
+
+        // The board is derived from the same files, so push it alongside.
+        try {
+            broadcastTo(openspecRoot, { type: 'snapshot', data: buildSnapshot(projectRootFor(openspecRoot)) });
+        } catch (_) { /* a snapshot failure must not kill the watcher */ }
+    });
+
+    watcher.on('error', (err) => {
+        logger.warn('stardust_live_watch_error', { path: openspecRoot, reason: err?.message });
+    });
+
+    watchers.set(openspecRoot, { watcher, refs: 1 });
+    logger.info('stardust_live_watching', { path: openspecRoot });
+}
+
+function releaseWatcher(openspecRoot) {
+    const entry = watchers.get(openspecRoot);
+    if (!entry) return;
+    entry.refs -= 1;
+    if (entry.refs > 0) return;
+    watchers.delete(openspecRoot);
+    try { entry.watcher.close(); } catch (_) { /* already closed */ }
+    logger.info('stardust_live_unwatched', { path: openspecRoot });
+}
+
+const EVENT_NAMES = {
+    add: 'created',
+    change: 'modified',
+    unlink: 'removed',
+    addDir: 'directory created',
+    unlinkDir: 'directory removed',
+};
 
 function attachToServer(httpServer) {
     const wss = new WebSocketServer({ server: httpServer, path: '/api/stardust/live' });
 
     wss.on('connection', (ws, req) => {
-        clients.add(ws);
-
-        // Parse project root from query string
         const url = new URL(req.url, 'http://localhost');
         const projectRoot = url.searchParams.get('projectRoot') || process.cwd();
+        const openspecRoot = findOpenSpecRoot(projectRoot);
 
-        // Send initial snapshot immediately
+        clients.set(ws, { projectRoot, openspecRoot });
+
+        // Seed immediately so the board never renders blank while chokidar warms up.
         try {
-            const snapshot = buildSnapshot(projectRoot);
-            ws.send(JSON.stringify({ type: 'snapshot', data: snapshot }));
+            ws.send(JSON.stringify({ type: 'snapshot', data: buildSnapshot(projectRoot) }));
         } catch (err) {
-            ws.send(JSON.stringify({ type: 'error', message: err.message }));
+            try { ws.send(JSON.stringify({ type: 'error', message: err.message })); } catch (_) { /* gone */ }
         }
 
-        ws.on('close', () => clients.delete(ws));
-        ws.on('error', () => clients.delete(ws));
+        if (openspecRoot) acquireWatcher(openspecRoot);
+
+        const detach = () => {
+            if (!clients.has(ws)) return;
+            clients.delete(ws);
+            if (openspecRoot) releaseWatcher(openspecRoot);
+        };
+
+        ws.on('close', detach);
+        ws.on('error', detach);
     });
-
-    // Watch the openspec directory of the first configured project
-    const watchRoot = findOpenSpecRoot(process.cwd());
-    if (watchRoot) {
-        const watcher = chokidar.watch(watchRoot, {
-            ignored: /(^|[/\\])\./,
-            persistent: true,
-            ignoreInitial: true,
-            depth: 10,
-        });
-
-        watcher.on('all', (event, filePath) => {
-            const relative = path.relative(watchRoot, filePath);
-            const detail = describeEvent(event, relative);
-            const activityEntry = {
-                event: event === 'add' ? 'created' : event === 'unlink' ? 'removed' : 'modified',
-                path: relative,
-                detail,
-                timestamp: Date.now(),
-            };
-            broadcast({ type: 'activity', data: activityEntry });
-
-            // Rebuild and push snapshot on any change
-            const snapshot = buildSnapshot(process.cwd());
-            broadcast({ type: 'snapshot', data: snapshot });
-        });
-
-        logger.info('stardust_live_watching', { path: watchRoot });
-    }
 
     return wss;
 }

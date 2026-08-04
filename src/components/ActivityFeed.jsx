@@ -1,12 +1,16 @@
 /**
- * ActivityFeed — slide-over drawer showing live file events from openspec/.
+ * ActivityFeed — live file events from the watched openspec/ directory.
  *
- * Renders a reverse-chronological list with icons, target name, detail, and
- * timestamp. Uses a slide-over panel triggered from a header button.
+ * Two presentations of the same stream:
+ *   ActivityDrawer — the header slide-over, available from every sub-tab
+ *   ActivityRail   — an inline column on the Board, so the live feed the dashboard
+ *                    promises is visible without opening anything
  */
 
 import React, { useState } from 'react';
-import { FilePlus2, PenLine, FileX2, Activity, X, FolderPlus, FolderX } from 'lucide-react';
+import {
+    FilePlus2, PenLine, FileX2, Activity, X, FolderPlus, FolderX, FileText,
+} from 'lucide-react';
 
 const EVENT_ICONS = {
     created: FilePlus2,
@@ -28,13 +32,41 @@ function timeOfDay(ts) {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
+function EventRow({ entry, dense = false }) {
+    // An unrecognized event name must still render — falling through to an
+    // undefined component used to take the whole feed down.
+    const Icon = EVENT_ICONS[entry.event] || FileText;
+    const color = EVENT_COLORS[entry.event] || 'text-slate-400';
+    return (
+        <div className={`flex items-start gap-2.5 hover:bg-white/[0.02] transition-colors ${dense ? 'px-3 py-2' : 'px-5 py-3'}`}>
+            <Icon size={13} className={`shrink-0 mt-0.5 ${color}`} />
+            <div className="min-w-0 flex-1">
+                <div className="font-mono text-[11px] text-slate-300 truncate" title={entry.path}>{entry.path}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5 truncate">{entry.detail || entry.event}</div>
+            </div>
+            <span className="shrink-0 text-[10px] text-slate-600 tabular-nums">{timeOfDay(entry.timestamp)}</span>
+        </div>
+    );
+}
+
+function EmptyFeed({ compact = false }) {
+    return (
+        <div className={`flex flex-col items-center justify-center gap-2 text-center ${compact ? 'py-10' : 'h-48'}`}>
+            <Activity size={20} className="text-slate-600 opacity-40" />
+            <span className="text-xs text-slate-600 italic">No activity yet</span>
+            <span className="text-[10px] text-slate-700">File events under openspec/ appear here in real time</span>
+        </div>
+    );
+}
+
 export function ActivityDrawer({ activity }) {
     const [open, setOpen] = useState(false);
+    const newest = [...activity].reverse();
 
     return (
         <>
-            {/* Trigger button */}
             <button
+                type="button"
                 onClick={() => setOpen(true)}
                 className="relative flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white hover:border-white/20 transition-colors"
             >
@@ -47,17 +79,12 @@ export function ActivityDrawer({ activity }) {
                 )}
             </button>
 
-            {/* Backdrop */}
             {open && (
-                <div
-                    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
-                    onClick={() => setOpen(false)}
-                />
+                <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
             )}
 
-            {/* Slide-over panel */}
             <div
-                className={`fixed top-0 right-0 z-50 h-full w-80 bg-[#020617] border-l border-white/5 shadow-2xl transform transition-transform duration-300 ${
+                className={`fixed top-0 right-0 z-50 h-full w-96 max-w-full bg-[#020617] border-l border-white/5 shadow-2xl transform transition-transform duration-300 ${
                     open ? 'translate-x-0' : 'translate-x-full'
                 }`}
             >
@@ -65,47 +92,54 @@ export function ActivityDrawer({ activity }) {
                     <div className="flex items-center gap-2">
                         <Activity size={14} className="text-amber-400" />
                         <h2 className="text-xs font-bold uppercase tracking-widest text-white">Activity Feed</h2>
+                        {activity.length > 0 && (
+                            <span className="text-[10px] text-slate-600">{activity.length}</span>
+                        )}
                     </div>
                     <button onClick={() => setOpen(false)} className="text-slate-500 hover:text-white transition-colors">
                         <X size={16} />
                     </button>
                 </div>
 
-                <div className="overflow-y-auto h-[calc(100%-57px)]">
-                    {activity.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 text-xs text-slate-600 italic gap-2">
-                            <Activity size={20} className="opacity-30" />
-                            No activity yet
-                            <span className="text-[10px]">File events appear here in real time</span>
-                        </div>
-                    ) : (
+                <div className="overflow-y-auto custom-scrollbar h-[calc(100%-57px)]">
+                    {newest.length === 0 ? <EmptyFeed /> : (
                         <div className="divide-y divide-white/[0.03]">
-                            {[...activity].reverse().map((entry, i) => {
-                                const Icon = EVENT_ICONS[entry.event] || FilePenLine;
-                                const color = EVENT_COLORS[entry.event] || 'text-slate-400';
-                                return (
-                                    <div key={`${entry.timestamp}-${i}`} className="px-5 py-3 hover:bg-white/[0.02] transition-colors">
-                                        <div className="flex items-start gap-3">
-                                            <Icon size={14} className={`shrink-0 mt-0.5 ${color}`} />
-                                            <div className="min-w-0 flex-1">
-                                                <div className="text-xs text-slate-300 truncate font-mono">
-                                                    {entry.path}
-                                                </div>
-                                                <div className="text-[10px] text-slate-500 mt-0.5">
-                                                    {entry.detail || entry.event}
-                                                </div>
-                                            </div>
-                                            <span className="text-[10px] text-slate-600 shrink-0">
-                                                {timeOfDay(entry.timestamp)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                            {newest.map((entry, i) => <EventRow key={`${entry.timestamp}-${i}`} entry={entry} />)}
                         </div>
                     )}
                 </div>
             </div>
         </>
+    );
+}
+
+/**
+ * Inline feed for the Board. Capped so a burst of file events cannot grow the
+ * board's column unbounded; the drawer holds the full history.
+ */
+export function ActivityRail({ activity, limit = 40, connected }) {
+    const newest = [...activity].reverse().slice(0, limit);
+
+    return (
+        <section className="rounded-2xl border border-white/5 bg-white/[0.02] flex flex-col h-full">
+            <header className="shrink-0 flex items-center gap-2 px-4 py-3 border-b border-white/5">
+                <Activity size={14} className="text-amber-400" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Live Activity</span>
+                <span
+                    className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`}
+                    title={connected ? 'Watching openspec/' : 'Not connected'}
+                />
+                {activity.length > 0 && (
+                    <span className="ml-auto text-[10px] text-slate-600">{activity.length} event{activity.length === 1 ? '' : 's'}</span>
+                )}
+            </header>
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                {newest.length === 0 ? <EmptyFeed compact /> : (
+                    <div className="divide-y divide-white/[0.03]">
+                        {newest.map((entry, i) => <EventRow key={`${entry.timestamp}-${i}`} entry={entry} dense />)}
+                    </div>
+                )}
+            </div>
+        </section>
     );
 }
