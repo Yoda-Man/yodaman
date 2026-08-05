@@ -2118,7 +2118,7 @@ function referenceMatchesFile(reference, relativeFile) {
 
 /**
  * GET /api/stardust/compose — file-centric cross-reference.
- * Query: ?projectRoot=<path>&file=<repo-relative path>
+ * Query: ?projectRoot=<path>&file=<repo-relative path>&depth=1..4&limit=<n>
  *
  * Aggregates all three mandatory tools for a single file, in one response, so the
  * composition happens server-side rather than leaving the UI to stitch three
@@ -2129,6 +2129,11 @@ function referenceMatchesFile(reference, relativeFile) {
  *
  * Each tool reports its own availability, so one missing tool degrades a single
  * column instead of blanking the view.
+ *
+ * `depth` and `limit` exist because two views read this endpoint with different
+ * needs: Compose wants a short list at the default two hops, while the Impact tab
+ * is the deep-dive and drives the hop control itself. Both default to what
+ * Compose was already getting, so callers that omit them see no change.
  */
 router.get('/stardust/compose', async (req, res) => {
     try {
@@ -2139,11 +2144,16 @@ router.get('/stardust/compose', async (req, res) => {
             return res.status(400).json({ error: 'file query parameter is required' });
         }
 
+        // Clamp rather than reject: a bad depth should not fail the whole view.
+        const depth = Math.min(4, Math.max(1, Number(req.query.depth) || 2));
+        const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 5));
+
         const relativeFile = toRepoRelative(projectRoot, targetFile);
 
         const result = {
             file: relativeFile,
             projectRoot,
+            depth,
             available: false,
             openspec: { available: false, mentionedIn: [], specCount: 0, reason: null },
             graphify: {
@@ -2154,6 +2164,7 @@ router.get('/stardust/compose', async (req, res) => {
                 blastRadius: 0,
                 nearestDependents: [],
                 coveredByTests: false,
+                testCount: 0,
                 testFiles: [],
                 risk: null,
                 stale: false,
@@ -2192,12 +2203,18 @@ router.get('/stardust/compose', async (req, res) => {
                 result.graphify.dependents = graph.dependedOnBy.get(relativeFile)?.size || 0;
                 result.graphify.centrality = graph.degree?.get(relativeFile) || 0;
 
-                const impact = impactAnalyzer.analyzeFile(projectRoot, relativeFile, { depth: 2 });
+                const impact = impactAnalyzer.analyzeFile(projectRoot, relativeFile, { depth });
                 if (impact?.available) {
                     result.graphify.blastRadius = impact.impactedCount;
-                    result.graphify.nearestDependents = impact.topDependents;
+                    // topDependents is pre-capped at 5 by the analyzer, so read the
+                    // full list when the caller asked for more than that.
+                    result.graphify.nearestDependents = (impact.dependentFiles || [])
+                        .filter(entry => !entry.isTest)
+                        .slice(0, limit)
+                        .map(entry => entry.file);
                     result.graphify.coveredByTests = impact.testCount > 0;
-                    result.graphify.testFiles = impact.coveringTests.slice(0, 5);
+                    result.graphify.testCount = impact.testCount;
+                    result.graphify.testFiles = impact.coveringTests.slice(0, limit);
                     result.graphify.risk = impact.risk;
                     result.graphify.stale = impact.stale;
                 } else if (impact?.reason) {

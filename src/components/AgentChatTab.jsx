@@ -944,6 +944,21 @@ export default function AgentChatTab({ selectedProject }) {
             }))
             return
 
+          // The Context Expert CLI exited while streaming this step's answer, so
+          // whatever arrived is a fragment. Flagged as it happens rather than only
+          // in the final answer, because on a multi-step task the truncated step is
+          // usually the one that was about to call a tool.
+          case 'response_truncated':
+            patchMessage(assistantId, message => ({
+              steps: [...(message.steps || []), {
+                tool: 'context expert',
+                done: true,
+                failed: true,
+                error: `Answer truncated on step ${step.iteration}: ${step.message || 'the CLI exited mid-stream'}`
+              }]
+            }))
+            return
+
           case 'final_answer':
             clearSlowTimer()
             speakAgentResponse(step.answer, voiceSettings)

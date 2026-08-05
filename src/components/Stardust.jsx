@@ -402,9 +402,7 @@ export default function Stardust({ selectedProject }) {
                 )}
 
                 {tab === 'impact' && (
-                    <div className="max-w-4xl">
-                        <ImpactAnalysisTab projectRoot={effectiveCwd} />
-                    </div>
+                    <ImpactAnalysisTab projectRoot={effectiveCwd} />
                 )}
             </div>
         </div>

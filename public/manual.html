@@ -19,14 +19,19 @@
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
         .card { background: rgba(15, 23, 42, 0.78); border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 8px; padding: 18px; }
         .muted { color: #94a3b8; }
+        .backlink { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 28px; padding: 8px 14px; border-radius: 10px; background: rgba(148, 163, 184, 0.08); border: 1px solid rgba(148, 163, 184, 0.18); color: #cbd5e1; text-decoration: none; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; }
+        .backlink:hover { color: #f8fafc; background: rgba(148, 163, 184, 0.16); }
     </style>
 </head>
 <body>
     <main>
+        <!-- This page is a standalone document with no app chrome, so it needs its
+             own way back: opened in a new tab there is no history to go back to. -->
+        <a class="backlink" href="/">&larr; Back to YodaMan</a>
         <header>
             <h1>YodaMan Manual</h1>
             <p class="lead">Local-first workspace intelligence with chat, search, mandatory Graphify knowledge graphs, supervised agent automation, plugins, desktop controls, VS Code commands, and mobile pairing.</p>
-            <p class="version">Version 0.4.2</p>
+            <p class="version">Version 0.4.3</p>
         </header>
 
         <h2>1. Setup</h2>
@@ -81,7 +86,7 @@ npm start</code></pre>
             <li><strong>Logs</strong>: Open searchable runtime logs, reindex requests, index queue state, and <code>ctx index</code> output. Filter by text, level, severity, and user action before copying diagnostics.</li>
             <li><strong>Manual</strong>: Read the in-app guide.</li>
             <li><strong>Stardust</strong>: OpenSpec CLI wrapper for spec-driven development. Propose, validate, apply, and archive changes. Includes diagnostics, version checks, and one-click OpenSpec installation.</li>
-            <li id="plugins"><strong>Plugins</strong>: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, and delete non-mandatory plugin files.</li>
+            <li id="plugins"><strong>Plugins</strong>: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, and delete non-mandatory plugin files. The <strong>Docs</strong> button on that page opens the full plugin authoring guide in the app &mdash; the contract, the permission allowlist, worked examples, and how the agent sees your tool. See section 11 for the summary.</li>
             <li><strong>Graph doctor</strong>: Run <code>yodaman doctor --graph</code> to check active graphs, persisted freshness, orphaned nodes, and the most dependency-heavy file.</li>
             <li><strong>Dependency doctor</strong>: Run <code>yodaman doctor</code> to check Ollama, Context Expert (<code>ctx</code>), Graphify, and OpenSpec. Each tool reports its version, resolved path, and reachability, and anything missing lists the install command for your platform. Add <code>--json</code> for machine-readable output; the command exits non-zero when a dependency is missing or unreachable.</li>
         </ul>
@@ -139,7 +144,7 @@ npm run lint
 npm run package</code></pre>
 
         <h2>10. Stardust &mdash; OpenSpec Integration</h2>
-        <p>YodaMan 0.4.2 integrates OpenSpec through the <strong>Stardust</strong> tab with eight views: Board, Drift, Compose, Trust, Trace, Impact, Diagnostics, and Commands — plus agent tools (specPropose, specValidate, specArchive) for autonomous OpenSpec workflows.</p>
+        <p>YodaMan 0.4.3 integrates OpenSpec through the <strong>Stardust</strong> tab with eight views: Board, Drift, Compose, Trust, Trace, Impact, Diagnostics, and Commands — plus agent tools (specPropose, specValidate, specArchive) for autonomous OpenSpec workflows.</p>
         <h3>Setup</h3>
         <pre><code>npm install -g @fission-ai/openspec@latest</code></pre>
         <h3>Workflow</h3>
@@ -153,6 +158,38 @@ npm run package</code></pre>
         <ul>
             <li><code>GET /api/stardust/diagnose?projectRoot=...</code> — Run OpenSpec diagnostics</li>
             <li><code>POST /api/stardust/run</code> — Execute any OpenSpec workflow action</li>
+        </ul>
+
+        <h2 id="agent-context">11. How the agent uses the three tools</h2>
+        <p>Context Expert has no session, so every reasoning step re-sends the conversation. Three mechanisms keep that affordable and keep all three tools in the loop:</p>
+        <ul>
+            <li><strong>Stardust brief</strong>: built once at the start of each task from all three tools at the same time &mdash; graph size and busiest modules, the spec list and current drift, and for every file the task names, its blast radius, covering tests and describing specs. It replaces the fixed slice of <code>GRAPH_REPORT.md</code> that used to be prepended regardless of the task, and it keeps only the report sections that carry information (God Nodes, Surprising Connections) rather than the navigation index.</li>
+            <li><strong>Bounded transcript</strong>: tool results are clipped on arrival, the newest turns stay verbatim, and older turns collapse to one line each recording which tool ran and how it ended. The original task is never elided. Prompt size plateaus instead of growing with every step.</li>
+            <li><strong>Scoped retrieval</strong>: each <code>ctx ask</code> is scoped to the active workspace with <code>-p</code>, so retrieval runs against one project rather than every indexed project at once.</li>
+        </ul>
+        <p>The agent also has <code>impactOf(file, project, depth)</code>, which returns a file's dependents, covering tests, risk and describing specs from an in-process graph read. It is the same assessment the write-approval dialog shows you, made available to the model <em>before</em> it proposes a change.</p>
+        <p>Tool signatures reaching the model are typed &mdash; <code>readFile(filePath: string (workspace-relative or absolute path))</code>, with <code>?</code> marking optional parameters &mdash; so parameter meaning no longer has to be inferred from the name alone.</p>
+
+        <h2 id="plugin-authoring">12. Writing a plugin</h2>
+        <p>A plugin is one CommonJS file in <code>core/plugins/</code>. The in-app guide (Plugins &rarr; Docs) covers this in full with copy-ready examples; the contract is:</p>
+        <pre><code>module.exports = {
+    name: 'Kyber-Count',                 // required — the tool name the model emits
+    description: 'What it does. Chat usage: "count the lines in this project"',
+    permissions: ['read'],               // required for uploads; allowlisted values only
+    parameters: {                        // only the KEYS reach the model
+        workspacePath: { type: 'string', required: true, description: 'Absolute path' }
+    },
+    async execute(params = {}) {         // required — returns a JSON-serializable result
+        return { fileCount: 0 };
+    }
+};</code></pre>
+        <ul>
+            <li><strong>Allowed permissions</strong>: <code>read</code>, <code>write</code>, <code>command</code>, <code>network</code>, <code>search</code>, <code>graphify:read</code>, <code>git:read</code>, <code>agent:invoke</code>, <code>task:create</code>, <code>audit:write</code>, <code>upload:temp</code>, <code>filesystem:read-selected</code>, <code>desktop:openFile</code>, <code>storage:indexeddb</code>, <code>webxr</code>, <code>speech</code>, <code>unrestricted</code>. Anything else stops the plugin from loading. Omitting the array means <code>unrestricted</code>, which is refused at call time unless enabled in Settings &mdash; and uploads reject it outright.</li>
+            <li><strong>The description is the prompt.</strong> <code>ToolBox.getToolDefinitions()</code> gives the model only <code>name(paramKeys): description</code>, so parameter types and per-parameter descriptions never reach it. Put the meaning, and the phrases a user would type, in the description.</li>
+            <li><strong>Keep results small.</strong> The whole return value is serialized into the model's context. Cap arrays and return counts with a truncated sample.</li>
+            <li><strong>Prefer the graph.</strong> <code>require('../backend/infrastructure/GraphFacts')</code> answers structural questions from resolved import edges instead of a filesystem scan.</li>
+            <li><strong>Lifecycle form</strong>: exporting <code>onLoad</code>/<code>onEnable</code>/<code>onDisable</code>/<code>onUnload</code> instead of <code>execute</code> gets a <code>PluginAPI</code> instance with <code>log</code>, <code>ui</code>, <code>fetch</code>, <code>worker</code> and <code>config</code>.</li>
+            <li><strong>Verify</strong>: <code>node -e "const t=require('./backend/infrastructure/ToolBox');console.log([...t.plugins.keys()])"</code></li>
         </ul>
     </main>
 </body>

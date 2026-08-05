@@ -1,5 +1,5 @@
 const contextEngine = require('../infrastructure/ContextEngine');
-const { stripCliNoise } = require('../infrastructure/CliOutput');
+const { stripCliNoise, hasSubstantiveAnswer } = require('../infrastructure/CliOutput');
 const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
 const specDrift = require('../stardust/SpecDrift');
 const toolBox = require('../infrastructure/ToolBox');
@@ -8,6 +8,8 @@ const graphifyService = require('../infrastructure/GraphifyService');
 const logger = require('../infrastructure/Logger');
 const defaultCodingSkill = require('./DefaultCodingSkill');
 const queueService = require('./QueueService');
+const ConversationBuffer = require('./ConversationBuffer');
+const stardustBrief = require('./StardustBrief');
 
 // Tools whose success invalidates the retrieval index and the knowledge graph.
 const MUTATING_TOOLS = new Set(['writeFile']);
@@ -52,34 +54,27 @@ ${toolBox.getToolDefinitions()}
 ${defaultCodingSkill}
 
 ### Process:
-- Plan before you code. For any significant feature, use specPropose to create an OpenSpec change BEFORE implementing.
-- Use tools to gather information or make changes.
-- To call a tool, use the following format:
+- Use tools to gather information or make changes. To call one:
 <tool_call>
 {
   "name": "toolName",
   "parameters": { "param1": "value1" }
 }
 </tool_call>
+- After a tool call the system provides the result. Continue until the task is done, then give a final summary.
+- Be concise and precise.
 
-- After a tool call, the user (system) will provide the result.
-- Continue until the task is complete, then provide a final summary.
-- Always be concise and precise.
+### Before you edit:
+- Call impactOf(file, project) on any file you intend to change that the brief does not already cover. It returns dependents, covering tests and the specs describing that file from an in-process graph read.
+- If impactOf reports dependents and no covering tests, say so and add or extend a test before changing behaviour.
+- Prefer applyPatch over writeFile for edits to existing files: a targeted replacement, not a whole-file rewrite.
+- When you cite structure from the graph or the brief, append a '[view graph](http://localhost:5190)' link, and say how many files a proposed change would reach.
 
-### OpenSpec Workflow (Propose → Apply → Archive):
-For any feature touching multiple files or introducing new patterns:
-1. Call specPropose(project, changeName, description) to create the change proposal.
-2. Implement the tasks defined in tasks.md.
-3. Call specValidate(project, changeName) to verify completeness.
-4. Call specArchive(project, changeName) to finalize the completed change.
-For simple bug fixes or single-file edits, skip the workflow.
-
-### Graph-Aware Responses:
-When project graph context is provided (you will see "Graphify knowledge graph report" in your context), reference it in your answer:
-- Cite specific files and their dependencies from the graph.
-- Append a '[view graph](http://localhost:5190)' link when you use graph-derived information.
-- If you identify similar patterns, suggest files to create based on existing module structure.
-- Mention how many files will be affected by a proposed change.
+### Context discipline:
+Earlier steps of a long task may appear collapsed under "Earlier steps in this task".
+That is a real record of work already done — do not repeat those tool calls. If you need a
+detail that was collapsed, call the tool again for that detail rather than re-running the
+whole sequence.
 `;
     }
 
@@ -186,28 +181,18 @@ When project graph context is provided (you will see "Graphify knowledge graph r
             error: null
         });
 
-        let graphContext = '';
-        let graphAvailable = false;
+        // The workspace's own state, composed from all three tools and scoped to
+        // the files this task names. Replaces the blind 4,000-character dump of
+        // GRAPH_REPORT.md that used to be prepended to every task regardless of
+        // whether the task was structural. Never fatal: a failed brief costs
+        // context, not the task.
+        let brief = '';
         if (metadata.projectId) {
-            const insights = await graphifyService.query(task, metadata.projectId);
-            const report = graphifyService.readReport(metadata.projectId, { maxChars: 4000 });
-            graphAvailable = !!(report || insights);
-            graphContext = [
-                '',
-                '',
-                'Graphify knowledge graph report:',
-                report || '(No Graphify report generated yet.)',
-                '',
-                'Graphify query insights:',
-                insights,
-                '',
-                '--- Graph-Aware Response Instructions ---',
-                'You have access to project graph context above. When you reference files, modules, or dependencies from the graph,',
-                'append a "[view graph](http://localhost:5190)" link to your answer so the user can explore the visual graph.',
-                'Example: "Similar endpoints exist in `routes/user.js` and `routes/product.js` [view graph](http://localhost:5190)"',
-                'If the graph has no data for this query, omit the link.',
-                '-----------------------------------------'
-            ].join('\n');
+            try {
+                brief = (await stardustBrief.build(metadata.projectId, task)).text;
+            } catch (err) {
+                logger.warn('stardust_brief_failed', { taskId, path: metadata.projectId, reason: err.message });
+            }
         }
 
         const uploadedFileContext = Array.isArray(metadata.uploadedFiles) && metadata.uploadedFiles.length
@@ -219,7 +204,15 @@ When project graph context is provided (you will see "Graphify knowledge graph r
             ].join('\n')
             : '';
 
-        let conversation = `${this.getSystemPrompt()}${graphContext}${uploadedFileContext}\n\nUser Task: ${task}`;
+        // Bounded transcript. ctx keeps no session, so every iteration re-sends
+        // the conversation — which made a plain growing string quadratic in
+        // tokens and eventually large enough to exceed ARG_MAX.
+        const conversation = new ConversationBuffer({
+            system: this.getSystemPrompt() + uploadedFileContext,
+            brief,
+            task,
+        });
+
         let iteration = 0;
         // Workspaces this task wrote to, refreshed once when the task ends.
         const touchedWorkspaces = new Set();
@@ -239,8 +232,34 @@ When project graph context is provided (you will see "Graphify knowledge graph r
 
             iteration++;
             console.log(`[Agent] Iteration ${iteration}/${this.maxIterations}`);
-            
-            const raw = await contextEngine.execute(['ask', '--', conversation]);
+
+            // Scoping to the workspace is what makes retrieval mean anything —
+            // unscoped, ctx answers against every indexed project at once.
+            const prompt = conversation.render();
+            const stats = conversation.stats();
+            logger.info('agent_prompt_built', {
+                taskId,
+                iteration,
+                promptChars: stats.promptChars,
+                budget: stats.budget,
+                turns: stats.turns,
+                digested: stats.digested,
+            });
+
+            // The fixed parts alone are over budget, so compaction cannot help.
+            // Answer quality falls off measurably past the budget, so this is the
+            // one prompt condition worth surfacing rather than absorbing.
+            if (stats.overBudget) {
+                logger.warn('agent_prompt_over_budget', {
+                    taskId,
+                    iteration,
+                    promptChars: stats.promptChars,
+                    budget: stats.budget,
+                    hint: 'The system prompt and Stardust brief exceed the budget on their own. Reduce the number of loaded plugins, or raise YODAMAN_AGENT_PROMPT_CHARS if the model has a larger context window.',
+                });
+            }
+
+            const raw = await contextEngine.ask(prompt, { project: metadata.projectId });
             const output = stripCliNoise(raw.output);
 
             if (this.isCancelled(taskId)) {
@@ -253,10 +272,45 @@ When project graph context is provided (you will see "Graphify knowledge graph r
             }
             
             const response = output.trim();
-            conversation += `\n\nAssistant: ${response}`;
+            conversation.addAssistant(response);
+
+            // ctx can exit mid-generation and still have written part of an answer;
+            // ContextEngine.ask salvages it rather than losing it. But a truncated
+            // response must not be presented as a finished one — with ctx 1.4.0 this
+            // happens precisely when the model starts emitting a tool call, so the
+            // step that got cut off is usually the one that mattered.
+            if (raw.partial) {
+                logger.warn('agent_response_truncated', {
+                    taskId,
+                    iteration,
+                    chars: response.length,
+                    reason: raw.error,
+                    hint: 'ctx exited non-zero while streaming the answer. Answer salvaged but incomplete.',
+                });
+                const event = { type: 'response_truncated', taskId, iteration, message: raw.error };
+                this.recordTaskEvent(taskId, event);
+                if (onStep) onStep(event);
+            }
+
+            // Generation produced nothing but the RAG citation block. Retrying is
+            // worth a step: this is intermittent, and accepting it means the user's
+            // answer is a list of filenames.
+            if (!hasSubstantiveAnswer(response)) {
+                logger.warn('agent_empty_answer', {
+                    taskId,
+                    iteration,
+                    chars: response.length,
+                    hint: 'ctx returned citations with no generated text. Retrying with an explicit instruction.',
+                });
+                conversation.addNote('Your previous response contained only citations and no answer. Answer the task directly in prose, or emit a single <tool_call> block.');
+                if (iteration < this.maxIterations) continue;
+
+                finalAnswer = 'Context Expert returned source citations but no generated answer, on every attempt. Check that the configured model is reachable (`yodaman doctor`) and that the prompt is within its context window.';
+                break;
+            }
 
             const toolCallMatch = response.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
-            
+
             if (toolCallMatch) {
                 try {
                     const toolCall = JSON.parse(toolCallMatch[1]);
@@ -343,7 +397,7 @@ When project graph context is provided (you will see "Graphify knowledge graph r
 
                         if (!approved) {
                             const result = { error: "User rejected this change." };
-                            conversation += `\n\nSystem (Tool Result): ${JSON.stringify(result)}`;
+                            conversation.addToolResult(toolCall.name, result);
                             const event = { type: 'tool_end', taskId, tool: toolCall.name, result };
                             this.recordTaskEvent(taskId, event);
                             if (onStep) onStep(event);
@@ -363,9 +417,11 @@ When project graph context is provided (you will see "Graphify knowledge graph r
                     // Use the unified toolBox.callTool which handles built-ins and plugins
                     const result = await toolBox.callTool(toolCall.name, toolCall.parameters);
 
-                    const resultStr = JSON.stringify(result, null, 2);
-                    conversation += `\n\nSystem (Tool Result): ${resultStr}`;
-                    
+                    // Clipped on arrival: a large file read must not be re-sent in
+                    // full on every remaining iteration.
+                    conversation.addToolResult(toolCall.name, result);
+
+
                     // An accepted write makes the ctx index and the graph stale the
                     // moment it lands. Mark the workspace dirty and refresh once
                     // when the task ends, rather than rebuilding per write.
@@ -384,7 +440,7 @@ When project graph context is provided (you will see "Graphify knowledge graph r
                         userAction: 'agent_tool_call',
                         severity: 'high'
                     });
-                    conversation += `\n\nSystem (Error): ${err.message}`;
+                    conversation.addNote(`Error: ${err.message}`);
                     const event = { type: 'error', taskId, message: err.message };
                     this.recordTaskEvent(taskId, event);
                     if (onStep) onStep(event);
@@ -392,14 +448,21 @@ When project graph context is provided (you will see "Graphify knowledge graph r
                 }
             } else {
                 console.log('[Agent] ✅ Task completed.');
-                finalAnswer = response;
+                // No tool call to act on. If the response was cut off, say so —
+                // otherwise a half-finished thought reads as a considered answer.
+                finalAnswer = raw.partial
+                    ? `${response}\n\n---\n⚠️ This answer is incomplete: the Context Expert CLI exited while streaming it — ${raw.error || 'unknown reason'}. Ask again, or run the tool the answer was reaching for directly.`
+                    : response;
                 break;
             }
         }
 
 
 
-        if (iteration >= this.maxIterations) {
+        // Only when the loop genuinely ran out of steps. A branch that already
+        // reached a conclusion — including a specific diagnosis of why it could not
+        // answer — has said something more useful than "try smaller parts".
+        if (iteration >= this.maxIterations && !finalAnswer) {
             finalAnswer = "I reached the maximum number of steps without finishing. Please try breaking the task into smaller parts.";
             console.warn('[Agent] ⚠️ Max iterations reached.');
         }

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { stripCliNoise } = require('../../backend/infrastructure/CliOutput');
+const { stripCliNoise, hasSubstantiveAnswer, summarizeCliError } = require('../../backend/infrastructure/CliOutput');
 
 // Real observed output: the banner and progress line were previously rendered
 // to the user as part of the assistant's answer.
@@ -51,6 +51,61 @@ describe('ctx ask output cleaning', () => {
         expect(stripCliNoise('')).toBe('');
         expect(stripCliNoise(null)).toBe('');
         expect(stripCliNoise(undefined)).toBe('');
+    });
+});
+
+describe('hasSubstantiveAnswer', () => {
+    // `ctx ask` prints its citation block whether or not generation produced
+    // anything, so "non-empty string" is not the same as "answered".
+    const CITATIONS_ONLY = 'Sources:\n[1] client/game_client.py (1.00)\n[2] README.md (0.88)';
+
+    test('a bare citation list is not an answer', () => {
+        expect(hasSubstantiveAnswer(CITATIONS_ONLY)).toBe(false);
+    });
+
+    test('citation lines without the header are still not an answer', () => {
+        expect(hasSubstantiveAnswer('[1] README.md (1.00)\n[2] docs/api.md (0.5)')).toBe(false);
+    });
+
+    test('prose followed by citations is an answer', () => {
+        expect(hasSubstantiveAnswer(`It has two dependents and no tests.\n\n${CITATIONS_ONLY}`)).toBe(true);
+    });
+
+    test('a tool call is an answer', () => {
+        expect(hasSubstantiveAnswer('<tool_call>\n{"name":"impactOf"}\n</tool_call>')).toBe(true);
+    });
+
+    test('empty and nullish output is not an answer', () => {
+        expect(hasSubstantiveAnswer('')).toBe(false);
+        expect(hasSubstantiveAnswer(null)).toBe(false);
+        expect(hasSubstantiveAnswer('   \n  ')).toBe(false);
+    });
+});
+
+describe('summarizeCliError', () => {
+    // ctx writes Node deprecation warnings before any real diagnostic, so naive
+    // first-line reporting told users that punycode is deprecated.
+    const REAL_FAILURE = [
+        '(node:1152) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.',
+        '(Use `node --trace-deprecation ...` to show where the warning was created)',
+        'Error: Failed to connect to Ollama server: Cannot read properties of undefined (reading \'content\')',
+        'Hint: Run with --verbose for more details',
+    ].join('\n');
+
+    test('reports the error, not the deprecation warning that precedes it', () => {
+        const summary = summarizeCliError(REAL_FAILURE);
+        expect(summary).toContain('Failed to connect to Ollama server');
+        expect(summary).not.toContain('DeprecationWarning');
+    });
+
+    test('falls back to the first meaningful line when nothing says "error"', () => {
+        expect(summarizeCliError('(node:1) [DEP0040] DeprecationWarning: x\nctx: no such project')).toBe('ctx: no such project');
+    });
+
+    test('never returns an empty string', () => {
+        expect(summarizeCliError('')).toBeTruthy();
+        expect(summarizeCliError(null)).toBeTruthy();
+        expect(summarizeCliError('(node:1) [DEP0040] DeprecationWarning: only noise')).toBeTruthy();
     });
 });
 

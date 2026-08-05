@@ -2,7 +2,7 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
-## [0.4.2] - 2026-08-04
+## [0.4.3] - 2026-08-04
 
 ### Fixed — black window on launch
 

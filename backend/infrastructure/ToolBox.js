@@ -5,6 +5,7 @@ const { exec } = require('child_process');
 const contextEngine = require('./ContextEngine');
 const auditLog = require('./AuditLog');
 const graphifyService = require('./GraphifyService');
+const impactAnalyzer = require('./ImpactAnalyzer');
 const specDrift = require('../stardust/SpecDrift');
 const stardustWrapper = require('../stardust/StardustWrapper');
 const logger = require('./Logger');
@@ -168,32 +169,127 @@ class ToolBox {
     }
 
     /**
+     * Every built-in tool's signature, as data rather than as a hand-written line.
+     *
+     * The previous form rendered bare parameter names — `readFile(filePath)` — so
+     * the model was never told a type, which was required, or what a value should
+     * look like. Guessing followed: relative paths where absolute were needed,
+     * `depth: "2"` as a string, `project` omitted so the tool fell back to the
+     * runtime's cwd instead of the user's workspace. Typing them here is the
+     * cheapest available accuracy win, because it costs prompt tokens once and
+     * removes a whole class of retry.
+     */
+    static get TOOL_SCHEMA() {
+        // `file` and `project` recur across almost every tool. Their meaning is
+        // stated once in TOOL_CONVENTIONS instead of being repeated per signature:
+        // spelled out inline, `project` alone cost ~600 characters of every prompt,
+        // and the whole block is re-sent on every reasoning step.
+        const file = { type: 'string', required: true };
+        const project = { type: 'string', required: false };
+
+        return [
+            ['readFile', { filePath: file }, 'Returns the content of a file.'],
+            ['writeFile', { filePath: file, content: { type: 'string', required: true, note: 'the complete new file content' } },
+                'Overwrites a file with new content. Requires human approval, so prefer applyPatch for edits to existing files.'],
+            ['applyPatch', {
+                filePath: file,
+                oldText: { type: 'string', required: true, note: 'exact existing text, including indentation' },
+                newText: { type: 'string', required: true },
+            }, 'Replaces an exact text range in a file. Fails if oldText is not found verbatim or is not unique.'],
+            ['executeCommand', {
+                command: { type: 'string', required: true },
+                cwd: { type: 'string', required: false, note: 'defaults to the active workspace' },
+            }, 'Runs a shell command and returns its output. Destructive patterns are blocked by policy.'],
+            ['searchCode', {
+                query: { type: 'string', required: true, note: 'natural language or a code fragment' },
+                project,
+                top: { type: 'number', required: false, note: 'max 50, default 10' },
+            }, 'Semantic search across the indexed workspace.'],
+            ['listFiles', { directoryPath: { type: 'string', required: true } }, 'Lists the entries of a directory.'],
+            ['impactOf', {
+                file,
+                project,
+                depth: { type: 'number', required: false, note: 'hops, 1-4, default 2' },
+            }, 'BEFORE editing any file: its dependents, covering tests, risk, and the OpenSpec specs describing it. Cheap in-process graph read — call it rather than guessing what a change reaches.'],
+            ['graphifyQuery', { query: { type: 'string', required: true }, project },
+                'Queries the knowledge graph for related code, docs and diagram relationships.'],
+            ['graphifyExplain', { node: { type: 'string', required: true, note: 'graph node id or symbol' }, project },
+                'Explains a graph node and its neighbours.'],
+            ['graphifyPath', {
+                source: { type: 'string', required: true },
+                target: { type: 'string', required: true },
+                project,
+            }, 'Finds a dependency path between two entities.'],
+            ['graphifyAffected', {
+                node: { type: 'string', required: true },
+                project,
+                depth: { type: 'number', required: false },
+            }, 'Nodes impacted by a change to a graph entity. Prefer impactOf for file-level questions.'],
+            ['specDrift', { project, minDependents: { type: 'number', required: false } },
+                'OpenSpec intent versus the graph: specs citing files that no longer exist, and load-bearing modules no spec describes.'],
+            ['specPropose', {
+                project,
+                changeName: { type: 'string', required: true, note: 'kebab-case' },
+                description: { type: 'string', required: false },
+            }, 'Creates an OpenSpec change proposal. Call BEFORE implementing any significant feature.'],
+            ['specValidate', { project, changeName: { type: 'string', required: true } },
+                'Validates a change against project specs. Run after implementing, before archiving.'],
+            ['specArchive', { project, changeName: { type: 'string', required: true } },
+                'Archives a completed change. Run only after specValidate passes.'],
+        ];
+    }
+
+    /**
+     * Conventions shared by most tools, stated once above the list.
+     *
+     * `?` marking and per-parameter types are the accuracy win; repeating the same
+     * prose for `project` on nine tools was not. This is the same information for a
+     * tenth of the tokens.
+     */
+    static get TOOL_CONVENTIONS() {
+        return [
+            'Parameter conventions: `name: type` is required, `name?: type` is optional.',
+            '`file`/`filePath` take a workspace-relative or absolute path.',
+            '`project` takes an absolute workspace path — pass it whenever you know it, or the tool falls back to the runtime directory rather than the user\'s workspace.',
+        ].join('\n');
+    }
+
+    /** Render one parameter map as a typed signature. */
+    static formatParameters(parameters) {
+        return Object.entries(parameters || {})
+            .map(([name, spec]) => {
+                // Plugin authors write { type, required, description }; built-ins
+                // above use `note`. Accept either rather than making plugins
+                // conform to an internal shape.
+                const type = spec?.type || 'string';
+                const optional = spec?.required === true ? '' : '?';
+                const note = spec?.note || spec?.description;
+                return `${name}${optional}: ${type}${note ? ` (${note})` : ''}`;
+            })
+            .join(', ');
+    }
+
+    /**
      * Returns a description of all available tools for the AI system prompt.
      */
     getToolDefinitions() {
-        const builtIn = [
-            "1. readFile(filePath): Returns the content of a file.",
-            "2. writeFile(filePath, content): Writes content to a file.",
-            "3. applyPatch(filePath, oldText, newText): Replaces an exact text range in a file.",
-            "4. executeCommand(command, cwd): Runs a shell command and returns output.",
-            "5. searchCode(query): Searches the codebase for relevant snippets.",
-            "6. listFiles(directoryPath): Lists files in a directory.",
-            "7. graphifyQuery(query, project): Queries the workspace knowledge graph for related code, docs, and diagram relationships.",
-            "8. graphifyExplain(node, project): Explains a graph node and its neighbors.",
-            "9. graphifyPath(source, target, project): Finds a graph path between two entities.",
-            "10. graphifyAffected(node, project, depth): Finds nodes likely impacted by a change to a graph entity.",
-            "11. specDrift(project): Compares OpenSpec intent against the actual graph — specs citing files that no longer exist, and load-bearing modules no spec describes.",
-            "12. specPropose(project, changeName, description): Creates a new OpenSpec change proposal (proposal.md, design.md, tasks.md) following the structured Propose → Apply → Archive workflow. Use this BEFORE implementing any significant feature.",
-            "13. specValidate(project, changeName): Validates an OpenSpec change against project specs — checks for completeness and convention adherence. Run this after proposing and before archiving.",
-            "14. specArchive(project, changeName): Archives a completed OpenSpec change. Use this after all tasks are implemented and validated."
-        ];
+        const builtIn = ToolBox.TOOL_SCHEMA.map(([name, parameters, description]) =>
+            `${name}(${ToolBox.formatParameters(parameters)})\n    ${description}`);
 
-        const pluginDocs = Array.from(this.plugins.values()).map((p, i) => {
-            const params = Object.keys(p.parameters || {}).join(', ');
-            return `${builtIn.length + i + 1}. ${p.name}(${params}): ${p.description || 'Custom plugin tool.'}`;
+        // A plugin description is author-written and can be long. It is the only
+        // thing that makes the model pick the plugin, so it is kept — but capped,
+        // because it is re-sent on every reasoning step of every task.
+        const pluginDocs = Array.from(this.plugins.values()).map(plugin => {
+            const description = String(plugin.description || 'Custom plugin tool.').replace(/\s+/g, ' ').trim();
+            const capped = description.length > 300 ? `${description.slice(0, 300)}…` : description;
+            return `${plugin.name}(${ToolBox.formatParameters(plugin.parameters)})\n    ${capped}`;
         });
 
-        return [...builtIn, ...pluginDocs].join('\n');
+        const numbered = [...builtIn, ...pluginDocs]
+            .map((entry, i) => `${i + 1}. ${entry}`)
+            .join('\n');
+
+        return `${ToolBox.TOOL_CONVENTIONS}\n\n${numbered}`;
     }
 
     async readFile({ filePath }) {
@@ -259,11 +355,20 @@ class ToolBox {
 
     async searchCode({ query, project, top } = {}) {
         const args = ['search', query];
-        if (project) args.push('-p', this.resolveAllowedPath(project));
+        if (project) {
+            // ctx -p takes the indexed project's NAME. This passed the absolute
+            // path, so ctx answered "Project not found", the JSON parse failed,
+            // and every workspace-scoped search fell through to the substring
+            // grep below — semantic retrieval was effectively off in exactly the
+            // case it is always used. ContextEngine.projectName resolves it.
+            const name = await contextEngine.projectName(this.resolveAllowedPath(project));
+            if (name) args.push('-p', name);
+        }
+        if (top) args.push('-k', String(Math.min(Math.max(Number(top) || 10, 1), 50)));
         try {
             const results = await contextEngine.executeJson(args);
-            if (Array.isArray(results) && results.length > 0) return results;
-            if (Array.isArray(results?.results) && results.results.length > 0) return results.results;
+            if (Array.isArray(results) && results.length > 0) return this.normalizeSearchHits(results);
+            if (Array.isArray(results?.results) && results.results.length > 0) return this.normalizeSearchHits(results.results);
             if (Array.isArray(results) || Array.isArray(results?.results)) {
                 return this.searchCodeFilesystem({ query, project, top });
             }
@@ -281,6 +386,42 @@ class ToolBox {
             });
             return this.searchCodeFilesystem({ query, project, top });
         }
+    }
+
+    /**
+     * Put ctx's hits into the shape every consumer already reads.
+     *
+     * `ctx search --json` returns `{ score, filePath, lineStart, content, … }`,
+     * while GraphRanker, searchRouter, the compose route, SearchTrace and
+     * SearchWindow all read `metadata.path` / `content` — the shape produced by
+     * searchCodeFilesystem. That mismatch went unnoticed because the -p bug meant
+     * they only ever received fallback results. With semantic search working, the
+     * real shape has to be mapped or every hit arrives with no filename.
+     *
+     * Original fields are kept alongside, so anything reading ctx's names still
+     * works.
+     */
+    normalizeSearchHits(hits) {
+        return hits.map((hit) => {
+            if (!hit || typeof hit !== 'object') return hit;
+            const filePath = hit.metadata?.path || hit.filePath || hit.path || hit.file || '';
+            const content = hit.content || hit.text || hit.snippet || '';
+            return {
+                ...hit,
+                content,
+                text: content,
+                snippet: content,
+                score: Number(hit.score) || 0,
+                metadata: {
+                    ...(hit.metadata || {}),
+                    path: filePath,
+                    line: hit.metadata?.line ?? hit.lineStart ?? null,
+                    lineEnd: hit.metadata?.lineEnd ?? hit.lineEnd ?? null,
+                    language: hit.metadata?.language ?? hit.language ?? null,
+                    source: hit.metadata?.source || 'ctx-semantic',
+                },
+            };
+        });
     }
 
     searchCodeFilesystem({ query, project, top = 10 }) {
@@ -392,6 +533,70 @@ class ToolBox {
         const projectPath = this.resolveAllowedPath(project || process.cwd());
         const impact = await graphifyService.affected(node, projectPath, { depth, relations });
         return { impact, graphPath: graphifyService.graphPath(projectPath) };
+    }
+
+    /**
+     * What editing one file would reach, and what the specs say about it.
+     *
+     * This is the same composition the writeFile approval gate performs — but the
+     * gate runs *after* the model has already decided what to write, so the risk
+     * information only ever reached the human. Exposing it as a tool lets the
+     * model check before proposing, which is the difference between "here is a
+     * diff, decide" and "this file has 12 dependents and no tests, so I will add
+     * a test first".
+     *
+     * Reads the graph in-process rather than shelling out to the graphify CLI
+     * (which is what graphifyAffected does), so it is cheap enough to call per
+     * file without the model hesitating over cost.
+     */
+    async impactOf({ file, project, depth = 2 }) {
+        if (!file) throw new Error('file is required — the workspace-relative path you intend to edit');
+
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        const hops = Math.min(4, Math.max(1, Number(depth) || 2));
+        const impact = impactAnalyzer.analyzeFile(projectPath, file, { depth: hops });
+
+        if (!impact?.available) {
+            return {
+                file,
+                available: false,
+                reason: impact?.reason || 'no structural information for this file',
+                advice: 'Proceed with care: the graph cannot confirm what depends on this file.',
+            };
+        }
+
+        // Which specs describe this file — the OpenSpec half of the answer.
+        let describedBy = [];
+        let specCount = 0;
+        try {
+            const specs = specDrift.readSpecs(projectPath);
+            specCount = specs.length;
+            describedBy = specs
+                .filter(spec => specDrift.extractReferences(spec.text)
+                    .some(reference => impact.targetFile.endsWith(reference) || reference.endsWith(path.basename(impact.targetFile))))
+                .map(spec => spec.id);
+        } catch (_) { /* OpenSpec unavailable — structure alone still answers */ }
+
+        // The transcript pays for every character of this, so cap the lists.
+        return {
+            file: impact.targetFile,
+            available: true,
+            risk: impact.risk,
+            stale: impact.stale,
+            depth: hops,
+            dependentCount: impact.impactedCount,
+            dependents: impact.topDependents,
+            testCount: impact.testCount,
+            coveringTests: impact.coveringTests.slice(0, 5),
+            specCount,
+            describedBy,
+            summary: impactAnalyzer.summarize(impact),
+            advice: impact.testCount === 0 && impact.impactedCount > 0
+                ? `${impact.impactedCount} file(s) depend on this and no test covers it — add or extend a test before changing behaviour.`
+                : describedBy.length > 0
+                    ? `Spec(s) ${describedBy.join(', ')} describe this file; keep the change consistent with them or update the spec.`
+                    : 'Low structural risk — a focused edit here is unlikely to reach far.',
+        };
     }
 
     /**
