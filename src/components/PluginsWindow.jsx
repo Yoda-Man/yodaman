@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Puzzle, Upload, Trash2, CheckCircle, Plus, Terminal, Zap, FileCode } from 'lucide-react';
+import { Puzzle, Upload, Trash2, CheckCircle, Plus, Terminal, Zap, FileCode, BookOpen } from 'lucide-react';
 import { api } from '../api/api';
+import PluginAuthoringGuide from './PluginAuthoringGuide';
 
 export default function PluginsWindow() {
     const [plugins, setPlugins] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [status, setStatus] = useState(null);
+    // 'marketplace' | 'docs'. The docs used to be a plain <a> to /manual.html,
+    // which left the SPA entirely — no tab bar, no way back to the agent.
+    const [view, setView] = useState('marketplace');
 
     useEffect(() => {
         loadPlugins();
@@ -54,6 +58,10 @@ export default function PluginsWindow() {
         }
     };
 
+    if (view === 'docs') {
+        return <PluginAuthoringGuide onBack={() => setView('marketplace')} />;
+    }
+
     return (
         <div className="h-full overflow-y-auto custom-scrollbar bg-[#020617] text-slate-300">
             <div className="max-w-6xl mx-auto py-20 px-8">
@@ -66,7 +74,15 @@ export default function PluginsWindow() {
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <button 
+                        <button
+                            onClick={() => setView('docs')}
+                            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+                            title="How to build a plugin"
+                        >
+                            <BookOpen size={18} />
+                            <span className="font-bold text-sm">Docs</span>
+                        </button>
+                        <button
                             onClick={loadPlugins}
                             className="h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all active:scale-95"
                             title="Refresh Plugins"
@@ -180,9 +196,22 @@ export default function PluginsWindow() {
                             <p className="text-slate-400 leading-relaxed">
                                 You can build your own plugins using standard JavaScript. Every plugin you upload is instantly learned by the Yoda-Agent reasoning engine.
                             </p>
-                            <div className="flex gap-4">
-                                <a href="/manual.html#plugins" className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-purple-400 hover:text-purple-300 transition-colors">
+                            <div className="flex flex-wrap items-center gap-6">
+                                {/* In-app so the Back button can return here. A plain link to
+                                    /manual.html leaves the SPA and strands the user. */}
+                                <button
+                                    onClick={() => setView('docs')}
+                                    className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-purple-400 hover:text-purple-300 transition-colors"
+                                >
                                     <FileCode size={14} /> View Documentation
+                                </button>
+                                <a
+                                    href="/manual.html#plugins"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors"
+                                >
+                                    <BookOpen size={14} /> Full manual
                                 </a>
                             </div>
                         </div>

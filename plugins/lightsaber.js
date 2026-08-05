@@ -6,7 +6,6 @@
  * static import anywhere in the codebase, so knip, IDE "unused file" hints, and
  * any basename-matching scan will all report this file as dead. It is not.
  *
- * See docs/dead-code.md for the full list of files in this category.
  */
 /**
  * Lightsaber — Git Health Map for YodaMan

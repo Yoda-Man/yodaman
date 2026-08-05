@@ -2,7 +2,7 @@
 
 YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime — with a real-time Stardust OpenSpec dashboard, cross-tool composition views, and agent-driven spec workflows.
 
-![Version](https://img.shields.io/badge/Version-0.4.1-gold)
+![Version](https://img.shields.io/badge/Version-0.4.3-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -121,7 +121,6 @@ yodaman/
 │   └── api/                    # Frontend HTTP client
 ├── tests/                      # Jest test suites
 ├── website/                    # Public website + downloads
-├── knip.json                   # Dead-code scan config — declares the real entry points
 ├── server.js                   # Express entry point
 ├── start.js                    # CLI launcher
 └── package.json
@@ -133,11 +132,6 @@ Much of this codebase is reached without a static import: plugins are `require()
 from a computed path, plugin UI components are named as strings in
 `plugins/plugin.json`, and several files are entry points launched by a host
 rather than imported. Tools that build an import graph report all of it as dead.
-
-**Read [docs/dead-code.md](docs/dead-code.md) first.** Files in that category
-carry a `LOAD-BEARING` header comment; run `npx knip` with the committed
-`knip.json` rather than bare defaults.
-
 ## Configuration
 
 Copy `config.example.json` to `config.json` and add your workspace paths:

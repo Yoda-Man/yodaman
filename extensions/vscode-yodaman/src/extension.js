@@ -12,7 +12,6 @@
  *  - It reaches OUT of the extension directory to ../../../shared/yodamanClient,
  *    which is why that file has no in-package importers.
  *
- * See docs/dead-code.md for the full list of files in this category.
  */
 const vscode = require('vscode');
 // Access the client singleton

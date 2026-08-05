@@ -582,6 +582,7 @@ export default function AgentChatTab({ selectedProject }) {
   const [preset, setPreset] = useState('')
   const [vrStatus, setVrStatus] = useState(null)
   const [isOpeningVr, setIsOpeningVr] = useState(false)
+  const [holocronAvailable, setHolocronAvailable] = useState(false)
   const [workspaceView, setWorkspaceView] = useState('chat')
   const [searchRequest, setSearchRequest] = useState({ id: 0, query: '' })
   const [isSearchPending, setIsSearchPending] = useState(false)
@@ -940,6 +941,21 @@ export default function AgentChatTab({ selectedProject }) {
             patchMessage(assistantId, message => ({
               content: `${message.content}\n\n⏹ Task cancelled.`.trim(),
               streaming: false
+            }))
+            return
+
+          // The Context Expert CLI exited while streaming this step's answer, so
+          // whatever arrived is a fragment. Flagged as it happens rather than only
+          // in the final answer, because on a multi-step task the truncated step is
+          // usually the one that was about to call a tool.
+          case 'response_truncated':
+            patchMessage(assistantId, message => ({
+              steps: [...(message.steps || []), {
+                tool: 'context expert',
+                done: true,
+                failed: true,
+                error: `Answer truncated on step ${step.iteration}: ${step.message || 'the CLI exited mid-stream'}`
+              }]
             }))
             return
 

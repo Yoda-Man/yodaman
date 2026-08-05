@@ -8,7 +8,6 @@
  *
  * It is also part of the published package (package.json "files") and is
  * required by shared/yodamanClient.js, so exports that look unused in-repo are
- * public API. See docs/dead-code.md.
  */
 const TASK_EVENT_TYPES = Object.freeze({
     TASK_STARTED: 'task_started',

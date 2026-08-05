@@ -108,9 +108,14 @@ function extractReferences(text) {
  *
  * Returns `{ available: false, reason }` rather than throwing when either side
  * is missing — drift is an insight, never a blocker.
+ *
+ * `specs` mirrors the existing `facts` escape hatch: a caller that has already
+ * read the specs can hand them in instead of paying for a second walk of
+ * openspec/. StardustBrief needs the spec list anyway to say which specs describe
+ * the files in hand, so without this every task read the same directory twice.
  */
-function detectDrift(projectRoot, { minDependents = 2, facts = null } = {}) {
-    const specs = readSpecs(projectRoot);
+function detectDrift(projectRoot, { minDependents = 2, facts = null, specs: preRead = null } = {}) {
+    const specs = preRead || readSpecs(projectRoot);
     if (specs.length === 0) {
         return {
             available: false,

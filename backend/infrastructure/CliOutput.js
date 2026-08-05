@@ -41,4 +41,56 @@ function stripCliNoise(output) {
     return cleaned || String(output ?? '').trim();
 }
 
-module.exports = { stripCliNoise, CLI_NOISE_PATTERNS };
+/**
+ * The most informative line of a ctx failure.
+ *
+ * ctx writes Node deprecation warnings to stderr ahead of any real diagnostic, so
+ * taking the first line reports `DeprecationWarning: punycode is deprecated`
+ * instead of the actual cause. Prefer a line that names an error.
+ *
+ * @param {string} stderr Raw stderr from the CLI.
+ * @returns {string} One line describing the failure.
+ */
+function summarizeCliError(stderr) {
+    const lines = String(stderr ?? '')
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .filter(line => !/DeprecationWarning|--trace-deprecation|--trace-warnings|ExperimentalWarning/.test(line));
+
+    return lines.find(line => /^(Error|error|FATAL|Failed)\b/.test(line))
+        || lines.find(line => /error|failed|cannot|refused/i.test(line))
+        || lines[0]
+        || 'the CLI exited without a diagnostic';
+}
+
+/**
+ * Does this output contain an actual answer, or only citations?
+ *
+ * `ctx ask` prints the RAG citation block ("Sources:" followed by "[1] path
+ * (0.88)" lines) whether or not the model produced any prose. When generation
+ * yields nothing — which happens intermittently, and reliably when the model
+ * begins emitting a tool call — the result is a bare citation list. That is
+ * indistinguishable from a real answer to anything that only checks for a
+ * non-empty string, so the agent used to accept it as the final answer and the
+ * user saw a list of filenames as their response.
+ *
+ * Citations are still shown to the user; this only reports whether they are all
+ * there is.
+ *
+ * @param {string} output Cleaned CLI output.
+ * @returns {boolean} True when there is prose beyond the citation block.
+ */
+function hasSubstantiveAnswer(output) {
+    const text = String(output ?? '');
+    // Everything before the citation block is the answer.
+    const prose = text.split(/^\s*Sources:\s*$/m)[0];
+    // Drop any stray citation lines that appear without the header.
+    const withoutCitations = prose
+        .split('\n')
+        .filter(line => !/^\s*\[\d+\]\s+\S+\s+\([\d.]+\)\s*$/.test(line))
+        .join('\n');
+    return withoutCitations.trim().length > 0;
+}
+
+module.exports = { stripCliNoise, hasSubstantiveAnswer, summarizeCliError, CLI_NOISE_PATTERNS };
