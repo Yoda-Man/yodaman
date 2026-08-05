@@ -582,6 +582,7 @@ export default function AgentChatTab({ selectedProject }) {
   const [preset, setPreset] = useState('')
   const [vrStatus, setVrStatus] = useState(null)
   const [isOpeningVr, setIsOpeningVr] = useState(false)
+  const [holocronAvailable, setHolocronAvailable] = useState(false)
   const [workspaceView, setWorkspaceView] = useState('chat')
   const [searchRequest, setSearchRequest] = useState({ id: 0, query: '' })
   const [isSearchPending, setIsSearchPending] = useState(false)

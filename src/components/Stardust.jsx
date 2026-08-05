@@ -18,7 +18,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Zap, Activity, CheckCircle2, XCircle, Play, FileCheck, Archive,
     FolderOpen, Terminal, Download, RefreshCw, Loader2, GitCompare,
-    LayoutGrid, Link2, Shield, Search, Trash2,
+    LayoutGrid, Link2, Shield, Search, Trash2, BarChart3,
 } from 'lucide-react';
 import { api } from '../api/api';
 import { useStardustLive } from '../hooks/useStardustLive';

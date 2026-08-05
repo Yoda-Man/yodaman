@@ -1,6 +1,6 @@
 {
   "name": "yodaman",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "YodaMan — local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
@@ -32,8 +32,9 @@
     "build": "vite build",
     "desktop": "npm run build && electron electron/main.js",
     "desktop:pack": "npm run build && electron-builder --config electron-builder.json --dir",
-    "desktop:dist": "npm run build && electron-builder --config electron-builder.json && npm run website:downloads",
-    "desktop:dist:all": "npm run build && electron-builder --config electron-builder.json --mac --arm64 && electron-builder --config electron-builder.json --win --linux --x64 && npm run website:downloads",
+    "desktop:dist": "npm run build && npm run test:render && electron-builder --config electron-builder.json && npm run website:downloads",
+    "desktop:dist:all": "npm run build && npm run test:render && electron-builder --config electron-builder.json --mac --arm64 && electron-builder --config electron-builder.json --win --linux --x64 && npm run website:downloads",
+    "test:render": "jest tests/electron/DesktopRenderSmoke.test.js",
     "website:downloads": "node scripts/sync-website-downloads.js",
     "preview": "vite preview",
     "test": "jest",
@@ -98,6 +99,16 @@
     "node": ">=18.0.0"
   },
   "jest": {
+    "transform": {
+      "^.+\\.jsx?$": "<rootDir>/tests/helpers/sucraseTransform.js"
+    },
+    "moduleNameMapper": {
+      "\\.(css|less|scss|sass)$": "<rootDir>/tests/helpers/styleStub.js",
+      "\\.(png|jpe?g|gif|svg|woff2?|ttf|eot)$": "<rootDir>/tests/helpers/styleStub.js"
+    },
+    "transformIgnorePatterns": [
+      "node_modules/(?!(three)/)"
+    ],
     "modulePathIgnorePatterns": [
       "<rootDir>/release",
       "<rootDir>/dist",

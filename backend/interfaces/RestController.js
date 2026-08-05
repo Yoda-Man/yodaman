@@ -658,7 +658,6 @@ router.post('/ask', async (req, res) => {
             requestId: req.id,
             projectId,
             projectPath,
-            mode,
             userAction: 'chat_ask',
             severity: 'high'
         });

@@ -2,6 +2,49 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.4.2] - 2026-08-04
+
+### Fixed — black window on launch
+
+The 0.4.1 desktop build started to an empty black window. The runtime was healthy and every asset returned HTTP 200, so nothing looked wrong from the server side — but the UI never appeared.
+
+- **Root cause**: `Stardust.jsx` referenced the `BarChart3` icon in its `TABS` array without importing it from `lucide-react`. The reference is evaluated while the module loads, so the bundle threw `Uncaught ReferenceError: BarChart3 is not defined` before `createRoot` ever ran. `<div id="root">` stayed empty against the `bg-gray-950` body, which is the black screen.
+- **Fix**: added `BarChart3` to the `lucide-react` import in `src/components/Stardust.jsx`. The Impact tab (added in 0.4.1) is what introduced the unimported reference.
+- **Fonts unblocked**: the runtime's Content-Security-Policy had no `font-src`, so it fell back to `default-src 'self'` and blocked every `data:` font Vite inlines. The bundled Inter, Outfit and JetBrains Mono faces were silently dropped in favour of system fallbacks. `font-src 'self' data:` added in `server.js`.
+
+### Fixed — crash card when opening the workspace chat
+
+With the black window fixed, the chat view replaced the UI with "YodaMan hit a display error — `holocronAvailable is not defined`".
+
+- **Root cause**: `AgentChatTab.jsx` read `holocronAvailable` in its render and called `setHolocronAvailable` from an effect, but the `useState` pair was never declared. The setter calls sat inside a `.then()` whose `.catch()` also threw, so they surfaced only as a silent unhandled rejection; the render read is what reached `AppErrorBoundary`.
+- **Fix**: declared `const [holocronAvailable, setHolocronAvailable] = useState(false)` alongside the other VR state.
+- **Why the launch smoke test missed it**: the first paint never mounts `AgentChatTab`, so a crash inside it is invisible to a test that only checks the initial render. That gap is now closed by `ComponentRender.test.js` (below).
+
+### Fixed — /api/ask error handler threw instead of reporting
+
+Found while auditing the 0.4.1 dead-code sweep for further fallout, not from a bug report — it only fires on the error path, so nothing surfaced it.
+
+- **Root cause**: the same cleanup that removed the Code/Docs mode toggle deleted the `mode` variable from the `/api/ask` route but left `mode` in the payload its `catch` block logs. Any failure in `/api/ask` therefore threw `ReferenceError: mode is not defined` from inside the error handler, discarding the original error and never sending the intended 500 response.
+- **Fix**: dropped the stale `mode` field from the `ask_failed` log payload in `RestController.js`.
+
+### Fixed — status bar reported v0.3.8
+
+The build badge in the status bar was a hardcoded string and had not moved since 0.3.8, so the running app told users it was three versions behind. Spotted by reading the live UI during release verification, not by any test.
+
+- **Fix**: `vite.config.js` now injects `__APP_VERSION__` from `package.json`, and `StatusBar.jsx` renders that. The badge follows the version bump automatically from here on.
+- **Guard**: `tests/frontend/DisplayedVersion.test.js` fails on any literal `vX.Y.Z` in `StatusBar.jsx`, and checks the built bundle carries the current version.
+
+### Added — crash regression guards
+
+Three layers now stand between this bug class and a release. Each was verified by re-introducing the original defect and confirming the test fails:
+
+- **`tests/frontend/RendererSafety.test.js`** — sweeps every file in `src/` for identifiers that are never bound, at any nesting depth, against an allowlist of browser globals. Catches both 0.4.x crashes and names the exact `file:symbol`. The previous check only inspected JSX element positions (`<BarChart3 />`), so neither `{ icon: BarChart3 }` nor a missing `useState` pair was visible to it. Runs in under a second and needs no build.
+- **`tests/frontend/ComponentRender.test.js`** — server-renders each top-level view for real, so a crash in a tab the first paint never mounts still fails the suite. Uses `react-dom/server` plus a small browser stub; effects never run, so nothing touches the network. `Stardust` and `App` are excluded because `useStardustLive` calls `useSyncExternalStore` without a `getServerSnapshot`, which `react-dom/server` rejects — they remain covered by the sweep above.
+- **`tests/electron/DesktopRenderSmoke.test.js`** — boots the real runtime, points Electron at it exactly as `electron/main.js` does, and fails unless `#root` has mounted children with no renderer `ReferenceError`. It also asserts the mounted UI is *not* `AppErrorBoundary`: the boundary renders into `#root` too, so "root has children" alone reports a crash card as a healthy render.
+- **`tests/infrastructure/NoUnboundReferences.test.js`** — the same sweep over `backend/`, `shared/`, `electron/`, `plugins/`, `scripts/` and `bin/`, which is where the `/api/ask` regression above was hiding. Generated bundles are skipped: mangled single-line output says nothing about hand-written mistakes.
+- **Test infrastructure**: `tests/helpers/sucraseTransform.js` transforms the frontend's JSX/ESM for Jest via sucrase (already in the toolchain — no new dependency) and delegates everything else to `babel-jest`, which is what hoists `jest.mock()` calls.
+- **Release path enforcement**: `desktop:dist` and `desktop:dist:all` now run `npm run test:render` between the Vite build and electron-builder, so a build that cannot render cannot be packaged.
+
 ## [0.4.1] - 2026-08-04
 
 ### Added — Stardust-powered search
