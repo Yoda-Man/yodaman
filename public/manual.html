@@ -38,10 +38,9 @@
         <p>Install Context Expert, OpenSpec, Graphify, install dependencies, and start the runtime from the project root.</p>
         <pre><code>npm install -g @contextexpert/cli
 npm install -g @fission-ai/openspec@latest
-python3 -m pip install graphifyy
-npm install
-sh setup.sh
-npm start</code></pre>
+python3 -m pip install --user graphifyy
+cd yodaman/core
+sh setup.sh</code></pre>
         <p>The backend runtime listens on <code>http://localhost:3090</code>. The development web UI listens on <code>http://localhost:5190</code>. Use <code>npm run desktop</code> for the Electron app.</p>
 
         <h2>2. Core ideas</h2>
@@ -81,7 +80,7 @@ npm start</code></pre>
             <li><strong>Settings</strong>: Open from the top-right Settings button, sidebar plus button, or Configuration modal. Paste an absolute path or use Browse in the desktop app, then add, edit, and delete workspace paths.</li>
             <li><strong>Workspaces</strong>: Select a project, refresh the workspace list, validate health, toggle inclusion, edit the file path, delete a workspace, and sync the selected repository.</li>
             <li><strong>Chat</strong>: Ask questions using selected workspace context.</li>
-            <li><strong>Search</strong>: Run semantic search across indexed code and documentation, optionally scoped to the selected project.</li>
+            <li><strong>Search</strong>: Run semantic search across indexed code and documentation, optionally scoped to the selected project. Results are ranked by a four-signal blend: Context Expert semantic relevance (0.50), Graphify proximity to your active file (0.20), Graphify structural centrality (0.15), and OpenSpec spec coverage (0.15).</li>
             <li><strong>Dashboard</strong>: View status, database/index metrics, environment info, diagnostics, task counts, approvals, plugin policy, and mobile pairing.</li>
             <li><strong>Logs</strong>: Open searchable runtime logs, reindex requests, index queue state, and <code>ctx index</code> output. Filter by text, level, severity, and user action before copying diagnostics.</li>
             <li><strong>Manual</strong>: Read the in-app guide.</li>
@@ -144,7 +143,7 @@ npm run lint
 npm run package</code></pre>
 
         <h2>10. Stardust &mdash; OpenSpec Integration</h2>
-        <p>YodaMan 0.4.4 integrates OpenSpec through the <strong>Stardust</strong> tab with eight views: Board, Drift, Compose, Trust, Trace, Impact, Diagnostics, and Commands — plus agent tools (specPropose, specValidate, specArchive) for autonomous OpenSpec workflows.</p>
+        <p>YodaMan 0.4.4 integrates OpenSpec through the <strong>Stardust</strong> tab with eight views: Board, Drift, Compose, Trust, Trace, Impact, Diagnostics, and Commands — plus agent tools (specPropose, specValidate, specArchive, specDrift) for autonomous OpenSpec workflows.</p>
         <h3>Setup</h3>
         <pre><code>npm install -g @fission-ai/openspec@latest</code></pre>
         <h3>Workflow</h3>
@@ -156,8 +155,17 @@ npm run package</code></pre>
         </ol>
         <h3>API Endpoints</h3>
         <ul>
+            <li><code>GET /api/stardust/board?projectRoot=...</code> — Change-board snapshot (REST fallback for WebSocket)</li>
+            <li><code>GET /api/stardust/deltas/:name?projectRoot=...</code> — Operation-grouped spec deltas for a change</li>
+            <li><code>GET /api/stardust/compose?projectRoot=...&file=...</code> — File-centric cross-reference (OpenSpec + Graphify + Context Expert)</li>
+            <li><code>GET /api/stardust/spec?projectRoot=...&spec=...</code> — Current published spec text by ID</li>
+            <li><code>GET /api/stardust/change-impact/:name?projectRoot=...</code> — Per-change graph-resolved impact analysis</li>
+            <li><code>PUT /api/stardust/validation/:name</code> — Store validation result for board health icons</li>
+            <li><code>WS /api/stardust/live?projectRoot=...</code> — Real-time WebSocket for board + activity feed</li>
             <li><code>GET /api/stardust/diagnose?projectRoot=...</code> — Run OpenSpec diagnostics</li>
-            <li><code>POST /api/stardust/run</code> — Execute any OpenSpec workflow action</li>
+            <li><code>POST /api/stardust/run</code> — Execute any OpenSpec workflow action (propose, validate, archive, list, init, install)</li>
+            <li><code>GET /api/stardust/drift?projectRoot=...</code> — Compare OpenSpec intent against the actual knowledge graph</li>
+            <li><code>GET /api/stardust/context?projectRoot=...&files=...</code> — Graph-grounded context for authoring a change</li>
         </ul>
 
         <h2 id="agent-context">11. How the agent uses the three tools</h2>
