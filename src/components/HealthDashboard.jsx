@@ -26,7 +26,7 @@ const CHECK_LABELS = {
 }
 
 export default function HealthDashboard({ compact = false }) {
-    const { checks, services, status, loading, error, refresh } = useHealthCheck()
+    const { checks, services, _status, loading, error, refresh } = useHealthCheck()
     const [copiedKey, setCopiedKey] = useState(null)
 
     const copyDetail = (key, text) => {

@@ -218,7 +218,7 @@ whole sequence.
         const touchedWorkspaces = new Set();
         let finalAnswer = '';
 
-        console.log(`[Agent] 🧠 Starting reasoning loop for task: "${task.substring(0, 50)}..."`);
+        logger.info('agent_loop_started', { taskPreview: task.substring(0, 50) });
 
         while (iteration < this.maxIterations) {
             if (this.isCancelled(taskId)) {
@@ -231,7 +231,7 @@ whole sequence.
             }
 
             iteration++;
-            console.log(`[Agent] Iteration ${iteration}/${this.maxIterations}`);
+            logger.info('agent_iteration', { iteration, maxIterations: this.maxIterations });
 
             // Scoping to the workspace is what makes retrieval mean anything —
             // unscoped, ctx answers against every indexed project at once.
@@ -447,7 +447,7 @@ whole sequence.
                     this.recordTask(taskId, { status: 'error', error: err.message });
                 }
             } else {
-                console.log('[Agent] ✅ Task completed.');
+                logger.info('agent_task_completed');
                 // No tool call to act on. If the response was cut off, say so —
                 // otherwise a half-finished thought reads as a considered answer.
                 finalAnswer = raw.partial
@@ -464,7 +464,7 @@ whole sequence.
         // answer — has said something more useful than "try smaller parts".
         if (iteration >= this.maxIterations && !finalAnswer) {
             finalAnswer = "I reached the maximum number of steps without finishing. Please try breaking the task into smaller parts.";
-            console.warn('[Agent] ⚠️ Max iterations reached.');
+            logger.warn('agent_max_iterations_reached', { maxIterations: this.maxIterations });
         }
 
         this.recordTask(taskId, { status: 'completed', finalAnswer });

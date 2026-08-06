@@ -136,7 +136,7 @@ export function useStardustLive(projectRoot) {
 }
 
 /** Optimistically update a snapshot from an activity entry so the board stays in sync. */
-function buildUpdatedSnapshot(snap, activityEntry) {
+function buildUpdatedSnapshot(snap, _activityEntry) {
     if (!snap || !snap.changes) return snap;
     // Simple approach: mark the snapshot as needing a refresh
     // The next snapshot push from the server will have the full data

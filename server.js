@@ -14,6 +14,8 @@ const logger = require('./backend/infrastructure/Logger');
 const graphifyService = require('./backend/infrastructure/GraphifyService');
 const dependencyChecker = require('./backend/infrastructure/DependencyChecker');
 const stardustLive = require('./backend/stardust/StardustLive');
+const originPolicy = require('./backend/infrastructure/OriginPolicy');
+const settings = require('./backend/infrastructure/SettingsProvider');
 
 // ─────────────────────────────────────────────────────────────────────────
 //  HEALTH — shared state populated by initialize() and queried by
@@ -34,9 +36,15 @@ const healthState = {
 
 const app = express();
 const PORT = Number(process.env.YODAMAN_PORT || 3090);
+// Loopback by default. Binding 0.0.0.0 exposed the API to every device on the
+// network; mobile pairing is the only reason to widen it, so that now has to be
+// an explicit opt-in via YODAMAN_HOST=0.0.0.0.
+const HOST = process.env.YODAMAN_HOST || '127.0.0.1';
 const CONFIG_PATH = process.env.YODAMAN_CONFIG_PATH || path.join(__dirname, 'config.json');
 
-app.use(cors());
+// Reflect loopback origins only. `cors()` sent Access-Control-Allow-Origin: *,
+// which let any website read API responses. See OriginPolicy for the rationale.
+app.use(cors({ origin: originPolicy.corsOrigin, credentials: true }));
 app.use(express.json());
 app.use(logger.requestId);
 app.use(logger.requestLogger);
@@ -64,7 +72,7 @@ app.set('healthState', healthState);
 // --- API Routes ---
 app.use('/api', apiRoutes);
 
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
     logger.error('http_unhandled_error', err, {
         requestId: req.id,
         method: req.method,
@@ -76,7 +84,9 @@ app.use((err, req, res, next) => {
 });
 
 // --- SPA Catch-all ---
-app.get('*', (req, res) => {
+// Express 5 removed the bare '*' path. '/*splat' is the v5 spelling for
+// "match everything", with `splat` naming the captured segments.
+app.get('/*splat', (req, res) => {
     const indexPath = path.join(DIST_PATH, 'index.html');
     if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
@@ -241,8 +251,25 @@ async function initialize() {
 const server = http.createServer(app);
 stardustLive.attachToServer(server);
 
-server.listen(PORT, async () => {
-    logger.info('runtime_started', { url: `http://localhost:${PORT}` });
+server.listen(PORT, HOST, async () => {
+    logger.info('runtime_started', { url: `http://localhost:${PORT}`, host: HOST });
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
+        logger.warn('runtime_bound_non_loopback', {
+            host: HOST,
+            detail: 'API is reachable from other devices on this network. Pairing tokens are the only control.'
+        });
+    }
+    // Announce any security setting that differs from its secure default, so
+    // drift shows up in runtime.log rather than waiting for the next audit.
+    for (const item of settings.drift()) {
+        logger.warn('security_setting_non_default', {
+            setting: item.key,
+            value: item.value,
+            expected: item.expected,
+            source: item.source,
+            severity: 'medium'
+        });
+    }
     // Non-fatal: initialize() stores results in healthState, never exits.
     await initialize().catch(err => logger.error('startup_initialize_error', err));
 });

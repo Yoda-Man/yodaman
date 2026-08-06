@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const router = require('../../backend/interfaces/RestController');
+const { findRouteHandler } = require('../helpers/routeHandler');
 const agentEngine = require('../../backend/core/AgentReasoningEngine');
 const auditLog = require('../../backend/infrastructure/AuditLog');
 const contextEngine = require('../../backend/infrastructure/ContextEngine');
@@ -40,8 +41,7 @@ describe('RestController Integration', () => {
     }
 
     function routeHandler(method, routePath) {
-        const layer = router.stack.find((item) => item.route?.path === routePath && item.route?.methods[method]);
-        return layer.route.stack[0].handle;
+        return findRouteHandler(router, method, routePath);
     }
 
     async function invoke(method, routePath, { body = {}, query = {}, params = {} } = {}) {
@@ -606,8 +606,13 @@ describe('RestController Integration', () => {
 
             expect(response.statusCode).toBe(200);
             expect(response.payload).toContain('<html><body>graph</body></html>');
+            // 'unsafe-inline' is still required: Graphify writes the graph data
+            // and its init call as inline <script> blocks we do not control.
             expect(response.headers['Content-Security-Policy']).toContain("'unsafe-inline'");
-            expect(response.headers['Content-Security-Policy']).toContain('https://unpkg.com');
+            // But the CDN and 'unsafe-eval' are gone — vis-network is served from
+            // /vendor now (GraphifyService.localizeVendorScripts).
+            expect(response.headers['Content-Security-Policy']).not.toContain('unpkg.com');
+            expect(response.headers['Content-Security-Policy']).not.toContain("'unsafe-eval'");
         });
 
         test('GET /graphify/artifact allows same-origin embedding in Graph Studio', async () => {
@@ -665,7 +670,7 @@ describe('RestController Integration', () => {
 
             try {
                 fs.symlinkSync(externalFile, artifactPath);
-            } catch (err) {
+            } catch (_err) {
                 fs.rmSync(externalFile, { force: true });
                 return;
             }
@@ -691,7 +696,7 @@ describe('RestController Integration', () => {
 
             try {
                 fs.symlinkSync(externalDir, path.join(workspace, 'graphify-out'), 'dir');
-            } catch (err) {
+            } catch (_err) {
                 fs.rmSync(externalDir, { recursive: true, force: true });
                 fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
                 return;
@@ -733,7 +738,7 @@ describe('RestController Integration', () => {
 
             try {
                 fs.symlinkSync(externalDir, path.join(workspace, 'graphify-out'), 'dir');
-            } catch (err) {
+            } catch (_err) {
                 fs.rmSync(externalDir, { recursive: true, force: true });
                 fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
                 return;
@@ -760,7 +765,7 @@ describe('RestController Integration', () => {
 
             try {
                 fs.symlinkSync(externalFile, reportPath);
-            } catch (err) {
+            } catch (_err) {
                 fs.rmSync(externalFile, { force: true });
                 return;
             }

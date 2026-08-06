@@ -33,10 +33,10 @@ async function request(url, options = {}) {
         return await parseResponse(response);
     } catch (err) {
         if (err.name === 'AbortError') {
-            throw new Error(`Request timed out after ${timeoutMs}ms`);
+            throw new Error(`Request timed out after ${timeoutMs}ms`, { cause: err });
         }
         if (err instanceof TypeError) {
-            throw new Error('YodaMan runtime is not available. Start the desktop app or run "yodaman" from Terminal, then try again.');
+            throw new Error('YodaMan runtime is not available. Start the desktop app or run "yodaman" from Terminal, then try again.', { cause: err });
         }
         throw err;
     } finally {
@@ -249,7 +249,7 @@ export const api = {
             });
         } catch (err) {
             if (err instanceof TypeError) {
-                throw new Error('YodaMan runtime is not available. Start the desktop app or run "yodaman" from Terminal, then try again.');
+                throw new Error('YodaMan runtime is not available. Start the desktop app or run "yodaman" from Terminal, then try again.', { cause: err });
             }
             throw err;
         }

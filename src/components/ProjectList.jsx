@@ -26,7 +26,7 @@ export default function ProjectList({
         try {
             const data = await api.checkHealth(path)
             setHealth(prev => ({ ...prev, [path]: data.status || 'healthy' }))
-        } catch (err) {
+        } catch (_err) {
             setHealth(prev => ({ ...prev, [path]: 'error' }))
         } finally {
             setChecking(false)

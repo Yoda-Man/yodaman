@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import ProjectList from './components/ProjectList'
 import AgentChatTab from './components/AgentChatTab'
 import Dashboard from './components/Dashboard'
@@ -8,9 +8,11 @@ import LogsModal from './components/LogsModal'
 import WelcomeModal from './components/WelcomeModal'
 import Stardust from './components/Stardust'
 import PluginsWindow from './components/PluginsWindow'
-import GraphStudio from './components/GraphStudio'
-import HolocronVrModal from './components/HolocronVrModal'
 import { MessageSquare, LayoutDashboard, Puzzle, Settings, Terminal, GitBranch, Sparkles } from 'lucide-react'
+
+// Code-split heavy components — THREE.js (~500KB) and Graph Studio load only when needed
+const GraphStudio = lazy(() => import('./components/GraphStudio'))
+const HolocronVrModal = lazy(() => import('./components/HolocronVrModal'))
 
 import { api } from './api/api'
 
@@ -191,7 +193,9 @@ export default function App() {
               <AgentChatTab selectedProject={selectedProject} />
             </div>
             <div style={{display: activeTab === 'graph' ? 'contents' : 'none'}}>
-              <GraphStudio selectedProject={selectedProject} />
+              <Suspense fallback={<div className="flex items-center justify-center h-48"><div className="animate-spin h-5 w-5 border-2 border-indigo-400 border-t-transparent rounded-full" /></div>}>
+                <GraphStudio selectedProject={selectedProject} />
+              </Suspense>
             </div>
             <div style={{display: activeTab === 'dashboard' ? 'contents' : 'none'}}>
               <Dashboard />
@@ -223,7 +227,7 @@ export default function App() {
         <LogsModal onClose={() => setIsLogsOpen(false)} />
       )}
 
-      {vrLaunch?.selectedProject && <HolocronVrModal project={vrLaunch.selectedProject} diagnostics={vrLaunch.diagnostics} onClose={() => setVrLaunch(null)} />}
+      {vrLaunch?.selectedProject && <Suspense fallback={null}><HolocronVrModal project={vrLaunch.selectedProject} diagnostics={vrLaunch.diagnostics} onClose={() => setVrLaunch(null)} /></Suspense>}
 
       <WelcomeModal />
     </div>

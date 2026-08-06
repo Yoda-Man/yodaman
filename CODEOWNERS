@@ -1,8 +1,25 @@
-* @Yoda-Man/core-maintainers
+# Code owners for Yoda-Man/yodaman
+#
+# Sole maintainer. One line, because that is the truth.
+#
+# WHY THIS FILE USED TO DO NOTHING
+# --------------------------------
+# It previously listed seven per-directory owners using GitHub team syntax
+# (@Yoda-Man/core-maintainers, @Yoda-Man/backend-maintainers, ...). Team syntax
+# is only valid inside a GitHub *organization*, and Yoda-Man is a personal user
+# account — so no such team could exist. GitHub silently ignores CODEOWNERS
+# entries it cannot resolve, which meant the file assigned no reviewer to any
+# pull request from the day it was added, while the audit tracker recorded
+# "SR-03 Resolved — Added CODEOWNERS".
+#
+# HONEST LIMITS OF THIS FILE
+# --------------------------
+# With a single maintainer, CODEOWNERS cannot enforce review: GitHub will not
+# request a review from the author of a pull request. This file is therefore
+# documentation of ownership, not a control. Treat it as the answer to "who do I
+# escalate to", not as a review gate.
+#
+# If a second maintainer joins, add them here first — that is what turns this
+# file from a label into an actual gate.
 
-/backend/ @Yoda-Man/backend-maintainers
-/src/ @Yoda-Man/frontend-maintainers
-/shared/ @Yoda-Man/protocol-maintainers
-/extensions/vscode-yodaman/ @Yoda-Man/vscode-maintainers
-/docs/ @Yoda-Man/docs-maintainers
-/plugins/ @Yoda-Man/plugin-maintainers
+* @Yoda-Man

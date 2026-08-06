@@ -17,7 +17,7 @@ function readConfig(configPath) {
 function readGraph(projectPath) {
     try {
         return graphifyService.readGraph(projectPath);
-    } catch (err) {
+    } catch (_err) {
         return null;
     }
 }

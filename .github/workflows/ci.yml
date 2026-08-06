@@ -20,14 +20,48 @@ jobs:
           node-version: 20
           cache: npm
 
+      # `npm ci` fails outright when package.json and the lockfile disagree.
+      # That is what silently broke this pipeline in August 2026: package.json
+      # pinned jest@^30.4.3, a version that has never existed. Keep this step
+      # first so a manifest/lockfile drift is the loudest possible failure.
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
       - name: Run tests
         run: npm test
+
+      # Production dependencies only: dev-tree advisories (electron-builder and
+      # friends) never reach a consumer of the published package and would make
+      # this gate too noisy to keep enabled.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Build web app
         run: npm run build
 
       - name: Run release smoke checks
         run: npm run release:smoke
+
+  # Non-blocking visibility on the full dependency tree, including dev.
+  audit-dev:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit all dependencies
+        run: npm audit --audit-level=moderate

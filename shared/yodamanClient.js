@@ -52,7 +52,7 @@ async function requestJson(runtimeUrl, path, options = {}) {
             }
         });
     } catch (error) {
-        throw new Error(runtimeUnavailableMessage(baseUrl, error.message));
+        throw new Error(runtimeUnavailableMessage(baseUrl, error.message), { cause: error });
     }
 
     if (!response.ok) {
@@ -257,7 +257,7 @@ function createYodaManClient(runtimeUrl, options = {}) {
                     body: JSON.stringify({ task, projectId })
                 });
             } catch (error) {
-                throw new Error(runtimeUnavailableMessage(baseUrl, error.message));
+                throw new Error(runtimeUnavailableMessage(baseUrl, error.message), { cause: error });
             }
 
             if (!response.ok) {

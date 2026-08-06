@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { db, useSqlite } = require('./Database');
+const logger = require('./Logger');
 
 const AUDIT_FILE = path.join(__dirname, '../../audit-log.json');
 const AUDIT_JSONL_FILE = path.join(__dirname, '../../audit-log.jsonl');
@@ -20,7 +21,7 @@ class AuditLog {
                 this.entries = rows.map((row) => JSON.parse(row.entry));
                 return;
             } catch (err) {
-                console.error('[AuditLog] Failed to load audit log from SQLite:', err.message);
+                logger.error('auditlog_sqlite_load_failed', err);
                 this.entries = [];
             }
         }
@@ -34,7 +35,7 @@ class AuditLog {
                     .slice(-MAX_ENTRIES);
                 return;
             } catch (err) {
-                console.error('[AuditLog] Failed to load append-only audit log:', err.message);
+                logger.error('auditlog_jsonl_load_failed', err);
                 this.entries = [];
             }
         }
@@ -44,7 +45,7 @@ class AuditLog {
         try {
             this.entries = JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8'));
         } catch (err) {
-            console.error('[AuditLog] Failed to load audit log:', err.message);
+            logger.error('auditlog_load_failed', err);
             this.entries = [];
         }
     }
@@ -75,7 +76,7 @@ class AuditLog {
                 stmt.run(item.id, item.timestamp, JSON.stringify(item));
                 return item;
             } catch (err) {
-                console.error('[AuditLog] SQLite record failed:', err.message);
+                logger.error('auditlog_sqlite_record_failed', err);
             }
         }
 
@@ -94,7 +95,7 @@ class AuditLog {
             try {
                 db.exec('DELETE FROM audit_logs');
             } catch (err) {
-                console.error('[AuditLog] Failed to clear SQLite audit logs:', err.message);
+                logger.error('auditlog_sqlite_clear_failed', err);
             }
         } else {
             fs.writeFileSync(AUDIT_JSONL_FILE, '');

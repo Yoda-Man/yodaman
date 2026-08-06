@@ -1,5 +1,5 @@
-const fs = require('fs');
 const path = require('path');
+const logger = require('./Logger');
 
 let db = null;
 let useSqlite = false;
@@ -37,7 +37,7 @@ try {
         );
     `);
 } catch (err) {
-    console.warn('[Database] SQLite not supported or failed to initialize, falling back to JSON storage:', err.message);
+    logger.warn('database_sqlite_unavailable', { reason: err.message, detail: 'falling back to JSON storage' });
     db = null;
     useSqlite = false;
 }

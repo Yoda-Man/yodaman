@@ -1,4 +1,3 @@
-const path = require('path');
 const toolBox = require('../../backend/infrastructure/ToolBox');
 const graphifyService = require('../../backend/infrastructure/GraphifyService');
 const specDrift = require('../../backend/stardust/SpecDrift');

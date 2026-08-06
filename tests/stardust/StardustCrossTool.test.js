@@ -13,10 +13,10 @@ const path = require('path');
 
 const router = require('../../backend/interfaces/RestController');
 
+const { findRouteHandler } = require('../helpers/routeHandler');
+
 function routeHandler(method, routePath) {
-    const layer = router.stack.find(item => item.route?.path === routePath && item.route?.methods[method]);
-    if (!layer) throw new Error(`no ${method.toUpperCase()} route registered at ${routePath}`);
-    return layer.route.stack[0].handle;
+    return findRouteHandler(router, method, routePath);
 }
 
 async function invoke(method, routePath, { query = {}, params = {} } = {}) {

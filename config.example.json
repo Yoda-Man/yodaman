@@ -1,4 +1,12 @@
 {
   "watchedDirectories": [],
-  "removedDirectories": []
+  "removedDirectories": [],
+  "settings": {
+    "requirePairingToken": true,
+    "allowAgentCommands": false,
+    "allowPluginUploads": false,
+    "allowUnrestrictedPlugins": false,
+    "allowSelfHealInstall": false,
+    "allowedCommands": []
+  }
 }

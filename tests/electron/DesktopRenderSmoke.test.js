@@ -135,10 +135,10 @@ maybeDescribe('desktop renders the dashboard', () => {
 });
 
 if (!hasBuild) {
-    // eslint-disable-next-line no-console
+     
     console.warn(`[DesktopRenderSmoke] skipped: no build at ${distIndex}. Run "npm run build" first.`);
 }
 if (!hasDisplay) {
-    // eslint-disable-next-line no-console
+     
     console.warn('[DesktopRenderSmoke] skipped: no DISPLAY. Run under xvfb-run to enable.');
 }

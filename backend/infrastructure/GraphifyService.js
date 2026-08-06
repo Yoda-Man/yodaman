@@ -128,7 +128,7 @@ function safeFilePath(filePath, baseDir) {
     let baseStat;
     try {
         baseStat = fs.lstatSync(baseDir);
-    } catch (err) {
+    } catch (_err) {
         return '';
     }
 
@@ -139,7 +139,7 @@ function safeFilePath(filePath, baseDir) {
     let stat;
     try {
         stat = fs.lstatSync(filePath);
-    } catch (err) {
+    } catch (_err) {
         return '';
     }
 
@@ -155,7 +155,7 @@ function safeFilePath(filePath, baseDir) {
             return '';
         }
         return filePath;
-    } catch (err) {
+    } catch (_err) {
         return '';
     }
 }
@@ -191,7 +191,7 @@ function latestSourceMtime(projectPath) {
             let stat;
             try {
                 stat = fs.statSync(entryPath);
-            } catch (err) {
+            } catch (_err) {
                 continue;
             }
 
@@ -369,6 +369,58 @@ function sourceLabelForCommunity(nodes) {
     return label ? `${label} cluster` : '';
 }
 
+/**
+ * CDN script tags that must be served locally instead.
+ * Keep in sync with scripts/sync-vendor.js.
+ */
+const VENDOR_SCRIPT_REWRITES = [
+    {
+        // Graphify hardcodes this tag in every graph artifact it emits.
+        pattern: /https?:\/\/unpkg\.com\/vis-network@[\d.]+\/standalone\/umd\/vis-network\.min\.js/g,
+        local: '/vendor/vis-network.min.js',
+        name: 'vis-network'
+    }
+];
+
+/**
+ * Points a Graphify artifact's external <script> tags at locally served copies.
+ *
+ * Graphify emits `<script src="https://unpkg.com/vis-network@9.1.6/...">`. Two
+ * problems with shipping that as-is: a local-first product should not need the
+ * public internet to draw a graph, and it forced the artifact's CSP to allow an
+ * external origin plus 'unsafe-eval'. The asset is vendored into public/vendor/
+ * by scripts/sync-vendor.js, so the tag can point at our own origin.
+ *
+ * This is deliberately a narrow rewrite of a known URL, not a general HTML
+ * transform — the input is third-party output we do not control. If Graphify
+ * changes its markup the pattern stops matching, which is logged rather than
+ * silently ignored, because the CSP will then block the CDN and the graph will
+ * render blank.
+ *
+ * @param {string} html - Raw artifact HTML as written by Graphify.
+ * @returns {string} HTML with vendor scripts pointed at local copies.
+ */
+function localizeVendorScripts(html) {
+    if (!html) return html;
+
+    let result = html;
+    for (const rewrite of VENDOR_SCRIPT_REWRITES) {
+        const matches = result.match(rewrite.pattern);
+        if (matches) {
+            result = result.replace(rewrite.pattern, rewrite.local);
+            continue;
+        }
+        // Only worth reporting if the artifact still points somewhere remote.
+        if (/<script[^>]+src=["']https?:\/\//i.test(result)) {
+            logger.warn('graphify_artifact_vendor_rewrite_missed', {
+                vendor: rewrite.name,
+                detail: 'Artifact loads a remote script this rewrite did not match. The CSP will block it. Graphify output format may have changed.'
+            });
+        }
+    }
+    return result;
+}
+
 function enhanceArtifactHtml(html) {
     if (!html || !html.includes('Community ')) return html;
 
@@ -443,7 +495,8 @@ module.exports = {
         } catch (err) {
             logger.error('graphify_unavailable', err, { binary: getGraphifyBin() });
             throw new Error(
-                `Graphify is required but "${getGraphifyBin()}" is not available. Install it with "pip install graphifyy" and ensure the "graphify" command is in PATH, or set YODAMAN_GRAPHIFY_BIN.`
+                `Graphify is required but "${getGraphifyBin()}" is not available. Install it with "pip install graphifyy" and ensure the "graphify" command is in PATH, or set YODAMAN_GRAPHIFY_BIN.`,
+                { cause: err }
             );
         }
 
@@ -559,7 +612,7 @@ module.exports = {
         }
         try {
             return JSON.parse(fs.readFileSync(currentBuildStatusPath, 'utf8'));
-        } catch (err) {
+        } catch (_err) {
             return { state: 'idle', message: 'Build status could not be read' };
         }
     },
@@ -618,7 +671,8 @@ module.exports = {
 
     readArtifact(projectPath, type) {
         const artifact = this.artifact(projectPath, type);
-        return enhanceArtifactHtml(fs.readFileSync(artifact.artifactPath, 'utf8'));
+        const html = fs.readFileSync(artifact.artifactPath, 'utf8');
+        return localizeVendorScripts(enhanceArtifactHtml(html));
     },
 
     readReport(projectPath, { maxChars = 8000 } = {}) {

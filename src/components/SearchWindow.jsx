@@ -5,7 +5,7 @@ import { api } from '../api/api'
 export default function SearchWindow({ selectedProject, searchRequest, onSearchingChange }) {
     const [results, setResults] = useState([])
     const [isSearching, setIsSearching] = useState(false)
-    const [stats, setStats] = useState(null)
+    const [_stats, setStats] = useState(null)
     const [error, setError] = useState('')
     const [hasSearched, setHasSearched] = useState(false)
     const [expandedResults, setExpandedResults] = useState({})

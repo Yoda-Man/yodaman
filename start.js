@@ -20,7 +20,7 @@ function checkDependencies() {
     try {
         execSync('ctx --version', { stdio: 'ignore' });
         console.log('✅ Context Expert is installed.');
-    } catch (error) {
+    } catch (_error) {
         console.error('❌ Error: "ctx" CLI is not installed or not in PATH.');
         process.exit(1);
     }
@@ -30,7 +30,7 @@ function checkDependencies() {
     try {
         execSync(`"${graphifyBin}" --help`, { stdio: 'ignore' });
         console.log(`✅ Graphify is installed at ${graphifyBin}.`);
-    } catch (error) {
+    } catch (_error) {
         console.error('❌ Error: "graphify" CLI is required and not in PATH.');
         console.error('Install it with: python3 -m pip install --user graphifyy');
         console.error('If it is installed outside PATH, set YODAMAN_GRAPHIFY_BIN to the graphify executable.');
@@ -41,7 +41,7 @@ function checkDependencies() {
     try {
         execSync('ollama --version', { stdio: 'ignore' });
         console.log('✅ Ollama is installed.');
-    } catch (error) {
+    } catch (_error) {
         console.error('❌ Error: "ollama" CLI is required for local-only model execution.');
         process.exit(1);
     }

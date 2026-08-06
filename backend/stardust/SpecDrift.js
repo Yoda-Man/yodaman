@@ -34,7 +34,7 @@ const logger = require('../infrastructure/Logger');
 // anything; a path with a directory separator or a known code extension is a
 // deliberate citation.
 const REFERENCE_PATTERN =
-    /(?:^|[\s`'"(\[])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]{1,5}|[A-Za-z0-9_.-]+\.(?:js|jsx|ts|tsx|mjs|cjs|py|go|rs|java|rb|php|swift|kt))(?=$|[\s`'".,;:)\]])/g;
+    /(?:^|[\s`'"([])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]{1,5}|[A-Za-z0-9_.-]+\.(?:js|jsx|ts|tsx|mjs|cjs|py|go|rs|java|rb|php|swift|kt))(?=$|[\s`'".,;:)\]])/g;
 
 // Paths that are cited constantly but are not application architecture.
 const IGNORED_REFERENCES = [

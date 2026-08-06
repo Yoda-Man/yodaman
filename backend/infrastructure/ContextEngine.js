@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const dependencyChecker = require('./DependencyChecker');
 const { stripCliNoise, summarizeCliError } = require('./CliOutput');
+const logger = require('./Logger');
 
 // `ctx list` is a process spawn, so its answer is cached. Short TTL: a workspace
 // indexed mid-session should become scopeable without a restart.
@@ -28,9 +29,9 @@ class ContextEngine {
         const resolved = dependencyChecker.which('ctx');
         this.binary = resolved || 'ctx';
         if (resolved) {
-            console.log(`[ContextEngine] ctx resolved to: ${resolved}`);
+            logger.info('ctx_binary_resolved', { binary: resolved });
         } else {
-            console.log('[ContextEngine] ctx not found via DependencyChecker — will rely on system PATH');
+            logger.warn('ctx_binary_not_found', { detail: 'falling back to system PATH' });
         }
 
         /** @type {{ at: number, byPath: Map<string, string> } | null} */
@@ -63,7 +64,7 @@ class ContextEngine {
                     if (project?.path && project?.name) byPath.set(path.resolve(project.path), project.name);
                 }
             } catch (err) {
-                console.warn(`[ContextEngine] ctx list failed, falling back to basename: ${err.message}`);
+                logger.warn('ctx_list_failed', { reason: err.message, detail: 'falling back to basename' });
             }
             this._projectCache = { at: Date.now(), byPath };
         }
@@ -123,7 +124,7 @@ class ContextEngine {
             const salvaged = err?.partialOutput;
             if (salvaged && salvaged.trim()) {
                 const reason = summarizeCliError(err.message);
-                console.warn(`[ContextEngine] ctx exited non-zero mid-answer (${reason}); salvaging ${salvaged.length} chars of output`);
+                logger.warn('ctx_partial_answer_salvaged', { reason, salvagedChars: salvaged.length });
                 return { output: salvaged, code: err.exitCode ?? 1, partial: true, error: reason };
             }
             throw err;
@@ -137,7 +138,7 @@ class ContextEngine {
      */
     async execute(args = [], { timeoutMs } = {}) {
         return new Promise((resolve, reject) => {
-            console.log(`[ContextEngine] Executing: ${this.binary} ${args.join(' ')}`);
+            logger.info('ctx_execute', { binary: this.binary, args });
             const proc = spawn(this.binary, args);
             let output = '';
             let error = '';
@@ -191,7 +192,7 @@ class ContextEngine {
         try {
             // Find the actual JSON block by looking for the first { or [ that starts a line
             // or is the start of the output, avoiding "tip" messages in the middle of lines.
-            const jsonMatch = output.match(/^[\s]*[\{\[]/m);
+            const jsonMatch = output.match(/^\s*[{[]/m);
             if (!jsonMatch) {
                 throw new Error('No valid JSON block found in CLI output');
             }
@@ -208,8 +209,8 @@ class ContextEngine {
             
             throw new Error('Could not identify valid JSON boundaries');
         } catch (e) {
-            console.error(`[ContextEngine] JSON Parse Error: ${e.message}`);
-            throw new Error(`Failed to parse CLI JSON: ${e.message}`);
+            logger.error('ctx_json_parse_failed', e);
+            throw new Error(`Failed to parse CLI JSON: ${e.message}`, { cause: e });
         }
     }
 }

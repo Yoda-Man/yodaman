@@ -21,7 +21,7 @@ class QueueService {
      */
     addToQueue(directoryPath) {
         if (!this.queue.includes(directoryPath)) {
-            console.log(`[Queue] Adding to queue: ${directoryPath}`);
+            logger.info('queue_enqueued', { path: directoryPath });
             logger.info('index_queue_added', { path: directoryPath, queueLength: this.queue.length + 1 });
             this.queue.push(directoryPath);
             this.processNext();
@@ -39,7 +39,7 @@ class QueueService {
         this.isProcessing = true;
         const targetDir = this.queue.shift();
 
-        console.log(`[Queue] 🏗️ Starting index for: ${targetDir}`);
+        logger.info('queue_index_started', { path: targetDir });
         logger.info('index_started', { path: targetDir });
         
         try {
@@ -69,7 +69,7 @@ class QueueService {
             });
 
             this.activeProcess.on('close', (code) => {
-                console.log(`[Queue] ✅ Finished indexing ${targetDir} (Exit Code: ${code})`);
+                logger.info('queue_index_finished', { path: targetDir, exitCode: code });
                 if (code === 0) {
                     logger.info('index_completed', { path: targetDir, exitCode: code });
                     graphifyService.build(targetDir, { update: true }).catch((err) => {
@@ -87,7 +87,7 @@ class QueueService {
                 this.processNext(); // Recursive call to process next item
             });
         } catch (err) {
-            console.error(`[Queue] Failed to start indexing for ${targetDir}:`, err.message);
+            logger.error('queue_index_start_failed', err, { path: targetDir });
             logger.error('index_start_failed', err, { path: targetDir });
             this.isProcessing = false;
             this.processNext();
@@ -99,7 +99,7 @@ class QueueService {
      */
     killActive() {
         if (this.activeProcess) {
-            console.log('[Queue] Killing active indexing process...');
+            logger.info('queue_index_killed');
             logger.warn('index_process_killed');
             this.activeProcess.kill();
         }

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const logger = require('./Logger');
 
 const SESSIONS_FILE = path.join(__dirname, '../../sessions.json');
 
@@ -19,7 +20,7 @@ class SessionStore {
             try {
                 this.sessions = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
             } catch (err) {
-                console.error('[SessionStore] Failed to load sessions:', err.message);
+                logger.error('sessionstore_load_failed', err);
                 this.sessions = {};
             }
         }

@@ -39,7 +39,11 @@ const { execFile, execFileSync } = require('child_process');
                 .sort()
                 .reverse()
                 .forEach(v => candidates.push(path.join(nvmRoot, v, 'bin')));
-        } catch (_) { }
+        } catch (_err) {
+            // Best effort: nvm's directory may be unreadable or mid-install.
+            // PATH augmentation is an optimisation, so skip this root and keep
+            // the other candidates rather than failing the whole lookup.
+        }
     }
 
     // macOS: Homebrew
@@ -73,7 +77,10 @@ const { execFile, execFileSync } = require('child_process');
                     .sort()
                     .reverse()
                     .forEach(v => candidates.push(path.join(fnmNode, v, 'installation', 'bin')));
-            } catch (_) { }
+            } catch (_err) {
+                // Same as the nvm branch above: an unreadable fnm root just
+                // means one fewer PATH candidate, not a failure.
+            }
         }
     }
 

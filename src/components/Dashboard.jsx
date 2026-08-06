@@ -31,7 +31,11 @@ function CtxConfigPanel() {
                 setCfg(prev => ({ ...prev, [editing]: editValue }))
                 setEditing(null)
             }
-        } catch (_) { }
+        } catch (err) {
+            // The save failed but the UI stays on the edit row, so the user can
+            // retry. Surface the reason for support rather than dropping it.
+            console.error('[Dashboard] Failed to save config:', err)
+        }
         setSaving(false)
     }
 

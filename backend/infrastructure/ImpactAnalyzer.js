@@ -40,7 +40,7 @@ const DEPENDENCY_RELATIONS = new Set([
 
 // Containment edges are still useful in one direction: a symbol node belongs to
 // its file, and a dependency on the symbol is a dependency on the file.
-const CONTAINMENT_RELATIONS = new Set(['contains', 'method', 'defines']);
+const _CONTAINMENT_RELATIONS = new Set(['contains', 'method', 'defines']);
 
 const TEST_PATTERNS = [
     /(^|[/\\])tests?[/\\]/i,

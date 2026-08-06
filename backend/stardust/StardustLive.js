@@ -19,7 +19,6 @@ const fs = require('fs');
 const path = require('path');
 const chokidar = require('chokidar');
 const { WebSocketServer } = require('ws');
-const specDrift = require('./SpecDrift');
 const graphifyService = require('../infrastructure/GraphifyService');
 const logger = require('../infrastructure/Logger');
 

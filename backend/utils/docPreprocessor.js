@@ -13,6 +13,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const glob = require('glob');
+const logger = require('../infrastructure/Logger');
 
 // -----------------------------------------------------------------
 // Configuration – can be tweaked without touching the rest of the code.
@@ -167,7 +168,7 @@ async function preprocessDocumentation(directories) {
       allChunks.push(...comments);
     }
   }
-  console.log(`[DocPreprocessor] Generated ${allChunks.length} documentation chunks`);
+  logger.info('doc_chunks_generated', { count: allChunks.length });
   return allChunks;
 }
 
@@ -182,7 +183,7 @@ async function preprocessDocumentation(directories) {
 async function updateCtxConfig(projectRoot) {
   const configPath = path.join(projectRoot, 'config.json');
   if (!await fs.pathExists(configPath)) {
-    console.warn('[DocPreprocessor] config.json not found – skipping config update');
+    logger.warn('doc_config_missing', { detail: 'skipping config update' });
     return;
   }
   const config = await fs.readJson(configPath);
@@ -193,7 +194,7 @@ async function updateCtxConfig(projectRoot) {
   const newWatched = [...new Set([...watched, ...chunkDirs])];
   config.watchedDirectories = newWatched;
   await fs.writeJson(configPath, config, { spaces: 2 });
-  console.log('[DocPreprocessor] Updated config.json with doc‑chunk directories');
+  logger.info('doc_config_updated');
 }
 
 module.exports = {

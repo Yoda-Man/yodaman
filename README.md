@@ -2,7 +2,7 @@
 
 YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime — with a real-time Stardust OpenSpec dashboard, cross-tool composition views, and agent-driven spec workflows.
 
-![Version](https://img.shields.io/badge/Version-0.4.3-gold)
+![Version](https://img.shields.io/badge/Version-0.4.4-gold)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Why YodaMan
@@ -143,7 +143,76 @@ Copy `config.example.json` to `config.json` and add your workspace paths:
 }
 ```
 
-All developer settings (plugin uploads, unrestricted plugins, agent commands) are managed through Settings → Developer Settings in the UI.
+### Security settings
+
+These live under `settings` in `config.json` and are also editable from
+Settings → Developer Settings in the UI. **Every one defaults to the safe value** — you
+only need to change them deliberately.
+
+| Setting | Default | Effect when enabled |
+|---------|---------|---------------------|
+| `requirePairingToken` | `true` | Non-local clients must present a pairing token. Turning this off exposes the API to any device that can reach the port. |
+| `allowAgentCommands` | `false` | Lets the agent run shell commands, restricted to an executable allowlist (see below). |
+| `allowPluginUploads` | `false` | Accepts plugin uploads over `POST /api/plugins`. |
+| `allowUnrestrictedPlugins` | `false` | Loads plugins that declare no `permissions` array. |
+| `allowSelfHealInstall` | `false` | Lets `POST /api/health/install` install missing dependencies (Ollama, ctx, OpenSpec). |
+| `allowedCommands` | `[]` | Extra executables the agent may run, on top of the built-in allowlist. Bare names only — `["docker", "kubectl"]`. |
+
+Agent shell commands are restricted to an allowlist of executables (git, npm, node, python3,
+and standard read-only inspection tools). Commands run without a shell, so `;`, `|`, `&`,
+backticks, `$(…)`, and redirection are rejected rather than interpreted. Inline evaluation
+(`node -e`, `python3 -c`) is refused; run a script file instead. Inspect the effective policy
+at any time with `GET /api/policy`.
+
+### Environment variables
+
+Every setting above can be overridden by an environment variable, which takes precedence over
+`config.json`. The name is the setting in `SCREAMING_SNAKE_CASE` with a `YODAMAN_` prefix:
+
+| Variable | Overrides |
+|----------|-----------|
+| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `requirePairingToken` |
+| `YODAMAN_ALLOW_AGENT_COMMANDS` | `allowAgentCommands` |
+| `YODAMAN_ALLOW_PLUGIN_UPLOADS` | `allowPluginUploads` |
+| `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `allowUnrestrictedPlugins` |
+| `YODAMAN_ALLOW_SELF_HEAL_INSTALL` | `allowSelfHealInstall` |
+| `YODAMAN_ALLOWED_COMMANDS` | `allowedCommands` (comma-separated) |
+
+Runtime and paths:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `YODAMAN_PORT` | `3090` | HTTP/WebSocket port. |
+| `YODAMAN_HOST` | `127.0.0.1` | Bind address. **Loopback by default.** Set `0.0.0.0` only to pair a phone on your LAN — the API then reaches every device on that network. |
+| `YODAMAN_CONFIG_PATH` | `./config.json` | Location of the config file. |
+| `YODAMAN_DB_PATH` | `./yodaman.db` | SQLite database location. |
+| `YODAMAN_UPLOAD_ROOT` | OS temp dir | Where uploaded files are staged. |
+| `YODAMAN_WATCH_DEBOUNCE_MS` | `1500` | File-watcher debounce before re-indexing. |
+
+Logging:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `YODAMAN_LOG_DIR` | `~/.yodaman/logs` | Directory for `runtime.log`. |
+| `YODAMAN_LOG_TO_FILE` | `true` | Set `false` to log to stdout only. |
+| `YODAMAN_LOG_MAX_BYTES` | `5242880` | Rotate `runtime.log` at this size. |
+| `YODAMAN_LOG_MAX_FILES` | `3` | Rotated files to retain. |
+
+Agent and integrations:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `YODAMAN_AGENT_PROMPT_CHARS` | — | Caps the character budget for agent prompts. |
+| `YODAMAN_CTX_ASK_TIMEOUT_MS` | — | Timeout for `ctx ask` calls. |
+| `YODAMAN_GRAPHIFY_BIN` | `graphify` | Path to the Graphify binary. |
+| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | — | Graphify subprocess timeout. |
+| `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | — | Model Graphify uses for enrichment. |
+| `YODAMAN_GRAPHIFY_FULL_EXTRACT` | — | Forces a full re-extract instead of incremental. |
+| `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | — | Caps nodes rendered in graph visualisations. |
+| `YODAMAN_GRAPHIFY_RUNNING_STALE_MS` | — | When a running Graphify job is considered stale. |
+
+Frontend build-time variables (Vite, prefixed `VITE_`): `VITE_YODAMAN_API_BASE`,
+`VITE_YODAMAN_FETCH_TIMEOUT_MS`.
 
 ## Stardust Dashboard
 

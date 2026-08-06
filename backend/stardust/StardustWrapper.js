@@ -1,8 +1,8 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
+const logger = require('../infrastructure/Logger');
 
 /**
  * StardustWrapper — CLI subprocess wrapper for OpenSpec.
@@ -33,12 +33,12 @@ class StardustWrapper {
         const resolved = dependencyChecker.which('openspec');
         if (resolved) {
             this._binary = resolved;
-            console.log(`[StardustWrapper] openspec resolved to: ${resolved}`);
+            logger.info('openspec_binary_resolved', { binary: resolved });
             return this._binary;
         }
 
         // Fall back to npx
-        console.log('[StardustWrapper] openspec not found via DependencyChecker — will use npx');
+        logger.warn('openspec_binary_not_found', { detail: 'falling back to npx' });
         this._binary = 'npx';
         return this._binary;
     }
@@ -73,9 +73,9 @@ class StardustWrapper {
         const spawnArgs = await this._buildArgs(args);
         const effectiveCwd = cwd || process.cwd();
 
-        console.log(`[StardustWrapper] Spawning: ${bin} ${spawnArgs.join(' ')} (cwd: ${effectiveCwd})`);
+        logger.info('openspec_spawn', { bin, args: spawnArgs, cwd: effectiveCwd });
 
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve, _reject) => {
             const proc = spawn(bin, spawnArgs, { cwd: effectiveCwd, stdio: ['pipe', 'pipe', 'pipe'] });
             let stdout = '';
             let stderr = '';
@@ -128,13 +128,13 @@ class StardustWrapper {
 
                 // Always log to server console for diagnostics
                 if (trimmedStderr) {
-                    console.warn(`[StardustWrapper] stderr (code ${code}): ${trimmedStderr.slice(0, 500)}`);
+                    logger.warn('openspec_stderr', { code, stderr: trimmedStderr.slice(0, 500) });
                 }
                 if (code !== 0) {
-                    console.error(`[StardustWrapper] Command failed with exit code ${code}: ${bin} ${spawnArgs.join(' ')}`);
-                    if (trimmedStderr) console.error(`[StardustWrapper] stderr: ${trimmedStderr}`);
+                    logger.error('openspec_command_failed', null, { code, bin, args: spawnArgs });
+                    if (trimmedStderr) logger.error('openspec_command_failed_stderr', null, { stderr: trimmedStderr });
                 } else {
-                    console.log(`[StardustWrapper] Command succeeded (code ${code})`);
+                    logger.info('openspec_command_succeeded', { code });
                 }
 
                 finish({
@@ -300,7 +300,7 @@ class StardustWrapper {
      */
     async install() {
         return new Promise((resolve) => {
-            console.log('[StardustWrapper] Installing @fission-ai/openspec globally...');
+            logger.info('openspec_install_started', { package: '@fission-ai/openspec' });
             const proc = spawn('npm', ['install', '-g', '@fission-ai/openspec'], {
                 stdio: ['pipe', 'pipe', 'pipe'],
             });

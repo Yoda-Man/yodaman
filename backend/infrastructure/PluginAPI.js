@@ -1,7 +1,7 @@
 /**
  * PluginAPI — Full API contract for legacy plugins (Holocron VR style)
  */
-const path=require('path'),{Worker}=require('worker_threads');
+const _path=require('path'),{_Worker}=require('worker_threads');
 class PluginAPI{
   constructor(dir){this.pluginDir=dir;this.workers=new Set();this.shortcuts=new Set();this._log=console;}
   async fetch(url,opts={}){
@@ -13,7 +13,7 @@ class PluginAPI{
   }
   get log(){return{info:(...a)=>this._log.log('[Plugin]',...a),warn:(...a)=>this._log.warn('[Plugin]',...a),error:(...a)=>this._log.error('[Plugin]',...a)};}
   get ui(){const s=this;return{registerPluginCard:c=>s._log.log('[PluginAPI] Card:',c.label),openModal:o=>s._log.log('[PluginAPI] Modal:',o.title||o.id),registerShortcut:k=>{s.shortcuts.add(k.id);s._log.log('[PluginAPI] Shortcut:',k.label);},unregisterShortcut:id=>{s.shortcuts.delete(id);s._log.log('[PluginAPI] Unregister:',id);}};}
-  get worker(){const s=this;return{run:(sp,opts)=>s._log.log('[PluginAPI] Worker:',sp),terminateAll:()=>s.workers.clear()};}
+  get worker(){const s=this;return{run:(sp,_opts)=>s._log.log('[PluginAPI] Worker:',sp),terminateAll:()=>s.workers.clear()};}
   get config(){return{get:()=>null};}
 }
 module.exports=PluginAPI;

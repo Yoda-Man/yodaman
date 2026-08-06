@@ -61,11 +61,25 @@ function main() {
 
     const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
     const files = new Set(pkg.files || []);
-    ['bin', 'dist', 'backend', 'shared', 'server.js', 'start.js', 'public', 'docs/*.md', 'README.md', 'config.example.json'].forEach((entry) => {
+    // `docs/*.md` used to be required here, but core/docs contains only
+    // superpowers/ — the glob matched nothing, so this check passed while the
+    // published package shipped no documentation at all. Assert the docs that
+    // actually exist instead.
+    ['bin', 'dist', 'backend', 'shared', 'server.js', 'start.js', 'public', 'README.md', 'user_manual.md', 'config.example.json'].forEach((entry) => {
         if (!files.has(entry)) {
             throw new Error(`package.json files is missing ${entry}`);
         }
     });
+
+    // A files entry that matches nothing is worse than no entry: it looks like
+    // coverage while shipping nothing. Verify each non-negated entry resolves.
+    (pkg.files || [])
+        .filter((entry) => !entry.startsWith('!') && !entry.includes('*'))
+        .forEach((entry) => {
+            if (!fs.existsSync(path.join(root, entry))) {
+                throw new Error(`package.json files entry "${entry}" does not exist`);
+            }
+        });
 
     // Verify Database.js and SQLite initialization if supported
     const dbHelper = require(path.join(root, 'backend/infrastructure/Database.js'));

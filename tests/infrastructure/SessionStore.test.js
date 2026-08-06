@@ -1,6 +1,4 @@
 const sessionStore = require('../../backend/infrastructure/SessionStore');
-const fs = require('fs');
-const path = require('path');
 
 describe('SessionStore', () => {
     const testProjectId = 'test-project-id';

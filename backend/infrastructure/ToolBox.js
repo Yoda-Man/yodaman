@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const contextEngine = require('./ContextEngine');
 const auditLog = require('./AuditLog');
 const graphifyService = require('./GraphifyService');
@@ -9,6 +9,42 @@ const impactAnalyzer = require('./ImpactAnalyzer');
 const specDrift = require('../stardust/SpecDrift');
 const stardustWrapper = require('../stardust/StardustWrapper');
 const logger = require('./Logger');
+
+/**
+ * Baseline executables the agent may invoke. See getAllowedExecutables().
+ * Read-only inspection and standard build/test tooling only — nothing that
+ * mutates the filesystem, escalates privilege, or fetches from the network.
+ */
+const DEFAULT_ALLOWED_EXECUTABLES = [
+    // version control
+    'git',
+    // node ecosystem
+    'node', 'npm', 'npx', 'yarn', 'pnpm', 'jest', 'tsc', 'eslint', 'prettier', 'vite',
+    // python
+    'python', 'python3', 'pip', 'pip3', 'pytest',
+    // other build toolchains
+    'make', 'cargo', 'go',
+    // read-only inspection
+    'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'rg', 'find', 'diff', 'stat', 'file',
+    'echo', 'pwd', 'which', 'sort', 'uniq', 'tree', 'du', 'df', 'date'
+];
+
+/**
+ * Interpreter flags that execute inline source.
+ *
+ * Allowlisting `node` and `python3` is necessary — running project scripts is
+ * the point — but `node -e "…"` and `python3 -c "…"` turn an allowed binary
+ * straight back into arbitrary code execution. Running a script FILE stays
+ * permitted: it lives in the workspace and is reviewable. Only inline
+ * evaluation is refused.
+ */
+const INLINE_EVAL_FLAGS = {
+    node: ['-e', '--eval', '-p', '--print'],
+    python: ['-c'],
+    python3: ['-c'],
+    ruby: ['-e'],
+    perl: ['-e']
+};
 
 const CONFIG_PATH = path.join(__dirname, '../../config.json');
 const PLUGIN_CONFIG_PATH = path.join(__dirname, '../../plugins/config.json');
@@ -54,26 +90,26 @@ class ToolBox {
                 const config = JSON.parse(fs.readFileSync(PLUGIN_CONFIG_PATH, 'utf8'));
                 if (Array.isArray(config.disabled)) this.disabledPlugins = new Set(config.disabled);
             }
-        } catch (err) { console.error('[ToolBox] Failed to load plugin config:', err.message); }
+        } catch (err) { logger.error('toolbox_plugin_config_load_failed', err); }
     }
     loadPluginPermissions() {
         // Reload plugin permissions from current settings — called after settings change
-        for (const [name, plugin] of this.plugins) {
+        for (const [name, _plugin] of this.plugins) {
             try { this.assertPluginPermissions(name); }
-            catch (err) { console.warn(`[ToolBox] Plugin ${name} permission check failed after settings change:`, err.message); }
+            catch (err) { logger.warn('toolbox_plugin_permission_recheck_failed', { plugin: name, reason: err.message }); }
         }
     }
     saveDisabledConfig() {
         try { const dir = path.dirname(PLUGIN_CONFIG_PATH); if (!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true}); fs.writeFileSync(PLUGIN_CONFIG_PATH, JSON.stringify({disabled:Array.from(this.disabledPlugins)},null,2),'utf8'); }
-        catch (err) { console.error('[ToolBox] Failed to save plugin config:', err.message); }
+        catch (err) { logger.error('toolbox_plugin_config_save_failed', err); }
     }
-    enablePlugin(name) { this.disabledPlugins.delete(name); this.saveDisabledConfig(); this.loadPlugins(); console.log(`[ToolBox] Plugin enabled: ${name}`); }
+    enablePlugin(name) { this.disabledPlugins.delete(name); this.saveDisabledConfig(); this.loadPlugins(); logger.info('toolbox_plugin_enabled', { plugin: name }); }
     disablePlugin(name) {
         const plugin = this.plugins.get(name);
         if (plugin && plugin._api && plugin.onDisable) {
-            plugin.onDisable(plugin._api).catch(e => console.warn(`[ToolBox] onDisable failed for ${name}:`, e.message));
+            plugin.onDisable(plugin._api).catch(e => logger.warn('toolbox_plugin_on_disable_failed', { plugin: name, reason: e.message }));
         }
-        this.disabledPlugins.add(name); this.plugins.delete(name); this.saveDisabledConfig(); console.log(`[ToolBox] Plugin disabled: ${name}`);
+        this.disabledPlugins.add(name); this.plugins.delete(name); this.saveDisabledConfig(); logger.info('toolbox_plugin_disabled', { plugin: name });
     }
 
     /**
@@ -103,8 +139,12 @@ class ToolBox {
                 const content = fs.readFileSync(path.join(pluginsDir, file), 'utf8');
                 const match = content.match(/name:\s*['"]([^'"]+)['"]/);
                 const pn = match ? match[1] : null;
-                if (pn && this.disabledPlugins.has(pn)) { console.log(`[ToolBox] Skipping disabled plugin: ${pn}`); return; }
-            } catch {}
+                if (pn && this.disabledPlugins.has(pn)) { logger.info('toolbox_plugin_skipped_disabled', { plugin: pn }); return; }
+            } catch (_err) {
+                // This read only decides whether the plugin is *disabled*. If it
+                // fails, fall through and let the require() below surface the
+                // real problem with a useful message instead of masking it here.
+            }
             
                 try {
                     const pluginPath = path.join(pluginsDir, file);
@@ -114,7 +154,7 @@ class ToolBox {
                     const plugin = require(pluginPath);
                     if (this.validatePlugin(plugin)) {
                         const permissions = this.normalizePluginPermissions(plugin.permissions);
-                        console.log(`[ToolBox] Loaded plugin: ${plugin.name}`);
+                        logger.info('toolbox_plugin_loaded', { plugin: plugin.name });
                         this.plugins.set(plugin.name, {
                             ...plugin,
                             permissions,
@@ -123,7 +163,7 @@ class ToolBox {
                     }
 
                 } catch (err) {
-                    console.error(`[ToolBox] Failed to load plugin ${file}:`, err.message);
+                    logger.error('toolbox_plugin_load_failed', err, { file });
                 }
         });
 
@@ -335,19 +375,31 @@ class ToolBox {
 
     async executeCommand({ command, cwd }) {
         const workingDirectory = this.resolveAllowedPath(cwd || process.cwd());
-        this.assertCommandAllowed(command);
+        const argv = this.assertCommandAllowed(command);
         const settings = require('./SettingsProvider');
         if (!settings.get('allowAgentCommands')) {
             throw new Error('Agent shell commands are disabled. Enable in Settings.');
         }
 
+        const [bin, ...args] = argv;
+
         return new Promise((resolve) => {
-            console.log(`[ToolBox] Running command: ${command} (cwd: ${workingDirectory})`);
-            exec(command, { cwd: workingDirectory }, (error, stdout, stderr) => {
+            logger.info('toolbox_command_started', { bin, args, cwd: workingDirectory });
+            // execFile, not exec: the command never reaches a shell, so quoting,
+            // globbing, substitution and chaining cannot be reinterpreted.
+            execFile(bin, args, { cwd: workingDirectory, timeout: 120000 }, (error, stdout, stderr) => {
+                if (error && error.code === 'ENOENT') {
+                    resolve({
+                        stdout: '',
+                        stderr: `Command not found: ${bin}`,
+                        exitCode: 127
+                    });
+                    return;
+                }
                 resolve({
                     stdout: stdout || '',
                     stderr: stderr || '',
-                    exitCode: error ? error.code : 0
+                    exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0
                 });
             });
         });
@@ -460,7 +512,7 @@ class ToolBox {
         return results;
     }
 
-    searchFileForNeedle(filePath, needle, results, maxResults) {
+    searchFileForNeedle(filePath, needle, results, _maxResults) {
         let stat;
         try {
             stat = fs.statSync(filePath);
@@ -699,7 +751,7 @@ class ToolBox {
             try {
                 watchedDirectories = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')).watchedDirectories || [];
             } catch (err) {
-                console.error('[ToolBox] Failed to load config:', err.message);
+                logger.error('toolbox_config_load_failed', err);
             }
         }
 
@@ -719,6 +771,7 @@ class ToolBox {
     getPolicy() {
         return {
             allowedRoots: this.getAllowedRoots(),
+            allowedExecutables: Array.from(this.getAllowedExecutables()).sort(),
             blockedCommandPatterns: this.getBlockedCommandPatterns().map((pattern) => pattern.toString()),
             auditLog: {
                 enabled: true,
@@ -734,8 +787,14 @@ class ToolBox {
 
     resolveAllowedPath(inputPath) {
         const resolvedPath = path.resolve(inputPath || '.');
+
+        // Resolve symlinks BEFORE testing containment. path.resolve() is purely
+        // lexical, so a symlink inside a watched directory pointing at
+        // ~/.ssh/id_rsa used to satisfy the check and escape the workspace.
+        const realPath = this.realPathOrNearest(resolvedPath);
+
         const allowed = this.getAllowedRoots().some((root) => {
-            const relative = path.relative(root, resolvedPath);
+            const relative = path.relative(this.realPathOrNearest(root), realPath);
             return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
         });
 
@@ -746,6 +805,82 @@ class ToolBox {
         return resolvedPath;
     }
 
+    /**
+     * fs.realpathSync for a path that need not exist yet.
+     *
+     * writeFile legitimately targets files that have not been created, and
+     * realpathSync throws ENOENT on those. This walks up to the nearest existing
+     * ancestor, resolves that, then re-appends the missing tail — so the symlink
+     * containment check works for new files as well as existing ones.
+     * @param {string} target
+     * @returns {string} Fully symlink-resolved absolute path.
+     */
+    realPathOrNearest(target) {
+        let current = path.resolve(target);
+        const missingTail = [];
+
+        for (;;) {
+            try {
+                return path.join(fs.realpathSync(current), ...[...missingTail].reverse());
+            } catch (err) {
+                if (err.code !== 'ENOENT') return current;
+                const parent = path.dirname(current);
+                if (parent === current) return current; // reached the filesystem root
+                missingTail.push(path.basename(current));
+                current = parent;
+            }
+        }
+    }
+
+    /**
+     * Executables the agent may run. argv[0] must match one of these exactly.
+     *
+     * This replaced a six-pattern denylist which was trivially bypassable:
+     * `rm -fr /`, `rm -r -f /`, `curl -o /tmp/x … && sh /tmp/x`, `node -e "…"`
+     * and `python3 -c "…"` all sailed straight through it. An allowlist fails
+     * closed instead of guessing at what is dangerous.
+     *
+     * Mutating the filesystem is deliberately absent (no rm/mv/cp/chmod): file
+     * changes belong in writeFile/applyPatch, which are workspace-sandboxed.
+     * Extend per-project via `settings.allowedCommands` in config.json.
+     */
+    getAllowedExecutables() {
+        const settings = require('./SettingsProvider');
+        const extra = settings.get('allowedCommands');
+        return new Set([
+            ...DEFAULT_ALLOWED_EXECUTABLES,
+            ...(Array.isArray(extra) ? extra : [])
+        ]);
+    }
+
+    /**
+     * Splits a command string into argv, honouring single and double quotes.
+     *
+     * Shell operators are rejected rather than escaped. Nothing runs through a
+     * shell any more, so they cannot be honoured — and silently dropping them
+     * would execute something other than what the caller asked for.
+     * @returns {string[]} argv
+     */
+    parseCommand(command) {
+        if (/[;&|`$><\n\r]/.test(command)) {
+            throw new Error(
+                'Command blocked by policy: shell operators (; & | ` $ > <) are not permitted. Run one command at a time.'
+            );
+        }
+
+        const argv = [];
+        const token = /"([^"]*)"|'([^']*)'|(\S+)/g;
+        let match;
+        while ((match = token.exec(command)) !== null) {
+            argv.push(match[1] ?? match[2] ?? match[3]);
+        }
+        return argv;
+    }
+
+    /**
+     * Legacy denylist, kept as defence in depth and for the /api/policy report.
+     * The allowlist in assertCommandAllowed is the real control.
+     */
     getBlockedCommandPatterns() {
         return [
             /\brm\s+-rf\s+(\/|\*|~)/i,
@@ -757,6 +892,11 @@ class ToolBox {
         ];
     }
 
+    /**
+     * Validates a command and returns its argv.
+     * @throws if the command is empty, uses shell operators, or is not allowlisted.
+     * @returns {string[]} argv ready for execFile.
+     */
     assertCommandAllowed(command) {
         if (!command || typeof command !== 'string') {
             throw new Error('Command is required');
@@ -766,6 +906,38 @@ class ToolBox {
         if (blocked) {
             throw new Error(`Command blocked by policy: ${blocked}`);
         }
+
+        const argv = this.parseCommand(command);
+        if (argv.length === 0) {
+            throw new Error('Command is required');
+        }
+
+        // Bare names only. A path like /tmp/evil or ./npm could otherwise
+        // impersonate an allowlisted executable.
+        const bin = argv[0];
+        if (bin.includes('/') || bin.includes('\\')) {
+            throw new Error(`Command blocked by policy: use a bare executable name, not a path (${bin})`);
+        }
+
+        if (!this.getAllowedExecutables().has(bin)) {
+            throw new Error(
+                `Command blocked by policy: "${bin}" is not an allowed executable. ` +
+                'Add it to settings.allowedCommands in config.json if this is intentional.'
+            );
+        }
+
+        const evalFlags = INLINE_EVAL_FLAGS[bin];
+        if (evalFlags) {
+            const inlineEval = argv.slice(1).find((arg) => evalFlags.includes(arg));
+            if (inlineEval) {
+                throw new Error(
+                    `Command blocked by policy: "${bin} ${inlineEval}" executes inline source. ` +
+                    'Run a script file instead.'
+                );
+            }
+        }
+
+        return argv;
     }
 
     assertPluginPermissions(name) {

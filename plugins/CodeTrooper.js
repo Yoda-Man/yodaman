@@ -56,7 +56,10 @@ module.exports = {
         const lineCount = content.split('\n').filter(l => l.trim()).length;
         byLang[lang].lines += lineCount;
         totalLines += lineCount;
-      } catch {}
+      } catch (_err) {
+        // Unreadable or binary file: exclude it from the line count rather than
+        // abandoning the scan of every remaining file.
+      }
     }
 
     const sorted = Object.entries(byLang).sort((a,b) => b[1].lines - a[1].lines).map(([lang, data]) => ({ lang, ...data }));

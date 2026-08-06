@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { db, useSqlite } = require('./Database');
+const logger = require('./Logger');
 
 const TASK_HISTORY_FILE = path.join(__dirname, '../../task-history.json');
 const TASK_HISTORY_JSONL_FILE = path.join(__dirname, '../../task-history.jsonl');
@@ -37,7 +38,7 @@ class TaskStore {
                 this.prune();
                 return;
             } catch (err) {
-                console.error('[TaskStore] Failed to load history from SQLite:', err.message);
+                logger.error('taskstore_sqlite_load_failed', err);
                 this.tasks = new Map();
             }
         }
@@ -52,7 +53,7 @@ class TaskStore {
                 this.prune();
                 return;
             } catch (err) {
-                console.error('[TaskStore] Failed to load append-only task history:', err.message);
+                logger.error('taskstore_jsonl_load_failed', err);
                 this.tasks = new Map();
             }
         }
@@ -64,7 +65,7 @@ class TaskStore {
             const tasks = Array.isArray(parsed) ? parsed : [];
             this.tasks = new Map(tasks.map((task) => [task.taskId, this.trimTask(task)]));
         } catch (err) {
-            console.error('[TaskStore] Failed to load task history:', err.message);
+            logger.error('taskstore_load_failed', err);
             this.tasks = new Map();
         }
     }
@@ -100,7 +101,7 @@ class TaskStore {
                 );
                 return;
             } catch (err) {
-                console.error('[TaskStore] SQLite save failed:', err.message);
+                logger.error('taskstore_sqlite_save_failed', err);
             }
         }
         this.append(task);
@@ -140,7 +141,7 @@ class TaskStore {
             try {
                 db.exec('DELETE FROM tasks');
             } catch (err) {
-                console.error('[TaskStore] Failed to clear SQLite tasks:', err.message);
+                logger.error('taskstore_sqlite_clear_failed', err);
             }
         } else {
             fs.writeFileSync(TASK_HISTORY_JSONL_FILE, '');

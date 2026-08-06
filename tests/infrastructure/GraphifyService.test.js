@@ -123,3 +123,66 @@ const LEGEND = [{"cid":7,"color":"#fff","label":"Community 7","count":2}];
         expect(status.stale).toBe(false);
     });
 });
+
+describe('GraphifyService vendor script localization', () => {
+    // Graphify emits artifacts that load vis-network from unpkg. For a
+    // local-first product a graph must render with no network access, and the
+    // CDN reference forced the artifact CSP to allow an external origin plus
+    // 'unsafe-eval'. readArtifact rewrites the tag to a locally served copy.
+    let workspace;
+
+    beforeEach(() => {
+        workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-graphify-vendor-'));
+        fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
+    });
+
+    afterEach(() => {
+        fs.rmSync(workspace, { recursive: true, force: true });
+    });
+
+    function writeArtifact(html) {
+        fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.html'), html);
+    }
+
+    test('rewrites the unpkg vis-network tag to the local vendor copy', () => {
+        writeArtifact(
+            '<html><head>'
+            + '<script src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>'
+            + '</head><body><div id="net"></div></body></html>'
+        );
+
+        const served = graphifyService.readArtifact(workspace, 'mindmap');
+
+        expect(served).not.toContain('unpkg.com');
+        expect(served).toContain('<script src="/vendor/vis-network.min.js">');
+    });
+
+    test('rewrites regardless of the pinned vis-network version', () => {
+        writeArtifact('<script src="https://unpkg.com/vis-network@9.2.0/standalone/umd/vis-network.min.js"></script>');
+
+        expect(graphifyService.readArtifact(workspace, 'mindmap')).toContain('/vendor/vis-network.min.js');
+    });
+
+    test('leaves an artifact with no remote scripts untouched', () => {
+        const html = '<html><body><script>const x = 1;</script></body></html>';
+        writeArtifact(html);
+
+        expect(graphifyService.readArtifact(workspace, 'mindmap')).toBe(html);
+    });
+
+    test('warns rather than silently serving an unmatched remote script', () => {
+        // If Graphify changes its output the CSP will block the CDN and the
+        // graph renders blank — that must be diagnosable from the logs.
+        const logger = require('../../backend/infrastructure/Logger');
+        const warn = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+        writeArtifact('<script src="https://cdn.example.com/other-lib.js"></script>');
+
+        graphifyService.readArtifact(workspace, 'mindmap');
+
+        expect(warn).toHaveBeenCalledWith(
+            'graphify_artifact_vendor_rewrite_missed',
+            expect.objectContaining({ vendor: 'vis-network' })
+        );
+        warn.mockRestore();
+    });
+});

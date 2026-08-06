@@ -149,7 +149,7 @@ module.exports = {
   },
 
   async execute(params = {}) {
-    const { action, workspacePath, commitLimit = 500, daysToAnalyze = 90, excludePatterns } = params;
+    const { action, workspacePath, commitLimit = 500, _daysToAnalyze = 90, excludePatterns } = params;
     if (!workspacePath) throw new Error('workspacePath is required');
     if (!gitService) throw new Error('Cannot load gitService from yodaman. Ensure yodaman/backend/services/gitService.js is accessible.');
 
@@ -220,7 +220,10 @@ module.exports = {
           const diff = await gitService.getCommitDiff(workspacePath, c.hash);
           const files = diff.files.map(f => f.filePath).filter(f => includeFile(f)).sort();
           for (let i = 0; i < files.length; i++) for (let j = i+1; j < files.length; j++) coupling.push({ file1:files[i], file2:files[j], commit:c.hash });
-        } catch {}
+        } catch (_err) {
+          // A single unreadable commit (shallow clone, rewritten history) must
+          // not void the whole coupling analysis — skip it and keep going.
+        }
       }
       const couplingStrength = new Map();
       for (const e of coupling) { const k = `${e.file1}|${e.file2}`; couplingStrength.set(k, (couplingStrength.get(k)||0)+1); }
@@ -293,7 +296,9 @@ module.exports = {
       const coupling = [];
       for (const c of commits.slice(0, 100)) {
         try { const diff = await gitService.getCommitDiff(workspacePath, c.hash); const files = diff.files.map(f => f.filePath).filter(f => includeFile(f)).sort(); for (let i = 0; i < files.length; i++) for (let j = i+1; j < files.length; j++) coupling.push({ file1:files[i], file2:files[j], commit:c.hash }); }
-        catch {}
+        catch (_err) {
+          // As above: skip commits git cannot diff, keep the rest of the sample.
+        }
       }
       const cs = new Map();
       for (const e of coupling) { const k = `${e.file1}|${e.file2}`; cs.set(k, (cs.get(k)||0)+1); }

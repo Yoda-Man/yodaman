@@ -57,7 +57,7 @@ function buildIndex(projectPath) {
     let graph;
     try {
         graph = graphifyService.readGraph(projectPath);
-    } catch (err) {
+    } catch (_err) {
         return null;
     }
 

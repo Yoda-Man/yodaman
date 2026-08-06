@@ -111,7 +111,7 @@ export default function HolocronVrModal({ project, diagnostics, onClose }) {
 
         const positions = new Array(nodes.length)
         const goldenAngle = Math.PI * (3 - Math.sqrt(5))
-        groups.forEach(([key, members], groupIndex) => {
+        groups.forEach(([_key, members], groupIndex) => {
           const groupAngle = groupIndex * goldenAngle
           const groupRadius = groupIndex === 0 ? 0 : 5.2 + Math.sqrt(groupIndex) * 3.1
           const center = new THREE.Vector3(

@@ -373,7 +373,7 @@ function logoDataUri() {
     for (const candidate of candidates) {
         try {
             return `data:image/png;base64,${fs.readFileSync(candidate).toString('base64')}`;
-        } catch (error) {
+        } catch (_error) {
             // Try the packaged fallback below.
         }
     }
@@ -384,7 +384,7 @@ function logoDataUri() {
 function diagnosticsPage({ title, message, status, logs = '' }) {
     const logoSrc = logoDataUri();
     const runtimeUrl = RUNTIME_URL;
-    const initialStatus = JSON.stringify(status || {});
+    const _initialStatus = JSON.stringify(status || {});
 
     return `<!doctype html>
 <html>
@@ -703,7 +703,7 @@ function loadLoadingState(message = 'Starting the local YodaMan runtime...') {
     }))}`);
 }
 
-function loadRuntimeUnavailable(error) {
+function loadRuntimeUnavailable(_error) {
     if (!mainWindow) return;
     mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(diagnosticsPage({
         title: 'YodaMan — Diagnostics Dashboard',

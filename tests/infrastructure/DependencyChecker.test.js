@@ -55,8 +55,25 @@ describe('Health self-heal coverage', () => {
     );
 
     test('POST /health/install can repair openspec', () => {
-        expect(restControllerSource).toContain("case 'openspec': {");
-        expect(restControllerSource).toContain('npm install -g @fission-ai/openspec@latest');
+        // The switch statement became a declarative installer table when the
+        // endpoint was hardened; assert the capability, not the control flow.
+        expect(restControllerSource).toContain('openspec:');
+        expect(restControllerSource).toContain("'@fission-ai/openspec@latest'");
+    });
+
+    test('no self-heal installer pipes a remote script into a shell', () => {
+        // POST /api/health/install used to run
+        //   execFile('/bin/sh', ['-c', 'curl -fsSL <url>/install.sh | sh'])
+        // from an unauthenticated endpoint. Every installer is argv-only now.
+        //
+        // Comments are stripped first: the hardened code documents what it
+        // replaced, and that prose would otherwise match the pattern it warns about.
+        const code = restControllerSource
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+
+        expect(code).not.toMatch(/curl[^\n]*\|\s*sh/);
+        expect(code).not.toContain("'/bin/sh'");
     });
 
     test('GET /health reports openspec as a first-class check', () => {
