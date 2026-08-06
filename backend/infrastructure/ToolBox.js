@@ -668,6 +668,10 @@ class ToolBox {
     async specPropose({ project, changeName, description = '' }) {
         const projectPath = this.resolveAllowedPath(project || process.cwd());
         if (!changeName) throw new Error('changeName is required — provide a kebab-case name like "add-dark-mode"');
+        // Reject path traversal via directory separators or '..'
+        if (changeName.includes('/') || changeName.includes('\\') || changeName.includes('..')) {
+            throw new Error('changeName must not contain path separators or ".."');
+        }
 
         // Create the change directory and proposal files using the stardust workflow
         const changeDir = path.join(projectPath, 'openspec', 'changes', changeName);

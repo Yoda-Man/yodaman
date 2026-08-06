@@ -25,6 +25,14 @@ const router = express.Router();
  * Mirrors ToolBox.specPropose so the UI and agent use the same logic.
  */
 async function proposeChange(projectRoot, changeName, description) {
+    // Prevent path traversal: reject names containing directory separators or '..'
+    if (!changeName || typeof changeName !== 'string') {
+        throw Object.assign(new Error('changeName is required'), { status: 400, code: 'invalid_change_name' });
+    }
+    const sanitized = changeName.replace(/[/\\]/g, '-').replace(/\.\./g, '');
+    if (sanitized !== changeName) {
+        throw Object.assign(new Error('changeName must not contain path separators or ".."'), { status: 400, code: 'invalid_change_name' });
+    }
     const changeDir = path.join(projectRoot, 'openspec', 'changes', changeName);
     if (!fs.existsSync(changeDir)) fs.mkdirSync(changeDir, { recursive: true });
 

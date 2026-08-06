@@ -194,7 +194,7 @@ function safePluginFilename(originalName) {
     if (filename !== originalName || filename.includes('..')) {
         throw new Error('Invalid plugin filename');
     }
-    if (!/^[a-zA-Z0-9._-]+\.(js|zip)$/.test(filename)) {
+    if (!/^[a-zA-Z0-9_-]+\.(js|zip)$/.test(filename)) {
         throw new Error('Plugin upload must be a .js or .zip file with a safe filename');
     }
     return filename;

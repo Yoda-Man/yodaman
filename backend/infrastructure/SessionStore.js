@@ -40,6 +40,11 @@ class SessionStore {
         }
         // message can now include { role, content, timestamp, isAgent, steps }
         this.sessions[projectId].push(message);
+        // Cap sessions at 200 messages per workspace to prevent unbounded growth.
+        // The audit log is the permanent record; sessions can be ephemeral.
+        if (this.sessions[projectId].length > 200) {
+            this.sessions[projectId] = this.sessions[projectId].slice(-200);
+        }
         this.save();
     }
 
