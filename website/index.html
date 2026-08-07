@@ -4,9 +4,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>YodaMan | Local-first agent ecosystem for developers</title>
+  <title>YodaMan | Local-first workspace intelligence for developers</title>
   <meta name="description"
-    content="YodaMan is a local-first developer agent ecosystem with a desktop app, VS Code extension, mobile approval companion, semantic code search, and auditable tool execution." />
+    content="YodaMan blends three mandatory tools — Context Expert for meaning, Graphify for structure, OpenSpec for intent — into every search, agent turn, and plan. Local-first, with a real-time Stardust dashboard, blast-radius approvals, and desktop, VS Code, and mobile clients." />
   <link rel="icon" href="./assets/favicon.png" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -19,9 +19,9 @@
     </a>
     <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">☰</button>
     <nav aria-label="Primary">
-      <a href="#ecosystem">Ecosystem</a>
-      <a href="#pillars">Pillars</a>
+      <a href="#pillar">The pillar</a>
       <a href="#composition">Stardust</a>
+      <a href="#ecosystem">Ecosystem</a>
       <a href="#holocron-vr">Holocron VR</a>
       <a href="#security">Security</a>
       <a href="#install">Install</a>
@@ -52,7 +52,7 @@
         <p class="eyebrow">Local-first developer intelligence</p>
         <h1 id="hero-title">YodaMan</h1>
         <p class="hero-copy">
-          A private agent ecosystem powered by three tools that compose: Context Expert for search, Graphify for structure, and OpenSpec for intent. Every answer — search, agent, planning — draws from all three.
+          Local-first workspace intelligence for developers. Context Expert (semantic search), Graphify (structure), and OpenSpec (architectural intent) form a single pillar: every search, every agent turn, and every plan draws on all three at once — none is optional, none runs alone.
         </p>
         <div class="hero-actions">
           <a class="button primary" href="#install">Get started</a>
@@ -75,6 +75,78 @@
         <strong>Autonomy with approval</strong>
         <span>Agents can plan and edit code, but every write stops for a diff that shows its blast radius &mdash; what
           depends on the file and whether a test covers it</span>
+      </div>
+    </section>
+
+    <section id="pillar" class="section pillars-section">
+      <div class="section-heading">
+        <p class="eyebrow">The three-tool pillar</p>
+        <h2>Three mandatory tools, blended into every answer</h2>
+        <p>No silos, no optional features &mdash; this is the architecture. Each tool answers a different question, and
+          YodaMan never consults one without the others.</p>
+      </div>
+      <div class="pillar-grid triad">
+        <article>
+          <h3>Context Expert &mdash; meaning</h3>
+          <p>Semantic search and LLM reasoning over your indexed workspace. Powers search, the agent finding files, and
+            RAG retrieval.</p>
+        </article>
+        <article>
+          <h3>Graphify &mdash; structure</h3>
+          <p>The local knowledge graph. Powers blast radius, centrality, proximity, and the structural half of ranking.</p>
+        </article>
+        <article>
+          <h3>OpenSpec &mdash; intent</h3>
+          <p>Architecture specs as a first-class input. Powers spec coverage, drift detection, and the
+            propose/validate/archive workflow.</p>
+        </article>
+      </div>
+      <div class="section-heading">
+        <p>Search ranks by all three: semantic &times; 0.50 + proximity &times; 0.20 + centrality &times; 0.15 +
+          specCoverage &times; 0.15. The agent gets a Stardust Brief every turn with graph state, spec awareness, and
+          per-file impact. Planning follows Propose &rarr; Validate &rarr; Archive with drift checking.</p>
+      </div>
+    </section>
+
+    <section id="composition" class="section pillars-section">
+      <div class="section-heading">
+        <p class="eyebrow">Stardust</p>
+        <h2>Real-time Stardust dashboard + cross-tool composition</h2>
+        <p>Context Expert, Graphify, and OpenSpec are all required &mdash; so YodaMan connects them. Each tool's output feeds the next instead of stopping at its own tab. The Stardust dashboard makes that connection visible across eight tabs &mdash; Board, Drift, Compose, Trust, Trace, Diagnostics, Commands, and Impact &mdash; with a live change board, spec diffs, and a WebSocket activity feed.</p>
+      </div>
+      <div class="pillar-grid">
+        <article>
+          <h3>Live change board + spec diff</h3>
+          <p>The Board tab is now a real-time OpenSpec dashboard. A card-based change board shows every active change with task progress, validation health, and live timestamps. Click any card to open a side-by-side spec diff with operation-grouped deltas (ADDED/MODIFIED/REMOVED/RENAMED) and a one-click validate/archive workflow.</p>
+        </article>
+        <article>
+          <h3>Drift detection</h3>
+          <p>The Drift tab compares current workspace state against active OpenSpec specs and flags every mismatch. Divergent files get severity badges, a side-by-side diff, and a one-click reindex action so you can close the gap before it grows.</p>
+        </article>
+        <article>
+          <h3>File-centric cross-reference</h3>
+          <p>The Compose tab answers: "what does every tool know about this file?" Enter any repo path to see which OpenSpec specs describe it, its Graphify structural position (dependents, centrality, blast radius, test coverage), and how Context Expert ranks it. Three columns, one file, no guesswork.</p>
+        </article>
+        <article>
+          <h3>Trust that updates itself</h3>
+          <p>The Trust tab shows per-tool health (Context Expert index freshness, Graphify graph state, OpenSpec CLI status) plus the overall WorkspaceReadiness verdict. A live activity feed tracks every file change in openspec/ pushed over WebSocket. Post-write reindex and regraph keep answers honest.</p>
+        </article>
+        <article>
+          <h3>Search that explains itself</h3>
+          <p>The Trace tab shows WHY each result ranked where it did. Every file gets four scores: semantic relevance from Context Expert, graph proximity to your active file, structural centrality from Graphify, and spec coverage from OpenSpec. The blend (0.50 + 0.20 + 0.15 + 0.15) is visible per result with colour-coded bars.</p>
+        </article>
+        <article>
+          <h3>Runtime diagnostics</h3>
+          <p>The Diagnostics tab surfaces runtime health at a glance. See Context Expert index freshness, Graphify graph state, OpenSpec CLI status, plugin health, and workspace connectivity in a single status grid with live WebSocket updates and colour-coded health badges.</p>
+        </article>
+        <article>
+          <h3>Command audit trail</h3>
+          <p>The Commands tab logs every tool execution with sanitized parameters, timing, exit codes, and result summaries. Filter by tool, status, or time range, and drill into any entry to see the full parameter payload and structured output.</p>
+        </article>
+        <article>
+          <h3>Impact Analysis</h3>
+          <p>Map the blast radius of any file change before you approve it. Set configurable hop depth (1–4), inspect affected dependents in a dual-panel Graphify graph + OpenSpec breakdown, review the risk verdict, and check per-file test coverage detail so you never merge blind.</p>
+        </article>
       </div>
     </section>
 
@@ -107,79 +179,6 @@
           <h3>Runtime API</h3>
           <p>REST and SSE endpoints expose task events, pending approvals, policy, audit logs, semantic search, and
             plugin tools.</p>
-        </article>
-      </div>
-    </section>
-
-    <section id="pillars" class="section pillars-section">
-      <div class="section-heading">
-        <p class="eyebrow">Core pillars</p>
-        <h2>The principles behind the runtime</h2>
-        <p>YodaMan is built for serious local work: private context, visible automation, one shared runtime, and tools
-          that can be extended without becoming invisible.</p>
-      </div>
-      <div class="pillar-grid">
-        <article>
-          <h3>Local-first intelligence</h3>
-          <p>Project context starts on your machine. Watched directories are indexed locally and reused by chat, search,
-            agent tasks, plugins, and external clients.</p>
-        </article>
-        <article>
-          <h3>Human-controlled automation</h3>
-          <p>Agents can reason through multi-step coding work, while streamed task events, approvals, cancellation, and
-            audit logs keep people in control.</p>
-        </article>
-        <article>
-          <h3>One ecosystem runtime</h3>
-          <p>The Express runtime is the shared contract for the React UI, desktop shell, VS Code extension, mobile app,
-            and CLI package.</p>
-        </article>
-        <article>
-          <h3>Extensible tools</h3>
-          <p>Built-in tools cover search, reads, controlled writes, patches, commands, and file listing. Plugins add
-            custom capabilities with declared permissions.</p>
-        </article>
-      </div>
-    </section>
-
-    <section id="composition" class="section pillars-section">
-      <div class="section-heading">
-        <p class="eyebrow">Stardust</p>
-        <h2>Real-time Stardust dashboard + cross-tool composition</h2>
-        <p>Context Expert, Graphify, and OpenSpec are all required &mdash; so YodaMan connects them. Each tool's output feeds the next instead of stopping at its own tab. The new Stardust dashboard makes that connection visible with a live change board, spec diffs, an activity feed, and four cross-tool views.</p>
-      </div>
-      <div class="pillar-grid">
-        <article>
-          <h3>Live change board + spec diff</h3>
-          <p>The Board tab is now a real-time OpenSpec dashboard. A card-based change board shows every active change with task progress, validation health, and live timestamps. Click any card to open a side-by-side spec diff with operation-grouped deltas (ADDED/MODIFIED/REMOVED/RENAMED) and a one-click validate/archive workflow.</p>
-        </article>
-        <article>
-          <h3>Drift detection</h3>
-          <p>The Drift tab compares current workspace state against active OpenSpec specs and flags every mismatch. Divergent files get severity badges, a side-by-side diff, and a one-click reindex action so you can close the gap before it grows.</p>
-        </article>
-        <article>
-          <h3>File-centric cross-reference</h3>
-          <p>The Compose tab answers: "what does every tool know about this file?" Enter any repo path to see which OpenSpec specs describe it, its Graphify structural position (dependents, centrality, blast radius, test coverage), and how Context Expert ranks it. Three columns, one file, no guesswork.</p>
-        </article>
-        <article>
-          <h3>Trust that updates itself</h3>
-          <p>The Trust tab shows per-tool health (Context Expert index freshness, Graphify graph state, OpenSpec CLI status) plus the overall WorkspaceReadiness verdict. A live activity feed tracks every file change in openspec/ pushed over WebSocket. Post-write reindex and regraph keep answers honest.</p>
-        </article>
-        <article>
-          <h3>Search that explains itself</h3>
-          <p>The Trace tab shows WHY each result ranked where it did. Every file gets three scores: semantic relevance from Context Expert, graph proximity to your active file, and structural centrality from Graphify. The blend (0.6 + 0.25 + 0.15) is visible per result with colour-coded bars.</p>
-        </article>
-        <article>
-          <h3>Runtime diagnostics</h3>
-          <p>The Diagnostics tab surfaces runtime health at a glance. See Context Expert index freshness, Graphify graph state, OpenSpec CLI status, plugin health, and workspace connectivity in a single status grid with live WebSocket updates and colour-coded health badges.</p>
-        </article>
-        <article>
-          <h3>Command audit trail</h3>
-          <p>The Commands tab logs every tool execution with sanitized parameters, timing, exit codes, and result summaries. Filter by tool, status, or time range, and drill into any entry to see the full parameter payload and structured output.</p>
-        </article>
-        <article>
-          <h3>Impact Analysis</h3>
-          <p>Map the blast radius of any file change before you approve it. Set configurable hop depth (1–5), inspect affected dependents in a dual-panel Graphify graph + OpenSpec breakdown, review the risk verdict, and check per-file test coverage detail so you never merge blind.</p>
         </article>
       </div>
     </section>
@@ -367,7 +366,8 @@ yodaman</code></pre>
           <h3>iOS Mobile</h3>
           <p>Use the iOS companion experience for task status, approvals, and project visibility on the go.</p>
           <a class="button secondary" href="./docs.html#mobile-linking">Pair mobile</a>
-          <span>Built for quick review moments when you are away from your desktop.</span>
+          <span>Built for quick review moments when you are away from your desktop. The iOS client runs through Expo
+            from source &mdash; there is no App Store build yet.</span>
         </article>
       </div>
     </section>
@@ -390,7 +390,7 @@ yodaman</code></pre>
 
   <footer>
     <span>YodaMan</span>
-    <span>Local-first agent ecosystem for serious codebases.</span>
+    <span>Local-first workspace intelligence. Context Expert + Graphify + OpenSpec, in every answer.</span>
   </footer>
 
   <script>

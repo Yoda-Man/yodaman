@@ -330,6 +330,11 @@ pre {
   gap: 14px;
 }
 
+/* The three-tool pillar has exactly three cards — a 4-up grid would leave a hole. */
+.pillar-grid.triad {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .pillar-grid article {
   min-height: 230px;
   border: 1px solid var(--line);
@@ -606,7 +611,8 @@ footer span:first-child {
   .ecosystem-grid,
   .install-panels,
   .download-grid,
-  .pillar-grid {
+  .pillar-grid,
+  .pillar-grid.triad {
     grid-template-columns: repeat(2, 1fr);
   }
 
@@ -632,6 +638,7 @@ footer span:first-child {
   .install-panels,
   .download-grid,
   .pillar-grid,
+  .pillar-grid.triad,
   .security-list {
     grid-template-columns: 1fr;
   }
