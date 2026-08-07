@@ -337,7 +337,7 @@ Rules:
                     chars: response.length,
                     hint: 'ctx returned citations with no generated text. Retrying with an explicit instruction.',
                 });
-                conversation.addNote('Your previous response contained only citations and no answer. Answer the task directly in prose, or emit a single <tool_call> block.');
+                conversation.addNote('Your previous response contained only citations and no answer. Reply with exactly ONE of: a direct answer in prose, or a single <tool_call>{"name":"readFile","parameters":{"filePath":"path/to/file"}}</tool_call> block.');
                 if (iteration < this.maxIterations) continue;
 
                 finalAnswer = 'Context Expert returned source citations but no generated answer, on every attempt. Check that the configured model is reachable (`yodaman doctor`) and that the prompt is within its context window. For reliable tool-calling, use a model with ≥14B parameters (e.g. qwen2.5:14b, codestral:22b, deepseek-coder-v2). Current model: see Health dashboard.';
@@ -348,7 +348,20 @@ Rules:
 
             if (toolCallMatch) {
                 try {
-                    const toolCall = JSON.parse(toolCallMatch[1]);
+                    let rawJson = toolCallMatch[1].trim();
+                    // JSON repair for 9B models: fix trailing commas, unquoted keys, missing braces
+                    let toolCall;
+                    try {
+                        toolCall = JSON.parse(rawJson);
+                    } catch (parseErr) {
+                        const repaired = repairJSON(rawJson);
+                        if (repaired) {
+                            logger.info('agent_tool_call_repaired', { taskId, iteration, original: rawJson.slice(0, 80), repaired: repaired.slice(0, 80) });
+                            toolCall = JSON.parse(repaired);
+                        } else {
+                            throw parseErr;
+                        }
+                    }
                     
                     // --- DIFF APPROVAL (The "Trust Gap") ---
                     if (toolCall.name === 'writeFile') {
@@ -537,6 +550,35 @@ Rules:
         this.pendingApprovals.clear();
         taskStore.clear();
     }
+}
+
+/**
+ * JSON repair for small models. Fixes common mistakes: trailing commas,
+ * single quotes used as key/value delimiters, missing closing braces,
+ * and unquoted keys. Returns the repaired string or null if unfixable.
+ */
+function repairJSON(raw) {
+    let s = raw.trim();
+    // Strip markdown backtick fences some models wrap JSON in
+    if (s.startsWith('```') && s.endsWith('```')) {
+        s = s.slice(3, -3).trim();
+    }
+    // Fix trailing comma before }
+    s = s.replace(/,\s*}/g, '}');
+    // Fix trailing comma before ]
+    s = s.replace(/,\s*\]/g, ']');
+    // Fix single-quoted keys and values (simple case)
+    if (!s.includes('"') && s.includes("'")) {
+        try { JSON.parse(s.replace(/'/g, '"')); s = s.replace(/'/g, '"'); } catch (_) {}
+    }
+    // Add missing closing brace
+    if (s.startsWith('{') && !s.endsWith('}')) {
+        const openBraces = (s.match(/{/g) || []).length;
+        const closeBraces = (s.match(/}/g) || []).length;
+        s += '}'.repeat(openBraces - closeBraces);
+    }
+    // Verify the repair actually parses
+    try { JSON.parse(s); return s; } catch (_) { return null; }
 }
 
 module.exports = new AgentReasoningEngine();
