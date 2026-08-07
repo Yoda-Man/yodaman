@@ -23,11 +23,10 @@ Every answer in YodaMan blends three mandatory tools. No silos, no optional feat
 - **See relationships, not fragments**: Graphify builds mandatory knowledge graphs that connect code, docs, diagrams, and architectural concepts.
 - **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and approval gates for file changes.
 - **Work where you already are**: Web UI, desktop app, CLI, VS Code extension, and mobile companion all talk to the same runtime.
-- **Extend the assistant**: Add JavaScript plugins for custom tools. Ships with 7 plugins: CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, Graphify, Holocron VR, and the plugin registry.
+- **Extend the assistant**: Add JavaScript plugins for custom tools. Ships with 5 plugins: CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, and Graphify.
 - **Drive specs with the agent**: The agent can propose, validate, and archive OpenSpec changes through `specPropose`, `specValidate`, and `specArchive` tools — following a structured Propose → Apply → Archive workflow.
 - **See every tool's view of a file**: The Compose tab cross-references any file across OpenSpec (specs), Graphify (structure), and Context Expert (relevance) in three columns.
-- **Understand search rankings**: The Trace tab shows why each result ranked where it did — semantic × 0.6 + proximity × 0.25 + centrality × 0.15 per result.
-- **Choose query intent**: Switch between Code and Docs modes for more relevant answers.
+- **Understand search rankings**: The Trace tab shows why each result ranked where it did — semantic × 0.50 + proximity × 0.20 + centrality × 0.15 + specCoverage × 0.15 per result.
 - **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
 
 ## Core Pillars
@@ -127,7 +126,7 @@ yodaman/
 ├── scripts/                    # Build and release scripts
 ├── shared/                     # Shared protocol/types for external clients
 ├── src/                        # React UI source
-│   ├── components/             # 26 UI components (Stardust, AgentChat, GraphStudio, etc.)
+│   ├── components/             # 29 UI components (Stardust, AgentChat, GraphStudio, etc.)
 │   ├── hooks/                  # useHealthCheck, useStardustLive, useStardustPipeline
 │   └── api/                    # Frontend HTTP client
 ├── tests/                      # Jest test suites
@@ -227,12 +226,13 @@ Frontend build-time variables (Vite, prefixed `VITE_`): `VITE_YODAMAN_API_BASE`,
 
 ## Stardust Dashboard
 
-The **Stardust** tab is a real-time OpenSpec dashboard with 7 views:
+The **Stardust** tab is a real-time OpenSpec dashboard with 8 views:
 - **Board** — live change cards with task progress, spec diff, validate/archive workflow
 - **Drift** — architecture drift detection (specs vs knowledge graph)
 - **Compose** — file-centric cross-reference across OpenSpec, Graphify, and Context Expert
 - **Trust** — unified health dashboard with per-tool status and WorkspaceReadiness verdict
 - **Trace** — search ranking transparency with per-result scoring breakdown
+- **Impact** — dedicated blast-radius analysis with configurable hop depth and spec awareness
 - **Diagnostics** — OpenSpec install check, version, project init
 - **Commands** — Propose, Validate, Archive, List Changes, List Specs with console output
 
