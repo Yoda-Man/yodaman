@@ -3,7 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>YodaMan Docs</title>
+    <title>YodaMan Docs | The three-tool pillar, Stardust, and the runtime API</title>
+    <meta name="description"
+      content="How YodaMan composes Context Expert, Graphify, and OpenSpec into every answer — plus the Stardust dashboard, security model, mobile pairing, and runtime API reference." />
     <link rel="icon" href="./assets/favicon.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -13,12 +15,15 @@
         <img src="./assets/logo.png" alt="" />
         <span>YodaMan</span>
       </a>
+      <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">☰</button>
       <nav aria-label="Documentation">
         <a href="./index.html">Website</a>
+        <a href="#pillar">The pillar</a>
+        <a href="#stardust">Stardust</a>
         <a href="#ecosystem">Ecosystem</a>
         <a href="#security">Security</a>
+        <a href="#api">API</a>
         <a href="#downloads-info">Downloads</a>
-        <a href="./index.html#downloads">Downloads</a>
       </nav>
     </header>
 
@@ -26,37 +31,83 @@
       <section class="section">
         <p class="eyebrow">Project docs</p>
         <h1>YodaMan Docs</h1>
-        <p class="hero-copy">Quick, browser-friendly summaries with links back to the source Markdown files in the repository.</p>
+        <p class="hero-copy">Browser-friendly summaries of how the runtime is put together. For the full guides, read
+          the Markdown in the repository.</p>
+      </section>
+
+      <section id="pillar" class="doc-section">
+        <h2>The Three-Tool Pillar</h2>
+        <p>Three tools are mandatory, and YodaMan never consults one without the others. This is the architecture, not
+          a feature list.</p>
+        <ul>
+          <li><strong>Context Expert &mdash; meaning.</strong> Semantic search and LLM reasoning over your indexed
+            workspace. Powers search, the agent finding files, and RAG retrieval.</li>
+          <li><strong>Graphify &mdash; structure.</strong> The local knowledge graph. Powers blast radius, centrality,
+            proximity, and the structural half of ranking.</li>
+          <li><strong>OpenSpec &mdash; intent.</strong> Architecture specs as a first-class input. Powers spec
+            coverage, drift detection, and the propose/validate/archive workflow.</li>
+        </ul>
+        <p>Search ranks by all three: <code>semantic × 0.50 + proximity × 0.20 + centrality × 0.15 + specCoverage ×
+          0.15</code>. The agent receives a Stardust Brief every turn carrying graph state, spec awareness, and
+          per-file impact. Planning follows Propose &rarr; Validate &rarr; Archive with drift checking.</p>
+      </section>
+
+      <section id="stardust" class="doc-section">
+        <h2>Stardust</h2>
+        <p>Stardust is where the three tools become visible as one system. Eight tabs, backed by a WebSocket feed that
+          watches <code>openspec/</code> for changes.</p>
+        <ul>
+          <li><strong>Board</strong> &mdash; real-time OpenSpec change board with task progress, validation health, and
+            a side-by-side spec diff grouped by ADDED/MODIFIED/REMOVED/RENAMED.</li>
+          <li><strong>Drift</strong> &mdash; current workspace state compared against active specs, with severity
+            badges and a one-click reindex.</li>
+          <li><strong>Compose</strong> &mdash; what every tool knows about one file: which specs describe it, its
+            structural position, and how Context Expert ranks it.</li>
+          <li><strong>Trust</strong> &mdash; per-tool health plus the overall WorkspaceReadiness verdict, with a live
+            activity feed.</li>
+          <li><strong>Trace</strong> &mdash; why each search result ranked where it did, showing all four signals and
+            their weights per result.</li>
+          <li><strong>Diagnostics</strong> &mdash; index freshness, graph state, OpenSpec CLI status, plugin health,
+            and workspace connectivity in one status grid.</li>
+          <li><strong>Commands</strong> &mdash; every tool execution with sanitized parameters, timing, exit codes, and
+            result summaries.</li>
+          <li><strong>Impact</strong> &mdash; blast radius for any file at a configurable hop depth of 1 to 4, with
+            dependents, spec breakdown, risk verdict, and per-file test coverage.</li>
+        </ul>
       </section>
 
       <section id="ecosystem" class="doc-section">
         <h2>Ecosystem Architecture</h2>
-        <p>YodaMan is organized around one shared local runtime used by the web UI, desktop app, VS Code extension, mobile companion, CLI, and mandatory Graphify knowledge graph layer.</p>
+        <p>One shared local runtime serves the web UI, desktop app, VS Code extension, mobile companion, and CLI.</p>
         <ul>
-          <li>Runtime owns agent execution, tools, indexing, sessions, plugins, audit, and safety policy.</li>
-          <li>Graphify runs with Ollama local execution only for graph-aware answers, impact analysis, and architecture maps.</li>
-          <li>Clients own UX: editor actions, desktop control, mobile approvals, and notifications.</li>
-          <li>REST and SSE provide the current protocol.</li>
+          <li>The runtime owns agent execution, tools, indexing, sessions, plugins, audit, and safety policy.</li>
+          <li>Graphify builds the knowledge graph locally, using Ollama for enrichment, and feeds graph-aware answers,
+            impact analysis, and architecture maps.</li>
+          <li>Clients own UX: editor actions, desktop control, and mobile approvals.</li>
+          <li>REST plus SSE for task event streams, and a WebSocket for the live Stardust feed.</li>
         </ul>
       </section>
 
       <section id="security" class="doc-section">
         <h2>Security And Audit</h2>
-        <p>The runtime includes baseline hardening for local agent tools.</p>
+        <p>The runtime hardens local agent tools by default.</p>
         <ul>
-          <li>Workspace-scoped file and command paths.</li>
-          <li>Blocked high-risk shell command patterns.</li>
-          <li>Audit log entries for tool calls.</li>
-          <li>Optional pairing-token enforcement for non-local clients.</li>
+          <li>File and command paths resolve against configured workspace roots before anything runs.</li>
+          <li>Shell operators (<code>; &amp; | ` $ &gt; &lt;</code>) are rejected outright &mdash; one command at a
+            time. Executables must be bare names drawn from an allowlist, not paths.</li>
+          <li>Every file write pauses for a structured approval showing the diff, the files that depend on it, and
+            whether any test covers the change.</li>
+          <li>Tool calls are recorded with status, duration, sanitized parameters, and result summaries.</li>
+          <li>Pairing-token enforcement for non-local clients, plus a cross-site request policy on the runtime.</li>
         </ul>
       </section>
 
       <section id="mobile-linking" class="doc-section">
         <h2>Mobile Linking</h2>
-        <p>The phone must connect to the Mac's LAN address, not <code>127.0.0.1</code>.</p>
+        <p>The phone must connect to the host machine's LAN address, not <code>127.0.0.1</code>.</p>
         <pre><code>curl -X POST http://127.0.0.1:3090/api/pairing \
   -H "Content-Type: application/json" \
-  -d '{"runtimeUrl":"http://YOUR-MAC-LAN-IP:3090"}'</code></pre>
+  -d '{"runtimeUrl":"http://YOUR-LAN-IP:3090"}'</code></pre>
         <p>Paste the returned <code>yodaman://pair</code> deep link into the mobile app and tap Use Pairing Link.</p>
       </section>
 
@@ -65,7 +116,8 @@
         <p>YodaMan gives you a choice of clients so you can work from the environment that fits the moment.</p>
         <ul>
           <li>Desktop downloads are available directly for macOS and Linux. Windows installers are published as build
-            artifacts from a native Windows runner &mdash; see the Windows card on the downloads page.</li>
+            artifacts from a native Windows runner &mdash; see the Windows card on the
+            <a href="./index.html#downloads">downloads page</a>.</li>
           <li>The VS Code extension is available on the Visual Studio Marketplace, or as a VSIX for offline installs.</li>
           <li>Mobile companion clients help you monitor tasks and approve changes while away from your desktop. Pair
             over your LAN; there is no app-store build yet.</li>
@@ -74,30 +126,85 @@
 
       <section id="api" class="doc-section">
         <h2>API Reference</h2>
-        <p>Important runtime endpoints include:</p>
+        <p>Runtime endpoints are mounted under <code>/api</code>. The most useful ones:</p>
+        <p><strong>Agent</strong></p>
         <ul>
-          <li><code>POST /api/agent/task</code></li>
-          <li><code>GET /api/agent/tasks</code></li>
-          <li><code>GET /api/agent/tasks/:taskId/events</code></li>
-          <li><code>GET /api/agent/pending-approvals</code></li>
-          <li><code>GET /api/policy</code></li>
-          <li><code>GET /api/audit</code></li>
-          <li><code>POST /api/pairing</code></li>
-          <li><code>GET /api/graphify/status</code></li>
-          <li><code>POST /api/graphify/affected</code></li>
-          <li><code>GET /api/graphify/map</code></li>
+          <li><code>POST /api/agent/task</code> &mdash; start a task</li>
+          <li><code>GET /api/agent/tasks</code> &mdash; list tasks</li>
+          <li><code>GET /api/agent/tasks/:taskId/events</code> &mdash; SSE event stream</li>
+          <li><code>GET /api/agent/pending-approvals</code> &mdash; approvals awaiting a decision</li>
+          <li><code>POST /api/agent/approve</code> &mdash; approve or reject</li>
+          <li><code>POST /api/agent/cancel</code> &mdash; cancel a running task</li>
+        </ul>
+        <p><strong>Search and graph</strong></p>
+        <ul>
+          <li><code>GET /api/search</code> &mdash; ranked search across indexed workspaces</li>
+          <li><code>GET /api/graphify/status</code> &mdash; graph state</li>
+          <li><code>GET /api/graphify/map</code> &mdash; architecture map</li>
+          <li><code>POST /api/graphify/affected</code> &mdash; blast radius for a file</li>
+          <li><code>POST /api/graphify/explain</code> &mdash; explain a node or relationship</li>
+        </ul>
+        <p><strong>Stardust</strong></p>
+        <ul>
+          <li><code>GET /api/stardust/board</code> &mdash; change board</li>
+          <li><code>GET /api/stardust/drift</code> &mdash; drift report</li>
+          <li><code>GET /api/stardust/compose</code> &mdash; cross-tool view of one file</li>
+          <li><code>GET /api/stardust/deltas/:name</code> &mdash; spec diff for a change</li>
+          <li><code>PUT /api/stardust/validation/:name</code> &mdash; validate a change</li>
+          <li><code>GET /api/stardust/diagnose</code> &mdash; runtime diagnostics</li>
+          <li><code>WS /api/stardust/live</code> &mdash; live dashboard feed</li>
+        </ul>
+        <p><strong>Runtime</strong></p>
+        <ul>
+          <li><code>GET /api/health</code> &mdash; dependency health</li>
+          <li><code>GET /api/readiness</code> &mdash; WorkspaceReadiness verdict</li>
+          <li><code>GET /api/policy</code> &mdash; active command policy</li>
+          <li><code>GET /api/audit</code> &mdash; audit log</li>
+          <li><code>GET /api/plugins</code> &mdash; installed plugins</li>
+          <li><code>POST /api/pairing</code> &mdash; issue a pairing token</li>
         </ul>
       </section>
 
       <section id="support" class="doc-section">
         <h2>Choosing A Client</h2>
-        <p>Use the desktop app when you want the full control center, the VS Code extension when you are actively coding, and mobile when you only need oversight away from the keyboard.</p>
+        <p>Use the desktop app when you want the full control center, the VS Code extension when you are actively
+          coding, and mobile when you only need oversight away from the keyboard.</p>
         <ul>
           <li>Desktop: manage projects, plugins, indexing, sessions, model settings, runtime health, and approvals.</li>
-          <li>VS Code: ask workspace questions, run coding tasks, review diffs, and keep streamed tool events beside your editor.</li>
+          <li>VS Code: ask workspace questions, run coding tasks, review diffs, and keep streamed tool events beside
+            your editor.</li>
           <li>Mobile: monitor tasks, search projects, ask workspace questions, and approve or reject pending changes.</li>
         </ul>
       </section>
     </main>
+
+    <footer>
+      <span>YodaMan</span>
+      <span>Local-first workspace intelligence. Context Expert + Graphify + OpenSpec, in every answer.</span>
+    </footer>
+
+    <script>
+      // ── Mobile Nav Toggle ────────────────────────────────────────────
+      (function navToggle() {
+        const btn = document.querySelector('.nav-toggle');
+        const nav = document.querySelector('.site-header nav');
+        if (!btn || !nav) return;
+
+        btn.addEventListener('click', function () {
+          const expanded = this.getAttribute('aria-expanded') === 'true' ? false : true;
+          this.setAttribute('aria-expanded', expanded);
+          nav.classList.toggle('nav-open');
+          this.textContent = expanded ? '✕' : '☰';
+        });
+
+        nav.querySelectorAll('a').forEach(function (a) {
+          a.addEventListener('click', function () {
+            nav.classList.remove('nav-open');
+            btn.setAttribute('aria-expanded', 'false');
+            btn.textContent = '☰';
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

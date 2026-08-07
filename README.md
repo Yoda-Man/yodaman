@@ -29,20 +29,6 @@ Every answer in YodaMan blends three mandatory tools. No silos, no optional feat
 - **Understand search rankings**: The Trace tab shows why each result ranked where it did — semantic × 0.50 + proximity × 0.20 + centrality × 0.15 + specCoverage × 0.15 per result.
 - **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
 
-## Core Pillars
-
-### Local-first intelligence
-Project context stays on your machine. Watched directories in `config.json` are indexed locally and reused by chat, search, agent tasks, and external clients.
-
-### Human-controlled automation
-The agent reasons through multi-step coding work, but write proposals require human approval. Events stream: `task_started`, tool activity, approvals, cancellation, final answers, errors.
-
-### One ecosystem runtime
-The Express runtime is the shared contract for the React UI, Electron desktop shell, VS Code extension, mobile app, and CLI. Each client can ask, search, reindex, inspect tasks, and participate in approvals.
-
-### Extensible tools
-Built-in tools cover file reads, controlled writes, exact patching, command execution, search, and file listing. Plugin tools in `plugins/` extend functionality with declared permissions.
-
 ## Sub-Projects
 
 | Project | Location | Description |
