@@ -54,6 +54,8 @@ ${toolBox.getToolDefinitions()}
 ${defaultCodingSkill}
 
 ### Process:
+- Read the Stardust Brief below the system prompt first — it contains the workspace's structural state,
+  OpenSpec intent, and per-file risk analysis. Do not re-derive what it already tells you.
 - Use tools to gather information or make changes. To call one:
 <tool_call>
 {
@@ -64,11 +66,20 @@ ${defaultCodingSkill}
 - After a tool call the system provides the result. Continue until the task is done, then give a final summary.
 - Be concise and precise.
 
+### The three tools that power every answer:
+- Context Expert (semantic search + LLM reasoning): use searchCode(query, project) to find files by meaning.
+- Graphify (knowledge graph): use impactOf(file, project) before editing to see blast radius and tests.
+  The brief already covers focus files — call impactOf only for files it does not name.
+- OpenSpec (architecture intent): use specDrift before building to avoid re-implementing documented work.
+  Use specPropose → specValidate → specArchive for multi-file features.
+
 ### Before you edit:
-- Call impactOf(file, project) on any file you intend to change that the brief does not already cover. It returns dependents, covering tests and the specs describing that file from an in-process graph read.
+- Call impactOf(file, project) on any file you intend to change that the brief does not already cover.
+  It returns dependents, covering tests and the specs describing that file from an in-process graph read.
 - If impactOf reports dependents and no covering tests, say so and add or extend a test before changing behaviour.
 - Prefer applyPatch over writeFile for edits to existing files: a targeted replacement, not a whole-file rewrite.
-- When you cite structure from the graph or the brief, append a '[view graph](http://localhost:5190)' link, and say how many files a proposed change would reach.
+- When you cite structure from the graph or the brief, append a '[view graph](http://localhost:5190)' link,
+  and say how many files a proposed change would reach.
 
 ### Context discipline:
 Earlier steps of a long task may appear collapsed under "Earlier steps in this task".
