@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="draw.io">
+  <diagram id="data-flow" name="Data Flow">
+    <mxGraphModel dx="1420" dy="960" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="t1" value="&lt;b&gt;YodaMan — Data Flow&lt;/b&gt;&lt;br&gt;How data moves through the system for the three main user workflows." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=top;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="100" y="10" width="900" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- ===== AGENT TASK FLOW ===== -->
+        <mxCell id="fl1" value="&lt;b&gt;🔵 1. Agent Task Flow&lt;/b&gt;" style="swimlane;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="20" y="60" width="1100" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s1" value="User" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="105" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="React UI" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="180" y="105" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="REST Controller" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="320" y="105" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="AgentReasoningEngine" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="480" y="105" width="130" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" value="Context Engine" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="670" y="105" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s6" value="ToolBox" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="830" y="105" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s7" value="ctx CLI" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="970" y="105" width="80" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows for agent flow -->
+        <mxCell id="ar1" value="1. Send task" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="s1" target="s2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ar2" value="2. POST /agent/task" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="s2" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ar3" value="3. executeTask()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="s3" target="s4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ar4" value="4. Ask" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="s4" target="s5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ar5" value="5. ctx ask" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="s5" target="s7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ar6" value="6. Tool call" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="s4" target="s6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ar7" value="7. SSE events" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="s4" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ar8" value="8. Stream" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="s3" target="s2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ar9" value="9. Display" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="s2" target="s1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== CHAT FLOW ===== -->
+        <mxCell id="fl2" value="&lt;b&gt;🟢 2. Chat Query Flow&lt;/b&gt;" style="swimlane;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="20" y="220" width="1100" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1" value="User" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="265" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" value="React UI" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="180" y="265" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" value="REST Controller" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="320" y="265" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" value="GraphifyService" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="480" y="265" width="110" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c5" value="ctx CLI" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="650" y="265" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c6" value="SessionStore" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="790" y="265" width="90" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cr1" value="Type question" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="c1" target="c2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr2" value="POST /ask" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="c2" target="c3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr3" value="Get graph context" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="c3" target="c4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr4" value="ctx ask" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="c3" target="c5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr5" value="Save" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="c3" target="c6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr6" value="Answer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="c3" target="c2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr7" value="Result" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="c2" target="c1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== PLUGIN UPLOAD FLOW ===== -->
+        <mxCell id="fl3" value="&lt;b&gt;🟠 3. Plugin Upload Flow&lt;/b&gt;" style="swimlane;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="20" y="380" width="1100" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="u1" value="User" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="430" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="u2" value="React UI" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="170" y="430" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="u3" value="Multer\n(file receive)" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="300" y="430" width="90" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="u4" value="Extract + Merge\n(if zip)" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="440" y="430" width="90" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="u5" value="ToolBox\nValidate" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="580" y="430" width="90" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="u6" value="PluginAPI\nWrap legacy" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="720" y="430" width="90" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="u7" value="plugins/\nDirectory" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="860" y="430" width="90" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ur1" value="Upload .js/.zip" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="u1" target="u2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ur2" value="POST /plugins" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="u2" target="u3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ur3" value="unzip + merge permissions" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="u3" target="u4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ur4" value="validatePlugin()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="u4" target="u5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ur5" value="Wrap if legacy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="u5" target="u6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ur6" value="Copy to plugins/" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="u6" target="u7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Indexing flow -->
+        <mxCell id="fl4" value="&lt;b&gt;🟣 4. Background Indexing Flow&lt;/b&gt;" style="swimlane;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="20" y="560" width="1100" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="x1" value="FileSystemWatcher" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="590" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="x2" value="QueueService" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="220" y="590" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="x3" value="ContextEngine" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="380" y="590" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="x4" value="ctx index" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="540" y="590" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="x5" value="Local SQLite DB" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="590" width="100" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="xr1" value="File changed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="x1" target="x2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xr2" value="Queue job" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="x2" target="x3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xr3" value="Spawn ctx index" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="x3" target="x4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xr4" value="Write embeddings" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="x4" target="x5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

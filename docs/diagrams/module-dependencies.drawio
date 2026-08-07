@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="draw.io">
+  <diagram id="module-dependencies" name="Module Dependencies">
+    <mxGraphModel dx="1420" dy="960" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="t1" value="&lt;b&gt;YodaMan — Module Dependency Diagram&lt;/b&gt;&lt;br&gt;How backend modules depend on each other. Arrows point from dependant to dependency." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=top;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="100" y="10" width="900" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="l1" value="Interface Layer" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="20" y="20" width="100" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="l2" value="Core Layer" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="130" y="20" width="100" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="l3" value="Infrastructure" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="240" y="20" width="100" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="l4" value="Services" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="350" y="20" width="100" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- RestController (center) -->
+        <mxCell id="rc" value="&lt;b&gt;RestController.js&lt;/b&gt;&lt;br&gt;52 route handlers&lt;br&gt;SSE streaming" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=center;" vertex="1" parent="1">
+          <mxGeometry x="380" y="250" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Core Layer -->
+        <mxCell id="agent" value="AgentReasoningEngine" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="250" width="130" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="queue" value="QueueService" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="350" width="130" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Infrastructure Layer -->
+        <mxCell id="toolbox" value="ToolBox" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="150" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="ctxeng" value="ContextEngine" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="230" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="graphify" value="GraphifyService" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="310" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="logger" value="Logger" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="390" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="audit" value="AuditLog" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="470" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="sessions" value="SessionStore" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="550" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="taskstore" value="TaskStore" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="630" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="settings" value="SettingsProvider" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="710" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="watcher" value="FileSystemWatcher" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="430" width="130" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="pairing" value="PairingService" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="510" width="130" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="pluginapi" value="PluginAPI" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="590" width="130" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- Services -->
+        <mxCell id="gitsvc" value="GitService" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="380" y="150" width="130" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="chat" value="chatHandler" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="380" y="360" width="130" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="search" value="searchRouter" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="380" y="440" width="130" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="upload" value="fileUploadService" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="380" y="520" width="130" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- === DEPENDENCY ARROWS === -->
+        <!-- RestController → Core -->
+        <mxCell id="d1" value="spawns" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="agent">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d2" value="spawns" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="queue">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- RestController → Services -->
+        <mxCell id="d3" value="calls" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="gitsvc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d4" value="calls" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="chat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- RestController → Infrastructure -->
+        <mxCell id="d5" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="toolbox">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d6" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="ctxeng">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d7" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="graphify">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d8" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="logger">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d9" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="audit">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d10" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="sessions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d11" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="taskstore">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d12" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="settings">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d13" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="rc" target="pairing">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Core → Infrastructure -->
+        <mxCell id="d14" value="uses ToolBox" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="agent" target="toolbox">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d15" value="uses ContextEngine" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="agent" target="ctxeng">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d16" value="uses Graphify" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="agent" target="graphify">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d17" value="uses Logger" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="agent" target="logger">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d18" value="uses TaskStore" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="agent" target="taskstore">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d19" value="queues to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="watcher" target="queue">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d20" value="ToolBox uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="toolbox" target="pluginapi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

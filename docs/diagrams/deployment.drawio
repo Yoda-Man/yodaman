@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="draw.io">
+  <diagram id="deployment" name="Deployment">
+    <mxGraphModel dx="1420" dy="960" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="t1" value="&lt;b&gt;YodaMan — Deployment Diagram&lt;/b&gt;&lt;br&gt;All components run locally on the developer's machine. No cloud infrastructure required." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=top;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="100" y="10" width="900" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Developer Machine -->
+        <mxCell id="dev" value="&lt;b&gt;Developer's Machine&lt;/b&gt;" style="swimlane;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="30" y="60" width="1100" height="640" as="geometry" />
+        </mxCell>
+
+        <!-- Runtime Node -->
+        <mxCell id="node" value="&lt;b&gt;Node.js Runtime&lt;/b&gt;&lt;br&gt;port 3090" style="swimlane;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="60" y="110" width="320" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="node-express" value="Express Server (server.js)" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="150" width="140" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="node-rest" value="REST Controller (50+ routes)" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="200" width="140" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="node-plugins" value="Plugins (5 pre-installed)" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="240" y="150" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="node-config" value="config.json" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="240" y="200" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="node-history" value="task-history.json" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="240" y="250" width="120" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Database -->
+        <mxCell id="db" value="&lt;b&gt;Local Storage&lt;/b&gt;" style="swimlane;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="60" y="360" width="320" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="db-sqlite" value="SQLite DB (~/.ctx/context.db)" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="400" width="280" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="db-json" value="JSON/JSONL fallback (sessions, audit)" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="455" width="280" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- External CLI tools -->
+        <mxCell id="cli" value="&lt;b&gt;External CLI Tools&lt;/b&gt;" style="swimlane;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="440" y="110" width="200" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-ctx" value="Context Expert (ctx)&#10;npm -g @contextexpert/cli" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="460" y="150" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-graph" value="Graphify&#10;pip install graphifyy" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="460" y="220" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-ollama" value="Ollama&#10;(qwen3.5:9b)" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="460" y="290" width="160" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Clients -->
+        <mxCell id="clients" value="&lt;b&gt;Client Applications&lt;/b&gt;" style="swimlane;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="700" y="110" width="400" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="client-web" value="Web UI&#10;React + Vite&#10;http://localhost:3090" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="720" y="150" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="client-desktop" value="Desktop App&#10;Electron&#10;macOS/Windows/Linux" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="910" y="150" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="client-vscode" value="VS Code Extension&#10;vscode-yodaman" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="720" y="220" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="client-mobile" value="Mobile Companion&#10;React Native" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="910" y="220" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="client-cli" value="CLI&#10;bin/yodaman.js" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="720" y="290" width="170" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Build Output -->
+        <mxCell id="build" value="&lt;b&gt;Build Output&lt;/b&gt;" style="swimlane;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="440" y="400" width="660" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="build-dmg" value="macOS: YodaMan-0.4.4-arm64.dmg (124 MB)" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="460" y="440" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="build-exe" value="Windows: YodaMan Setup 0.4.4.exe (107 MB)" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="460" y="475" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="build-appimage" value="Linux: YodaMan-0.4.4.AppImage (125 MB)" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="680" y="440" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="build-vsix" value="VS Code: vscode-yodaman-0.4.4.vsix (1.1 MB)" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="680" y="475" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="build-zip" value="Source: yodaman-0.4.4.zip (121 MB)" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="900" y="440" width="180" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="build-npm" value="npm: yodaman@0.4.4 (2.5 MB)" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="900" y="475" width="180" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Connections -->
+        <mxCell id="con1" value="HTTP (localhost:3090)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="node" target="client-web">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="con2" value="HTTP" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="node" target="client-desktop">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="con3" value="HTTP" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="node" target="client-vscode">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="con4" value="HTTP (LAN)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="node" target="client-mobile">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="con5" value="Subprocess" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="node" target="cli-ctx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="con6" value="Subprocess" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="node" target="cli-graph">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="con7" value="HTTP" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="node" target="cli-ollama">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="con8" value="SQLite r/w" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;" edge="1" parent="1" source="cli-ctx" target="db-sqlite">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
