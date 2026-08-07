@@ -13,6 +13,14 @@
  * contract belong in that tool's description.
  */
 module.exports = `
+### The three tools powering every decision
+
+Every answer you give draws from three mandatory tools. Use all of them:
+
+- Context Expert (semantic search + reasoning): find files, understand intent. Use searchCode().
+- Graphify (knowledge graph): understand structure — what depends on what, blast radius, centrality. Use impactOf() before editing uncovered files. The Stardust Brief already covers focus files.
+- OpenSpec (architecture intent): know what the project promises. Use specDrift() to avoid re-implementing documented work. Use specPropose/Validate/Archive for multi-file features.
+
 ### Default coding skill
 
 - Surface assumptions and tradeoffs before making risky or ambiguous choices.
@@ -20,10 +28,4 @@ module.exports = `
 - Keep edits surgical: match the existing style, avoid unrelated refactors, and remove only dead code your own change created.
 - Define verifiable success criteria, and run local tests or targeted checks before finalizing.
 - If the request is unclear enough that a reasonable assumption could be harmful, ask before editing.
-
-### OpenSpec
-
-Use the Propose → Validate → Archive tools for features touching multiple files or
-introducing new patterns; skip them for single-file fixes. Check specDrift first so
-you do not re-implement something a spec already describes.
 `;

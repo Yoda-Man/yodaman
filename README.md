@@ -1,9 +1,20 @@
 # YodaMan
 
-YodaMan is your code's memory palace. Private. Extensible. Graph-powered. It connects your projects, semantic search, agent tasks, approvals, plugins, desktop controls, VS Code, and mobile companion flows around one private local runtime — with a real-time Stardust OpenSpec dashboard, cross-tool composition views, and agent-driven spec workflows.
+YodaMan's core pillar: **Context Expert**, **Graphify**, and **OpenSpec** compose into every answer — search, the agent, and planning all draw from all three. Nothing works in isolation.
 
-![Version](https://img.shields.io/badge/Version-0.4.4-gold)
-![License](https://img.shields.io/badge/License-MIT-green)
+![Version](https://img.shields.io/badge/Version-0.4.4-gold) ![License](https://img.shields.io/badge/License-MIT-green)
+
+## The three-tool pillar
+
+Every answer in YodaMan blends three mandatory tools. No silos, no optional features — this is the architecture:
+
+| Tool | Role | Powers |
+|------|------|--------|
+| **Context Expert** | Semantic search + LLM reasoning | Search, agent finding files, RAG retrieval |
+| **Graphify** | Knowledge graph — structure | Blast radius, centrality, proximity, ranking |
+| **OpenSpec** | Architecture intent — specs | Spec coverage, drift detection, propose/validate/archive workflow |
+
+**Search** ranks by all three: semantic × 0.50 + proximity × 0.20 + centrality × 0.15 + specCoverage × 0.15. **The agent** gets a Stardust Brief every turn with graph state, spec awareness, and per-file impact. **Planning** follows Propose → Validate → Archive with drift checking.
 
 ## Why YodaMan
 
