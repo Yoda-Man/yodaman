@@ -1,6 +1,6 @@
 # YodaMan
 
-YodaMan's core pillar: **Context Expert**, **Graphify**, and **OpenSpec** compose into every answer — search, the agent, and planning all draw from all three. Nothing works in isolation.
+YodaMan is local-first workspace intelligence for developers. **Context Expert** (semantic search), **Graphify** (structure), and **OpenSpec** (architectural intent) form a single pillar: every search, every agent turn, and every plan draws on all three at once — none is optional, none runs alone.
 
 ![Version](https://img.shields.io/badge/Version-0.4.4-gold) ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -18,7 +18,7 @@ Every answer in YodaMan blends three mandatory tools. No silos, no optional feat
 
 ## Why YodaMan
 
-- **Keep code private**: Designed around local project indexing and local model workflows through Context Expert and optional Ollama. No code leaves your machine.
+- **Keep code private**: Designed around local project indexing and local model workflows through Context Expert and Ollama. No code leaves your machine.
 - **Understand the whole workspace**: Search and ask across indexed repositories instead of juggling isolated editor tabs.
 - **See relationships, not fragments**: Graphify builds mandatory knowledge graphs that connect code, docs, diagrams, and architectural concepts.
 - **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and approval gates for file changes.
