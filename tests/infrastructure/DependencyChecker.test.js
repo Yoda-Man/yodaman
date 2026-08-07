@@ -113,3 +113,27 @@ describe('setup.sh dependency checks', () => {
         expect(setupSource).toContain('check_graphify');
     });
 });
+
+describe('model awareness', () => {
+    test('isWeakModel detects small models', () => {
+        expect(dependencyChecker.isWeakModel(null)).toBeNull();
+        expect(dependencyChecker.isWeakModel('')).toBeNull();
+        expect(dependencyChecker.isWeakModel('qwen3.5:9b')).toBe(true);   // 9B < 14
+        expect(dependencyChecker.isWeakModel('llama3.2:3b')).toBe(true);  // 3B < 14
+        expect(dependencyChecker.isWeakModel('codellama:7b')).toBe(true); // 7B < 14
+    });
+
+    test('isWeakModel passes models ≥14B', () => {
+        expect(dependencyChecker.isWeakModel('qwen2.5:14b')).toBe(false);
+        expect(dependencyChecker.isWeakModel('codestral:22b')).toBe(false);
+        expect(dependencyChecker.isWeakModel('deepseek-coder-v2')).toBeNull(); // no param count in name
+        expect(dependencyChecker.isWeakModel('mixtral:8x7b')).toBe(true); // regex matches 7B; MoE total is ~47B
+        expect(dependencyChecker.isWeakModel('gemma2:27b')).toBe(false);
+    });
+
+    test('isWeakModel handles edge cases', () => {
+        expect(dependencyChecker.isWeakModel('model-with-no-b')).toBeNull();
+        expect(dependencyChecker.isWeakModel('13B')).toBe(true);        // 13B < 14, uppercase
+        expect(dependencyChecker.isWeakModel('my-model-14b-v2')).toBe(false);
+    });
+});
