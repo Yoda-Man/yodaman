@@ -491,4 +491,27 @@ async function checkAll() {
     return results;
 }
 
-module.exports = { locate, check, checkAll, checkRunning, which, SERVICES, PLATFORM_PATHS };
+/** Detect which Ollama model Context Expert is configured to use. */
+async function detectCtxModel() {
+    try {
+        const { execFile } = require('child_process');
+        const output = await new Promise((resolve, reject) => {
+            execFile('ctx', ['config', 'get', 'default_model'], { timeout: 5000, env: { ...process.env, DOTENVX_QUIET: 'true' } },
+                (err, stdout) => err ? reject(err) : resolve(stdout));
+        });
+        const model = String(output).trim().split('\n').pop().trim();
+        return model || null;
+    } catch (_) {
+        return null;
+    }
+}
+
+/** Heuristic: models under ~14B params struggle with structured tool calls. */
+function isWeakModel(model) {
+    if (!model) return null;
+    const match = String(model).match(/(\d+)b/i);
+    if (!match) return null;
+    return parseInt(match[1], 10) < 14;
+}
+
+module.exports = { locate, check, checkAll, checkRunning, which, detectCtxModel, isWeakModel, SERVICES, PLATFORM_PATHS };

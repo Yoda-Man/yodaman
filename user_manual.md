@@ -8,6 +8,8 @@ YodaMan is a local-first AI workspace companion for developers. It keeps project
 
 **Prerequisites**: Node.js 18+, Python 3.10+, and [Ollama](https://ollama.com) installed.
 
+**Model requirements**: For reliable coding-agent tool calls (structured JSON output), use a model with ≥14B parameters. Smaller models (7B–9B) may produce malformed tool calls or empty responses. Recommended models: `qwen2.5:14b`, `codestral:22b`, `deepseek-coder-v2`. Configure with `ctx config set default_model <model>`. See the Health dashboard for the currently configured model.
+
 Install Context Expert, OpenSpec, and Graphify, then install and start YodaMan from the project root:
 
 ```bash

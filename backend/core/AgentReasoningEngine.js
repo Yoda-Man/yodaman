@@ -316,7 +316,7 @@ whole sequence.
                 conversation.addNote('Your previous response contained only citations and no answer. Answer the task directly in prose, or emit a single <tool_call> block.');
                 if (iteration < this.maxIterations) continue;
 
-                finalAnswer = 'Context Expert returned source citations but no generated answer, on every attempt. Check that the configured model is reachable (`yodaman doctor`) and that the prompt is within its context window.';
+                finalAnswer = 'Context Expert returned source citations but no generated answer, on every attempt. Check that the configured model is reachable (`yodaman doctor`) and that the prompt is within its context window. For reliable tool-calling, use a model with ≥14B parameters (e.g. qwen2.5:14b, codestral:22b, deepseek-coder-v2). Current model: see Health dashboard.';
                 break;
             }
 
