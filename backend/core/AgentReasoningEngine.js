@@ -10,6 +10,7 @@ const defaultCodingSkill = require('./DefaultCodingSkill');
 const queueService = require('./QueueService');
 const ConversationBuffer = require('./ConversationBuffer');
 const stardustBrief = require('./StardustBrief');
+const dependencyChecker = require('../infrastructure/DependencyChecker');
 
 // Tools whose success invalidates the retrieval index and the knowledge graph.
 const MUTATING_TOOLS = new Set(['writeFile']);
@@ -86,6 +87,26 @@ Earlier steps of a long task may appear collapsed under "Earlier steps in this t
 That is a real record of work already done — do not repeat those tool calls. If you need a
 detail that was collapsed, call the tool again for that detail rather than re-running the
 whole sequence.
+`;
+    }
+
+    /**
+     * Shorter prompt for models below 14B params.
+     * Drops verbose sections, uses terse one-line-per-tool summary.
+     */
+    getCompactSystemPrompt() {
+        return `
+You are Yoda-Agent. Tools:
+
+${toolBox.getBriefToolDefinitions()}
+
+Rules:
+- Read the Stardust Brief first — it has graph structure, specs, and per-file risks.
+- Call: <tool_call>{"name":"tool","parameters":{}}</tool_call>
+- Before editing: impactOf(file). No tests covering → say so.
+- Multi-file features: specPropose → specValidate → specArchive.
+- Check specDrift first to avoid re-implementing documented work.
+- Be concise. One tool call per turn.
 `;
     }
 
@@ -218,8 +239,11 @@ whole sequence.
         // Bounded transcript. ctx keeps no session, so every iteration re-sends
         // the conversation — which made a plain growing string quadratic in
         // tokens and eventually large enough to exceed ARG_MAX.
+        // Models <14B get a shorter prompt + tighter budget automatically.
+        let compact = false;
+        try { compact = dependencyChecker.isWeakModel(await dependencyChecker.detectCtxModel()); } catch (_) {}
         const conversation = new ConversationBuffer({
-            system: this.getSystemPrompt() + uploadedFileContext,
+            system: (compact ? this.getCompactSystemPrompt() : this.getSystemPrompt()) + uploadedFileContext,
             brief,
             task,
         });

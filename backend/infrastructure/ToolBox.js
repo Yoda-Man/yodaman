@@ -332,6 +332,20 @@ class ToolBox {
         return `${ToolBox.TOOL_CONVENTIONS}\n\n${numbered}`;
     }
 
+    /**
+     * Terse one-line-per-tool format for models below 14B params.
+     * No numbered list, no conventions, no plugin descriptions — just name(params).
+     */
+    getBriefToolDefinitions() {
+        const builtIn = ToolBox.TOOL_SCHEMA.map(([name, parameters]) =>
+            `${name}(${ToolBox.formatParameters(parameters)})`);
+
+        const pluginDocs = Array.from(this.plugins.values()).map(plugin =>
+            `${plugin.name}(${ToolBox.formatParameters(plugin.parameters)})`);
+
+        return [...builtIn, ...pluginDocs].join(', ');
+    }
+
     async readFile({ filePath }) {
         const fullPath = this.resolveAllowedPath(filePath);
         if (!fs.existsSync(fullPath)) {

@@ -6,6 +6,7 @@ jest.mock('../../backend/infrastructure/ContextEngine', () => ({
 
 jest.mock('../../backend/infrastructure/ToolBox', () => ({
     getToolDefinitions: jest.fn(() => '1. readFile(filePath: string (path)): Returns the content of a file.'),
+    getBriefToolDefinitions: jest.fn(() => 'readFile(filePath), writeFile(filePath, content), searchCode(query, project)'),
     getFileContent: jest.fn(),
     callTool: jest.fn()
 }));
