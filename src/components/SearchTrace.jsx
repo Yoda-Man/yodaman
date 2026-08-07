@@ -3,7 +3,7 @@
  *
  * GraphRanker blends Context Expert's semantic score with Graphify's structure:
  *
- *   score = semantic × 0.6 + proximity × 0.25 + centrality × 0.15
+ *   score = semantic × 0.50 + proximity × 0.20 + centrality × 0.15 + specCoverage × 0.15
  *
  * The bars here are the values the ranker actually used, read from the
  * `graphSignal` it attaches to every hit — so when the graph knows nothing about
@@ -67,7 +67,7 @@ export default function SearchTrace({ projectRoot, focusFile, onOpenFile }) {
     };
 
     const results = response?.results || [];
-    const weights = response?.weights || { semantic: 0.6, proximity: 0.25, centrality: 0.15 };
+    const weights = response?.weights || { semantic: 0.50, proximity: 0.20, centrality: 0.15, specCoverage: 0.15 };
     const graphRanked = Boolean(response?.graphRanked);
     const inGraphCount = results.filter(hit => hit?.graphSignal?.inGraph).length;
 
@@ -115,7 +115,7 @@ export default function SearchTrace({ projectRoot, focusFile, onOpenFile }) {
                     <EmptyState
                         icon={Target}
                         title="Search trace explains the ordering"
-                        hint="Every result carries three scores: semantic relevance from Context Expert, proximity to your active file in Graphify's dependency graph, and structural centrality. The blend decides the order, and this tab shows the values that produced it."
+                        hint="Every result carries four scores: semantic relevance from Context Expert, proximity to your active file in Graphify's dependency graph, structural centrality, and OpenSpec coverage. The blend decides the order."
                     />
                 </Panel>
             )}
@@ -244,6 +244,7 @@ function ResultRow({ rank, hit, weights, onOpenFile }) {
                             <SignalBar label="Semantic" value={signal.semantic} weight={weights.semantic} color="purple" />
                             <SignalBar label="Proximity" value={signal.proximity} weight={weights.proximity} color="cyan" />
                             <SignalBar label="Central" value={signal.centrality} weight={weights.centrality} color="amber" />
+                            <SignalBar label="Spec" value={signal.specCoverage} weight={weights.specCoverage} color="emerald" />
                             <div className="pt-0.5 text-[9px] text-slate-600">
                                 {signal.hops === null || signal.hops === undefined
                                     ? 'no proximity origin set'

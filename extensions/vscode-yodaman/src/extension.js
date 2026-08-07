@@ -23,7 +23,7 @@ let sidebarProvider;
 let activeTaskId = null;
 let runtimeTerminal = null;
 let runtimeAvailable = false;
-let storedMode = 'code'; // default mode
+let storedMode = 'code'; // legacy — mode toggle removed in 0.4.1
 let lastStatus = null;
 let extensionContext = null;
 
@@ -151,7 +151,6 @@ async function askWorkspace() {
     // Persist selected mode
     storedMode = mode;
     extensionContext.globalState.update('yodamanMode', mode);
-    await getClient().setMode(mode);
 
     output.show(true);
     output.appendLine(`> ${question} (mode: ${mode})`);
@@ -176,7 +175,6 @@ async function runAgentTask() {
     // Use stored mode for agent tasks as well
     const mode = storedMode;
     if (mode) {
-        await getClient().setMode(mode);
     }
 
     output.show(true);

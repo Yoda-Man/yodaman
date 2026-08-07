@@ -129,9 +129,8 @@ function createYodaManClient(runtimeUrl, options = {}) {
                 body: JSON.stringify({ path, nextPath })
             });
         },
-        ask(question, projectId, mode) {
+        ask(question, projectId) {
             const body = { question, projectId };
-            if (mode) body.mode = mode;
             return request(API_PATHS.ask, {
                 method: 'POST',
                 body: JSON.stringify(body)

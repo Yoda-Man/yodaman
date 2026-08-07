@@ -236,7 +236,7 @@ YodaMan 0.4.4 integrates OpenSpec through the **Stardust** tab. OpenSpec provide
 - **Trace**: Search ranking transparency. Every search result shows its semantic×0.50 + proximity×0.20 + centrality×0.15 + specCoverage×0.15 breakdown with colour-coded bars for each signal and a spec coverage indicator showing which OpenSpec specs describe the file.
 - **Diagnostics**: Installation check, version, project initialization status, and one-click install/init buttons.
 - **Commands**: Direct CLI access with Propose, Validate, Archive, List Changes, and List Specs buttons plus a scrollable console output. The Propose button creates `openspec/changes/<name>/` with proposal.md, design.md, and tasks.md.
-- **Impact**: Dedicated impact analysis tool. Enter any file path to see its full blast radius with configurable hop depth (1–4), spec awareness (which OpenSpec specs describe it), test coverage mapping, and dependency chain visualization.
+- **Impact**: Dedicated blast-radius analysis with configurable hop depth and spec awareness. Enter any file path to see dependents, test coverage, and which OpenSpec specs describe it.
 
 ### Setup
 
