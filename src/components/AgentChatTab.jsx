@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, Copy, File, FileText, Filter, Link2, MessageSquare, Mic, Search, Send, Square, Terminal, Trash2, X } from 'lucide-react'
 import { api } from '../api/api'
+// Shared with scripts/plugin-smoke.js so the release gate exercises the exact
+// phrase this dropdown inserts.
+import { pluginCapability, pluginInvocation } from '../../shared/pluginInvocation.js'
 import { VoiceAgentBridge, readVoiceAgentSettings, speakAgentResponse, writeVoiceAgentSettings } from '../../frontend/voiceAgentBridge.js'
 import FileUploader from '../../frontend/FileUploader.jsx'
 import GitPanel from './GitPanel'
@@ -24,67 +27,6 @@ const TASK_PRESETS = [
   - Suggested test files to update`
   }
 ]
-
-/**
- * Turn a plugin into text for the composer.
- *
- * Selecting a plugin fills the box; it does not run anything. Plugins are tool
- * executions with declared permissions, not prompt templates, so they keep the
- * same "you press Send" contract as everything else typed here — and the
- * inserted phrase teaches the chat syntax rather than hiding it.
- *
- * Every shipped plugin carries a `💡 Chat usage:` hint holding quoted example
- * phrases; the first is the most natural invocation. Plugins without a hint
- * fall back to "Run <name>", which the agent resolves by tool name.
- */
-function pluginInvocation(plugin) {
-  const description = plugin?.description || ''
-  const hintIndex = description.indexOf('Chat usage:')
-  if (hintIndex !== -1) {
-    const quoted = [...description.slice(hintIndex).matchAll(/"([^"]+)"/g)]
-      .map(match => match[1].trim())
-      .filter(Boolean)
-
-    // Prefer the explicit "Run <plugin>" phrasing over the conversational one.
-    // Picking the first hint inserted "How many lines of code?" for CodeTrooper,
-    // and the agent went looking for documentation about code size instead of
-    // calling the tool. The conversational phrasings exist for people who do not
-    // know the plugin exists — but selecting from this menu is already that
-    // discovery, and by then what you want is the invocation that lands.
-    const explicit = quoted.find(phrase => /^run\b/i.test(phrase))
-    if (explicit) return explicit
-    if (quoted.length) return quoted[0]
-  }
-  return `Run ${plugin?.name || 'plugin'}`
-}
-
-/**
- * A short, literal statement of what a plugin's permissions let it do, or null
- * when there is nothing worth warning about.
- *
- * Mapped explicitly against PLUGIN_PERMISSION_ALLOWLIST in ToolBox.js, which is
- * a closed set — an earlier version pattern-matched the permission strings and
- * labelled anything containing "write" as able to modify your code. That flagged
- * `audit:write`, which writes the audit log and nothing else, and so described a
- * VR graph viewer as capable of changing files. A label that overstates is worse
- * than no label: it trains people to ignore the one that matters.
- *
- * Ordered by consequence — the strongest capability wins.
- */
-const PLUGIN_CAPABILITY_LABELS = [
-  ['unrestricted', 'unrestricted'],
-  ['write', 'writes files'],
-  ['command', 'runs commands'],
-  ['agent:invoke', 'starts agent tasks'],
-  ['task:create', 'starts agent tasks'],
-  ['network', 'network access']
-]
-
-function pluginCapability(plugin) {
-  const permissions = Array.isArray(plugin?.permissions) ? plugin.permissions : []
-  const match = PLUGIN_CAPABILITY_LABELS.find(([permission]) => permissions.includes(permission))
-  return match ? match[1] : null
-}
 
 function normalizeRole(role) {
   if (role === 'ai') return 'assistant'

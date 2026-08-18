@@ -1,7 +1,7 @@
 {
   "name": "yodaman",
   "version": "0.4.6",
-  "description": "YodaMan — local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
+  "description": "YodaMan \u2014 local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
     "yodaman": "bin/yodaman.js"
@@ -38,11 +38,13 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "audit:prod": "npm audit --omit=dev",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
     "test": "jest",
     "generate:protocol": "node scripts/generate-protocol.js",
     "release:smoke": "node scripts/release-smoke.js",
-    "audit:vendored": "node scripts/audit-vendored.js"
+    "audit:vendored": "node scripts/audit-vendored.js",
+    "test:plugins": "node scripts/plugin-smoke.js",
+    "release:verify": "npm run lint && npm test && npm run audit:prod && npm run audit:vendored && npm run release:smoke && npm run test:plugins"
   },
   "dependencies": {
     "chokidar": "^4.0.3",

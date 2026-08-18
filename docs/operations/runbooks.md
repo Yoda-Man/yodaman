@@ -245,16 +245,37 @@ Enable risky toggles only in trusted local support sessions, then restart the ru
 
 ## Pre-Handover Verification
 
-Run from the repository root:
+Run from `core/`:
 
 ```bash
-npm audit
-npm test
+npm run release:verify
+```
+
+That chains every gate in order of cost — lint, tests, production audit, vendored
+audit, release smoke, and finally the plugin journey. Then:
+
+```bash
 npm run build
-npm run release:smoke
 npm --cache /private/tmp/yodaman-npm-cache pack --dry-run
 yodaman doctor --graph
 ```
+
+### Why `test:plugins` is in that chain
+
+It drives every installed plugin through the agent exactly as the chat dropdown
+does, and fails if the agent cannot reach a tool.
+
+0.4.5 shipped with the agent unable to call a single tool. Lint passed, 492 tests
+passed, release smoke passed, the audit gate passed — every one of them checked
+code, dependencies and configuration, and not one asked the product to do the
+thing it exists to do. Prose questions worked, so the runtime looked healthy
+right until a user asked for real work. This gate is the check that would have
+caught it.
+
+It needs the full local stack. Where Ollama is unreachable it prints `SKIP` and
+exits 0, so a CI runner without a model does not fail on an environment it cannot
+provide — **but a skip is not a pass.** Before shipping, run it somewhere the
+stack is live and confirm you see plugin results rather than the skip notice.
 
 Expected results:
 
