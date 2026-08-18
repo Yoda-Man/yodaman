@@ -180,30 +180,53 @@ function hasGraph(projectPath) {
     return fs.existsSync(graphPath(projectPath));
 }
 
+// Symlinked directories are NEVER followed here, and the depth is capped.
+// Both guards are load-bearing: Flutter writes .plugin_symlinks/ and .symlinks/
+// entries that point back into an ancestor directory, and statSync() resolves a
+// link to its target, so isDirectory() was true and the walk recursed forever.
+// That wedged the whole runtime — this walk is synchronous, so a cycle blocks
+// the event loop, and the process kept the port bound at 100% CPU while every
+// request hung. GET /api/readiness reaches this on the Electron startup poll.
+const MAX_SOURCE_SCAN_DEPTH = 12;
+
 function latestSourceMtime(projectPath) {
     const ignored = new Set(['node_modules', '.git', 'dist', 'build', 'release', 'graphify-out']);
     let latest = 0;
 
-    function walk(dir) {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            if (ignored.has(entry.name)) continue;
+    function walk(dir, depth) {
+        if (depth > MAX_SOURCE_SCAN_DEPTH) return;
+
+        let entries;
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch (_err) {
+            return;
+        }
+
+        for (const entry of entries) {
+            // isSymbolicLink() comes off the dirent, so it describes the link
+            // itself. Do not swap this for a statSync() check — that follows the
+            // link and reports the target, which is exactly the bug above.
+            if (ignored.has(entry.name) || entry.isSymbolicLink()) continue;
             const entryPath = path.join(dir, entry.name);
+
+            if (entry.isDirectory()) {
+                walk(entryPath, depth + 1);
+                continue;
+            }
+            if (!entry.isFile()) continue;
+
             let stat;
             try {
                 stat = fs.statSync(entryPath);
             } catch (_err) {
                 continue;
             }
-
-            if (stat.isDirectory()) {
-                walk(entryPath);
-            } else {
-                latest = Math.max(latest, stat.mtimeMs);
-            }
+            latest = Math.max(latest, stat.mtimeMs);
         }
     }
 
-    if (fs.existsSync(projectPath)) walk(projectPath);
+    if (fs.existsSync(projectPath)) walk(projectPath, 0);
     return latest;
 }
 
