@@ -1,0 +1,28 @@
+{
+  "name": "yodaman-mobile",
+  "version": "0.1.9",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "build:android": "npx eas-cli@latest build --platform android --profile production",
+    "submit:android": "npx eas-cli@latest submit --platform android --profile production",
+    "build:ios": "npx eas-cli@latest build --platform ios --profile production",
+    "submit:ios": "npx eas-cli@latest submit --platform ios --profile production",
+    "build:all": "npx eas-cli@latest build --platform all --profile production"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "^6.1.2",
+    "expo": "^54.0.0",
+    "react": "^19.1.0",
+    "react-native": "^0.81.0",
+    "react-native-safe-area-context": "^5.6.0"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
+  },
+  "devDependencies": {}
+}

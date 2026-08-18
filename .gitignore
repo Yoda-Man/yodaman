@@ -34,8 +34,10 @@ extensions/vscode-yodaman/.vscode-test/
 extensions/vscode-yodaman/out/
 extensions/vscode-yodaman/dist/
 
-# Mobile apps
-apps/mobile/
+# Mobile apps — build output only. The blanket `apps/mobile/` rule that used to
+# sit here also excluded the app's own source, so App.js, app.json, eas.json and
+# the store assets were never in version control. node_modules is already
+# covered by `apps/*/node_modules/` above.
 apps/mobile/.expo/
 apps/mobile/.expo-shared/
 apps/mobile/dist/
