@@ -30,6 +30,12 @@ function safeToolName(rawToolCall) {
  * It manages context, parses tool calls, and interacts with the infrastructure layer
  * to execute actions and gather information.
  */
+// Budgets for a small model, whose context the full prompt plus ctx's retrieved
+// chunks will not fit. Both are deliberately conservative: an answer that fits
+// beats a richer prompt that gets truncated from the front.
+const COMPACT_PROMPT_CHARS = 5000;
+const COMPACT_TOP_K = 3;
+
 class AgentReasoningEngine {
     constructor() {
         /** @type {Map<string, Function>} Pending approval resolvers. */
@@ -257,7 +263,19 @@ Rules:
             ? `\n\nActive workspace (absolute path — use this for any tool needing workspacePath, projectPath or a project root): ${metadata.projectId}`
             : '';
 
+        // The prompt budget governs what WE send. ctx then prepends its retrieved
+        // chunks on top, and the two together have to fit the model's context —
+        // 4096 tokens for qwen3.5:9b. At the default budget plus five chunks the
+        // total overflowed, and llama-server runs with --context-shift, which
+        // drops from the FRONT: the system prompt carrying the tool instructions.
+        // The model then answered with citations and no tool call, which is the
+        // agent_empty_answer path. It accounted for 9 of 22 iterations measured.
+        // Small models therefore get both a tighter budget and fewer chunks.
+        const promptChars = compact ? COMPACT_PROMPT_CHARS : undefined;
+        const topK = compact ? COMPACT_TOP_K : undefined;
+
         const conversation = new ConversationBuffer({
+            ...(promptChars ? { maxPromptChars: promptChars } : {}),
             system: (compact ? this.getCompactSystemPrompt() : this.getSystemPrompt()) + workspaceContext + uploadedFileContext,
             brief,
             task,
@@ -309,7 +327,7 @@ Rules:
                 });
             }
 
-            const raw = await contextEngine.ask(prompt, { project: metadata.projectId });
+            const raw = await contextEngine.ask(prompt, { project: metadata.projectId, topK });
             const output = stripCliNoise(raw.output);
 
             if (this.isCancelled(taskId)) {

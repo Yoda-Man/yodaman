@@ -37,7 +37,10 @@ const { pluginInvocation } = require('../shared/pluginInvocation');
 
 const RUNTIME_URL = process.env.YODAMAN_SMOKE_URL || 'http://127.0.0.1:3090';
 const PROJECT = process.env.YODAMAN_SMOKE_PROJECT || path.resolve(__dirname, '..', '..');
-const TASK_TIMEOUT_MS = Number(process.env.YODAMAN_SMOKE_TASK_TIMEOUT || 260000);
+// Measured, not guessed: a clean "Run CodeTrooper" completes in ~75s in two
+// iterations once the prompt fits the model's context. 180s leaves generous head
+// room without letting a genuinely stuck task hold the release up for minutes.
+const TASK_TIMEOUT_MS = Number(process.env.YODAMAN_SMOKE_TASK_TIMEOUT || 180000);
 const BOOT_TIMEOUT_MS = 45000;
 
 const log = (msg) => process.stdout.write(`${msg}\n`);
@@ -130,7 +133,14 @@ async function main() {
         for (const plugin of plugins) {
             const phrase = pluginInvocation(plugin);
             process.stdout.write(`  ${plugin.name.padEnd(20)} "${phrase}" ... `);
-            const result = await runTask(phrase);
+
+            // Retry once, and only on a timeout. A timeout is latency; anything
+            // else is signal, and retrying signal is how a gate learns to lie.
+            let result = await runTask(phrase);
+            if (!result.ok && !result.fatal && /timeout/i.test(result.reason)) {
+                process.stdout.write('timed out, retrying once ... ');
+                result = await runTask(phrase);
+            }
             log(result.ok ? `ok (${result.reason})` : `FAILED — ${result.reason}`);
             if (!result.ok) failures.push({ name: plugin.name, phrase, reason: result.reason });
             if (result.fatal) {

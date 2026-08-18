@@ -44,7 +44,8 @@
     "release:smoke": "node scripts/release-smoke.js",
     "audit:vendored": "node scripts/audit-vendored.js",
     "test:plugins": "node scripts/plugin-smoke.js",
-    "release:verify": "npm run lint && npm test && npm run audit:prod && npm run audit:vendored && npm run release:smoke && npm run test:plugins"
+    "release:verify": "npm run lint && npm test && npm run audit:prod && npm run audit:vendored && npm run release:smoke && npm run test:plugins && npm run test:approval",
+    "test:approval": "node scripts/approval-smoke.js"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
@@ -121,12 +122,14 @@
     "modulePathIgnorePatterns": [
       "<rootDir>/release",
       "<rootDir>/dist",
-      "<rootDir>/extensions/vscode-yodaman/node_modules"
+      "<rootDir>/extensions/vscode-yodaman/node_modules",
+      "<rootDir>/.claude/worktrees"
     ],
     "testPathIgnorePatterns": [
       "<rootDir>/release",
       "<rootDir>/dist",
-      "<rootDir>/extensions/vscode-yodaman/node_modules"
+      "<rootDir>/extensions/vscode-yodaman/node_modules",
+      "<rootDir>/.claude/worktrees"
     ]
   }
 }
