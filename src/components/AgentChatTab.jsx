@@ -25,6 +25,34 @@ const TASK_PRESETS = [
   }
 ]
 
+/**
+ * Turn a plugin into text for the composer.
+ *
+ * Selecting a plugin fills the box; it does not run anything. Plugins are tool
+ * executions with declared permissions, not prompt templates, so they keep the
+ * same "you press Send" contract as everything else typed here — and the
+ * inserted phrase teaches the chat syntax rather than hiding it.
+ *
+ * Every shipped plugin carries a `💡 Chat usage:` hint holding quoted example
+ * phrases; the first is the most natural invocation. Plugins without a hint
+ * fall back to "Run <name>", which the agent resolves by tool name.
+ */
+function pluginInvocation(plugin) {
+  const description = plugin?.description || ''
+  const hintIndex = description.indexOf('Chat usage:')
+  if (hintIndex !== -1) {
+    const quoted = description.slice(hintIndex).match(/"([^"]+)"/)
+    if (quoted && quoted[1].trim()) return quoted[1].trim()
+  }
+  return `Run ${plugin?.name || 'plugin'}`
+}
+
+/** Plugins that can change something deserve a visible marker in the list. */
+function pluginWrites(plugin) {
+  const permissions = Array.isArray(plugin?.permissions) ? plugin.permissions : []
+  return permissions.some(permission => /write|create|invoke|command|exec|delete/i.test(permission))
+}
+
 function normalizeRole(role) {
   if (role === 'ai') return 'assistant'
   return role || 'assistant'
@@ -580,6 +608,7 @@ export default function AgentChatTab({ selectedProject }) {
   const [sections, setSections] = useState(INITIAL_SECTIONS)
   const [error, setError] = useState('')
   const [preset, setPreset] = useState('')
+  const [plugins, setPlugins] = useState([])
   const [vrStatus, setVrStatus] = useState(null)
   const [isOpeningVr, setIsOpeningVr] = useState(false)
   const [holocronAvailable, setHolocronAvailable] = useState(false)
@@ -598,6 +627,22 @@ export default function AgentChatTab({ selectedProject }) {
     const refs = messages.flatMap(message => extractFileReferences(message.content))
     return refs.slice(-5)
   }, [messages])
+
+  // Loaded from the runtime rather than hardcoded: plugins can be uploaded,
+  // removed or fail to load at any time, and a menu offering one that is not
+  // there is a support ticket. A failure leaves the list empty, which simply
+  // hides the group.
+  useEffect(() => {
+    let cancelled = false
+    api.getPlugins()
+      .then(result => {
+        if (cancelled) return
+        const list = Array.isArray(result) ? result : result?.plugins || []
+        setPlugins(list)
+      })
+      .catch(() => { if (!cancelled) setPlugins([]) })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (!selectedProject) return
@@ -1138,21 +1183,43 @@ export default function AgentChatTab({ selectedProject }) {
 
           {workspaceView === 'chat' ? <div className="mb-3 flex items-center gap-2">
             <select
+              aria-label="Insert a task preset or plugin command"
               value={preset}
               onChange={e => {
                 const selected = e.target.value
                 setPreset(selected)
-                if (selected) {
-                  const found = TASK_PRESETS.find(p => p.label === selected)
-                  if (found) setInputText(found.template)
+                if (!selected) return
+
+                // Both branches only fill the composer. Nothing here sends, and
+                // nothing here runs a plugin: a plugin is a tool execution with
+                // declared permissions, so it keeps the same "you press Send"
+                // contract as anything else typed into this box.
+                if (selected.startsWith('plugin:')) {
+                  const name = selected.slice('plugin:'.length)
+                  const plugin = plugins.find(item => item.name === name)
+                  if (plugin) setInputText(pluginInvocation(plugin))
+                  return
                 }
+                const found = TASK_PRESETS.find(p => p.label === selected)
+                if (found) setInputText(found.template)
               }}
               className="w-full rounded-lg border border-[var(--border-color)] bg-slate-900/80 px-3 py-2 text-xs text-slate-300 outline-none focus:border-indigo-400/50"
             >
-              <option value="">💡 Task presets...</option>
-              {TASK_PRESETS.map(p => (
-                <option key={p.label} value={p.label}>{p.label}</option>
-              ))}
+              <option value="">💡 Insert a preset or plugin...</option>
+              <optgroup label="Task presets">
+                {TASK_PRESETS.map(p => (
+                  <option key={p.label} value={p.label}>{p.label}</option>
+                ))}
+              </optgroup>
+              {plugins.length > 0 ? (
+                <optgroup label="Plugins — inserts a command, does not run it">
+                  {plugins.map(plugin => (
+                    <option key={plugin.name} value={`plugin:${plugin.name}`}>
+                      {`🔌 ${plugin.name}${pluginWrites(plugin) ? ' · can modify' : ''}`}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </select>
           </div> : null}
 

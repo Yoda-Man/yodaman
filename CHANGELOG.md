@@ -7,6 +7,27 @@ All notable changes to **YodaMan** will be documented in this file.
 A handover audit found the verification machinery, not the product, was the
 weak part. Every finding below was reproduced before it was fixed.
 
+### Added — plugins are reachable from the chat composer
+
+Every shipped plugin carried a `💡 Chat usage:` hint precisely because the only
+way to run one was knowing the phrase. The composer dropdown now lists them
+alongside the task presets.
+
+Selecting one **fills the box; it does not run anything.** A preset is a prompt
+template, but a plugin is a tool execution with declared permissions, and
+collapsing that difference into one click would have quietly turned a menu into
+a trigger. Inserting keeps the "you press Send" contract, leaves the text
+editable so parameters can be adjusted, and teaches the chat syntax rather than
+hiding it.
+
+- The list comes from `GET /api/plugins`, never a hardcoded array — plugins can
+  be uploaded or removed while the app is running, and a menu offering one that
+  is not loaded is a support ticket.
+- Plugins whose permissions allow a change (`agent:invoke`, `audit:write`,
+  `task:create`, and similar) are marked "can modify" in the list.
+- Nothing here bypasses the approval gate. A plugin that writes still stops for
+  the same diff, dependents and test-coverage review as any agent write.
+
 ### Fixed — CI had never passed, and it was hiding a real regression
 
 Every CI run since 4 August failed, including the release workflow on tag
