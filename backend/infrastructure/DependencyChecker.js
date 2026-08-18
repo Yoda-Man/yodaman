@@ -492,7 +492,40 @@ async function checkAll() {
 }
 
 /** Detect which Ollama model Context Expert is configured to use. */
-async function detectCtxModel() {
+// The configured model is read on the hot path of every agent task, and each
+// read spawned `ctx config get default_model` with a 5s timeout. That put a
+// subprocess — and up to five seconds — in front of every task, for a value
+// that changes about as often as the user edits their ctx config. Cache it,
+// with a TTL short enough that a model change is picked up without a restart.
+const CTX_MODEL_TTL_MS = 5 * 60 * 1000;
+let ctxModelCache = { value: null, at: 0 };
+// Concurrent tasks share one probe. Without this, N tasks starting together
+// spawn N subprocesses and race to write the cache.
+let ctxModelInFlight = null;
+
+/** Drop the cached model. Exposed for tests and for config-change handlers. */
+function resetCtxModelCache() {
+    ctxModelCache = { value: null, at: 0 };
+    ctxModelInFlight = null;
+}
+
+function detectCtxModel() {
+    if (ctxModelCache.at && (Date.now() - ctxModelCache.at) < CTX_MODEL_TTL_MS) {
+        return Promise.resolve(ctxModelCache.value);
+    }
+    if (ctxModelInFlight) return ctxModelInFlight;
+
+    ctxModelInFlight = probeCtxModel()
+        .then((model) => {
+            ctxModelCache = { value: model, at: Date.now() };
+            return model;
+        })
+        .finally(() => { ctxModelInFlight = null; });
+
+    return ctxModelInFlight;
+}
+
+async function probeCtxModel() {
     try {
         const { execFile } = require('child_process');
         const output = await new Promise((resolve, reject) => {
@@ -514,4 +547,5 @@ function isWeakModel(model) {
     return parseInt(match[1], 10) < 14;
 }
 
-module.exports = { locate, check, checkAll, checkRunning, which, detectCtxModel, isWeakModel, SERVICES, PLATFORM_PATHS };
+module.exports = {
+    resetCtxModelCache, locate, check, checkAll, checkRunning, which, detectCtxModel, isWeakModel, SERVICES, PLATFORM_PATHS };

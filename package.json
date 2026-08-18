@@ -1,6 +1,6 @@
 {
   "name": "yodaman",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "YodaMan — local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
@@ -41,17 +41,18 @@
     "audit:prod": "npm audit --omit=dev",
     "test": "jest",
     "generate:protocol": "node scripts/generate-protocol.js",
-    "release:smoke": "node scripts/release-smoke.js"
+    "release:smoke": "node scripts/release-smoke.js",
+    "audit:vendored": "node scripts/audit-vendored.js"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
     "cors": "^2.8.5",
     "express": "^5.2.1",
-    "fs-extra": "^11.0.0",
+    "fs-extra": "^11.4.0",
     "glob": "^13.0.6",
     "multer": "^2.1.1",
     "simple-git": "^3.36.0",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@babel/parser": "^7.29.8",
@@ -75,7 +76,7 @@
     "react-dom": "^18.2.0",
     "tailwindcss": "^3.3.5",
     "three": "^0.128.0",
-    "vis-network": "^9.1.6",
+    "vis-network": "^10.1.1",
     "vite": "^8.0.13"
   },
   "overrides": {
@@ -102,7 +103,7 @@
   },
   "homepage": "https://github.com/Yoda-Man/yodaman#readme",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "jest": {
     "transform": {

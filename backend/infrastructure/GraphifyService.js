@@ -189,7 +189,29 @@ function hasGraph(projectPath) {
 // request hung. GET /api/readiness reaches this on the Electron startup poll.
 const MAX_SOURCE_SCAN_DEPTH = 12;
 
+// The scan is synchronous, so its cost is charged to the event loop: every
+// GET /api/readiness walked all watched trees before answering (~300ms across
+// seven projects here), and the desktop dashboard polls that route. Cache per
+// project for long enough to absorb a poll burst, but briefly enough that an
+// edit shows up as stale almost immediately.
+const SOURCE_MTIME_TTL_MS = 10 * 1000;
+const sourceMtimeCache = new Map();
+
+/** Drop cached scan results. Exposed for tests and post-write invalidation. */
+function resetSourceMtimeCache(projectPath) {
+    if (projectPath) sourceMtimeCache.delete(projectPath);
+    else sourceMtimeCache.clear();
+}
+
 function latestSourceMtime(projectPath) {
+    const cached = sourceMtimeCache.get(projectPath);
+    if (cached && (Date.now() - cached.at) < SOURCE_MTIME_TTL_MS) return cached.value;
+    const value = scanSourceMtime(projectPath);
+    sourceMtimeCache.set(projectPath, { value, at: Date.now() });
+    return value;
+}
+
+function scanSourceMtime(projectPath) {
     const ignored = new Set(['node_modules', '.git', 'dist', 'build', 'release', 'graphify-out']);
     let latest = 0;
 
@@ -499,6 +521,7 @@ function enhanceArtifactHtml(html) {
 }
 
 module.exports = {
+    resetSourceMtimeCache,
     // Set to true after assertAvailable() confirms Ollama is installed.
     _ollamaAvailable: false,
     graphPath,

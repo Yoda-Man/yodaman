@@ -1,8 +1,11 @@
 const path = require('path');
 const logger = require('./Logger');
 
-let db = null;
-let useSqlite = false;
+// Both are assigned by initialise() on success and reset by its catch, so
+// they are never read before being written. Undefined reads as falsy in the
+// `if (db)` guards exactly as null did.
+let db;
+let useSqlite;
 
 // Overridable so tests can use a throwaway database. Without this the suite
 // wrote into the live `yodaman.db`, leaving fake `test-task-*` rows in the

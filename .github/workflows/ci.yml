@@ -17,7 +17,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       # `npm ci` fails outright when package.json and the lockfile disagree.
@@ -33,11 +33,20 @@ jobs:
       - name: Run tests
         run: npm test
 
-      # Production dependencies only: dev-tree advisories (electron-builder and
-      # friends) never reach a consumer of the published package and would make
-      # this gate too noisy to keep enabled.
+      # Production dependencies only: most dev-tree advisories (electron-builder
+      # and friends) never reach a consumer of the published package and would
+      # make this gate too noisy to keep enabled.
+      #
+      # The exception is anything scripts/sync-vendor.js copies into public/,
+      # which ships in both the npm tarball and the desktop app despite being a
+      # devDependency. This gate reported "0 vulnerabilities" for months while a
+      # vulnerable vis-network bundle shipped to users. The step below closes
+      # that hole; do not remove one without the other.
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit vendored libraries that ship to users
+        run: npm run audit:vendored
 
       - name: Build web app
         run: npm run build
@@ -57,7 +66,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies

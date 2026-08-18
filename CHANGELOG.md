@@ -2,6 +2,90 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.4.6] - 2026-08-18
+
+A handover audit found the verification machinery, not the product, was the
+weak part. Every finding below was reproduced before it was fixed.
+
+### Fixed — CI had never passed, and it was hiding a real regression
+
+Every CI run since 4 August failed, including the release workflow on tag
+`v0.4.3`. The pipeline died at `lint`, so the test step never ran, so nobody saw
+that two tests were also failing. Two defects, each concealing the other.
+
+- **Lint**: two empty `catch {}` blocks, added by `b2e1ae0` (compact mode) and
+  `852bb99` (JSON repair). Both feature commits broke the build; neither was
+  caught, because the pipeline was already red.
+- **Tests**: `b2e1ae0` put `ctx config get default_model` — a subprocess with a
+  5-second timeout — on the hot path of *every* agent task, re-probed each time,
+  for a value that changes when the user edits their ctx config. One task cost
+  ~1s before doing any work. In tests it delayed approval registration past the
+  window, so `should continue when a write approval is rejected` timed out; the
+  orphaned task then consumed a mock belonging to the next test, which is why
+  `should report malformed tool calls as task errors` failed too. Two failures,
+  one cause.
+- **Fix**: cache the detection with a 5-minute TTL, and share the in-flight
+  promise so concurrent tasks do not each spawn a probe. First call 908 ms,
+  every subsequent call 0 ms.
+
+Suite is 492/492 across 63 suites, lint is clean, `release:smoke` passes.
+
+### Fixed — a vulnerable bundle shipped while the audit gate reported clean
+
+`vis-network` is a devDependency, so `npm audit --omit=dev` reported **0
+vulnerabilities** — but `scripts/sync-vendor.js` copies its bundle into
+`public/vendor/`, and `public/` ships in both the npm tarball and the desktop
+app. A vulnerable 9.1.6 bundle had been reaching users while CI called the tree
+clean, and the comment justifying that gate asserted dev advisories "never reach
+a consumer of the published package", which was false for this package.
+
+- Upgraded to `vis-network@10.1.1`, outside the advisory range. Verified by
+  rendering a graph with the exact API Graphify's artifacts use (`new
+  vis.DataSet`, `new vis.Network`) — `afterDrawing` fires, no console errors.
+- Added `npm run audit:vendored`, a CI gate that cross-references
+  `public/vendor/MANIFEST.json` against `npm audit` so anything vendored is
+  audited regardless of which dependency block it sits in. Verified it exits 1
+  on a vulnerable package and 0 when clean.
+- The manifest recorded a **hardcoded** `9.1.6` and kept reporting it after the
+  upgrade while shipping different bytes. It now reads the installed version, so
+  the record cannot drift from the artifact.
+
+`nanoid` remains flagged, via `postcss`. It is build-time only and never ships,
+which is what `--omit=dev` is for.
+
+### Fixed — the same symlink cycle, on the plugin upload path
+
+`walkArchiveFiles` recursed with `fs.statSync`, which resolves a symlink to its
+target, with no depth cap and no cycle detection — the identical defect that
+pinned the runtime at 100% CPU for 17 hours in 0.4.5, except this walk runs over
+an archive somebody uploaded, so the cycle can be authored deliberately rather
+than arriving by accident. Now refuses symlinks via the dirent and caps depth. A
+crafted archive that would have wedged the loop completes in 0 ms.
+
+### Changed — readiness no longer rescans on every poll
+
+`GET /api/readiness` walked every watched tree synchronously, ~310 ms of blocked
+event loop per call, on a route the dashboard polls. Cached per project for 10
+seconds: ten polls now cost 2 ms in total.
+
+### Changed — operational and ownership gaps closed
+
+- **New runbook section**: "Runtime is listening but answers nothing (100% CPU)"
+  — the failure whose every ordinary check looks healthy. Covers how to
+  recognise it, how to capture a stack sample *before* restarting destroys the
+  evidence, and why `SIGTERM` does nothing (the handler needs the same blocked
+  loop). It also states plainly that detection is manual.
+- **Added `.github/CODEOWNERS`**, which the runbook already referenced as
+  existing.
+- **Node**: `engines` now says `>=20`, and CI moved from the deprecated Node 20
+  runner to 22, which is what development actually runs on.
+- Cleared all remaining lint warnings, so a clean run means something.
+
+### Changed — dependencies
+
+`fs-extra` and `ws` to current patches. `chokidar` stays on 4; the 5.x bump is a
+major on the file watcher and buys only a patch-level fix.
+
 ## [0.4.5] - 2026-08-18
 
 ### Fixed — runtime wedged at 100% CPU on any workspace containing a Flutter project

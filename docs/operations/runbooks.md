@@ -117,6 +117,46 @@ YodaMan also keeps append-only local state, which does **not** self-rotate:
 
 To archive those, stop the runtime, move the files to a dated backup directory, then start the runtime again. Use `DELETE /api/audit` and `DELETE /api/agent/tasks` only when support intentionally wants to clear visible history.
 
+## Runtime is listening but answers nothing (100% CPU)
+
+The hardest failure to recognise, because every ordinary check looks healthy: the
+port is bound, the process is alive, and the startup log ends with
+`startup_health_summary healthy: true`. What gives it away is that requests hang
+rather than fail — `curl` times out instead of being refused — while the process
+sits near 100% CPU.
+
+This happens when a synchronous scan blocks the event loop. One instance ran for
+17 hours undetected in August 2026 (a symlink cycle in a watched Flutter project;
+fixed in 0.4.6). Assume any future variant has the same signature.
+
+1. Confirm the shape rather than guessing:
+   ```bash
+   lsof -nP -iTCP:3090 -sTCP:LISTEN     # bound?
+   ps -o pid,stat,%cpu,etime -p <PID>   # near 100% CPU, long ELAPSED?
+   curl -m 5 http://127.0.0.1:3090/api/health   # hangs, rather than refusing?
+   ```
+   All three together mean a blocked event loop. Any one alone does not.
+2. Capture evidence before killing it — the process is the only record of the
+   cause, and a restart destroys it:
+   ```bash
+   sample <PID> 5 -f /tmp/yodaman-wedge.txt    # macOS
+   ```
+   A stack dominated by `scandir` / `opendir` / `readdir` means a runaway
+   filesystem walk. Attach this to the escalation.
+3. **`SIGTERM` will not work.** The handler needs the same blocked event loop.
+   Use `kill -9 <PID>`. If a plain `kill` appears to do nothing, this is why —
+   it is not a permissions problem.
+4. Restart, then confirm recovery with `curl -m 5 .../api/readiness`. A healthy
+   runtime answers in well under a second.
+5. If it wedges again, identify the workspace: remove watched directories from
+   `config.json` one at a time, restarting between each. Projects containing
+   symlink farms (Flutter `.plugin_symlinks/`, `node_modules/.bin`, pub caches)
+   are the first to suspect. Escalate with the sample from step 2.
+
+**Detection is manual.** There is no alerting; nothing will page anyone when this
+happens. Until that changes, a periodic `curl -m 5 .../api/health` from outside
+the runtime is the only early warning available.
+
 ## Recover from `ctx` CLI failures
 
 1. Run `ctx --version`.

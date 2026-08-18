@@ -1,0 +1,17 @@
+# Ownership of record. Note the limit documented in docs/operations/runbooks.md:
+# GitHub never requests review from the author of a pull request, so with a
+# single maintainer this file documents ownership but cannot enforce review.
+# Closing that gap means adding a second maintainer with publish rights.
+
+*                       @Yoda-Man
+
+# Security boundaries. Changes here warrant the closest reading.
+/backend/infrastructure/OriginPolicy.js   @Yoda-Man
+/backend/infrastructure/ToolBox.js        @Yoda-Man
+/backend/interfaces/                      @Yoda-Man
+
+# Release and supply chain.
+/.github/workflows/                       @Yoda-Man
+/scripts/sync-vendor.js                   @Yoda-Man
+/scripts/audit-vendored.js                @Yoda-Man
+/electron-builder.json                    @Yoda-Man

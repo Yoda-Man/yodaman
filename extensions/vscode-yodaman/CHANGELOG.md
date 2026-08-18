@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.6 - 2026-08-18
+
+- Align extension package version with the YodaMan `0.4.6` release.
+- No extension code changed. The fixes are in the runtime this extension talks
+  to: a CI pipeline that had never passed while concealing a real agent-task
+  regression, a vulnerable vendored bundle that shipped while the audit gate
+  reported clean, and a symlink cycle on the plugin upload path. Agent tasks
+  also start roughly a second faster, which this extension benefits from
+  directly. See the core changelog.
+
 ## 0.4.5 - 2026-08-18
 
 ### Added — the rest of the runtime

@@ -241,7 +241,13 @@ Rules:
         // tokens and eventually large enough to exceed ARG_MAX.
         // Models <14B get a shorter prompt + tighter budget automatically.
         let compact = false;
-        try { compact = dependencyChecker.isWeakModel(await dependencyChecker.detectCtxModel()); } catch (_) {}
+        try {
+            compact = dependencyChecker.isWeakModel(await dependencyChecker.detectCtxModel());
+        } catch (err) {
+            // Never block a task on model detection — but say so, because a
+            // silent failure here downgrades every prompt without explanation.
+            logger.warn('agent_model_detect_failed', { taskId, reason: err?.message });
+        }
         const conversation = new ConversationBuffer({
             system: (compact ? this.getCompactSystemPrompt() : this.getSystemPrompt()) + uploadedFileContext,
             brief,
@@ -569,7 +575,13 @@ function repairJSON(raw) {
     s = s.replace(/,\s*\]/g, ']');
     // Fix single-quoted keys and values (simple case)
     if (!s.includes('"') && s.includes("'")) {
-        try { JSON.parse(s.replace(/'/g, '"')); s = s.replace(/'/g, '"'); } catch (_) {}
+        try {
+            JSON.parse(s.replace(/'/g, '"'));
+            s = s.replace(/'/g, '"');
+        } catch (_) {
+            // The quote swap did not produce valid JSON, so keep the original
+            // and let the caller's final parse check reject it.
+        }
     }
     // Add missing closing brace
     if (s.startsWith('{') && !s.endsWith('}')) {

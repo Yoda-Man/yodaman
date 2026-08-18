@@ -29,13 +29,26 @@ const ASSETS = [
     {
         from: 'node_modules/vis-network/standalone/umd/vis-network.min.js',
         to: 'vis-network.min.js',
-        // Must match the version Graphify references. If Graphify starts
-        // emitting a different version, update both this and the rewrite in
-        // GraphifyService.localizeVendorScripts.
-        version: '9.1.6'
+        // Read from the installed package rather than hardcoded. A literal here
+        // silently went stale on the 9.1.6 -> 10.1.1 upgrade: the manifest kept
+        // reporting 9.1.6 while shipping a different bundle, which is precisely
+        // the record an audit would rely on. The rewrite in
+        // GraphifyService.localizeVendorScripts matches vis-network@[\d.]+, so
+        // it does not need to know the version.
+        packageName: 'vis-network'
     },
     { from: 'node_modules/vis-network/LICENSE-APACHE-2.0', to: 'vis-network.LICENSE.txt' }
 ];
+
+/** The version actually installed, so the manifest cannot drift from the bytes. */
+function resolveVersion(asset) {
+    if (!asset.packageName) return null;
+    try {
+        return require(`${asset.packageName}/package.json`).version;
+    } catch (_err) {
+        return null;
+    }
+}
 
 function main() {
     fs.mkdirSync(vendorDir, { recursive: true });
@@ -57,7 +70,7 @@ function main() {
         manifest.push({
             file: asset.to,
             source: asset.from,
-            version: asset.version || null,
+            version: resolveVersion(asset) || null,
             bytes: bytes.length,
             sha256: sha
         });
