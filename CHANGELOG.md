@@ -23,8 +23,14 @@ hiding it.
 - The list comes from `GET /api/plugins`, never a hardcoded array — plugins can
   be uploaded or removed while the app is running, and a menu offering one that
   is not loaded is a support ticket.
-- Plugins whose permissions allow a change (`agent:invoke`, `audit:write`,
-  `task:create`, and similar) are marked "can modify" in the list.
+- Plugins carry a short, literal statement of what their permissions allow —
+  "writes files", "runs commands", "starts agent tasks" — mapped explicitly
+  against the permission allowlist. The first attempt pattern-matched the
+  permission strings and called anything containing "write" able to modify your
+  code, which flagged `audit:write` (the audit log, nothing else) and so
+  described a VR graph viewer as capable of changing files. A label that
+  overstates is worse than none: it teaches people to ignore the one that
+  matters.
 - Nothing here bypasses the approval gate. A plugin that writes still stops for
   the same diff, dependents and test-coverage review as any agent write.
 

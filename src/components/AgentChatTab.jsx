@@ -47,10 +47,32 @@ function pluginInvocation(plugin) {
   return `Run ${plugin?.name || 'plugin'}`
 }
 
-/** Plugins that can change something deserve a visible marker in the list. */
-function pluginWrites(plugin) {
+/**
+ * A short, literal statement of what a plugin's permissions let it do, or null
+ * when there is nothing worth warning about.
+ *
+ * Mapped explicitly against PLUGIN_PERMISSION_ALLOWLIST in ToolBox.js, which is
+ * a closed set — an earlier version pattern-matched the permission strings and
+ * labelled anything containing "write" as able to modify your code. That flagged
+ * `audit:write`, which writes the audit log and nothing else, and so described a
+ * VR graph viewer as capable of changing files. A label that overstates is worse
+ * than no label: it trains people to ignore the one that matters.
+ *
+ * Ordered by consequence — the strongest capability wins.
+ */
+const PLUGIN_CAPABILITY_LABELS = [
+  ['unrestricted', 'unrestricted'],
+  ['write', 'writes files'],
+  ['command', 'runs commands'],
+  ['agent:invoke', 'starts agent tasks'],
+  ['task:create', 'starts agent tasks'],
+  ['network', 'network access']
+]
+
+function pluginCapability(plugin) {
   const permissions = Array.isArray(plugin?.permissions) ? plugin.permissions : []
-  return permissions.some(permission => /write|create|invoke|command|exec|delete/i.test(permission))
+  const match = PLUGIN_CAPABILITY_LABELS.find(([permission]) => permissions.includes(permission))
+  return match ? match[1] : null
 }
 
 function normalizeRole(role) {
@@ -1215,7 +1237,7 @@ export default function AgentChatTab({ selectedProject }) {
                 <optgroup label="Plugins — inserts a command, does not run it">
                   {plugins.map(plugin => (
                     <option key={plugin.name} value={`plugin:${plugin.name}`}>
-                      {`🔌 ${plugin.name}${pluginWrites(plugin) ? ' · can modify' : ''}`}
+                      {`🔌 ${plugin.name}${pluginCapability(plugin) ? ` · ${pluginCapability(plugin)}` : ''}`}
                     </option>
                   ))}
                 </optgroup>
