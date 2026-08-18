@@ -24,7 +24,16 @@ const API_PATHS = {
     tasks: '/api/agent/tasks',
     pendingApprovals: '/api/agent/pending-approvals',
     policy: '/api/policy',
-    audit: '/api/audit'
+    audit: '/api/audit',
+    health: '/api/health',
+    readiness: '/api/readiness',
+    plugins: '/api/plugins',
+    sessions: '/api/sessions',
+    stardustBoard: '/api/stardust/board',
+    stardustDrift: '/api/stardust/drift',
+    stardustCompose: '/api/stardust/compose',
+    stardustContext: '/api/stardust/context',
+    stardustDiagnose: '/api/stardust/diagnose'
 };
 
 function normalizeBaseUrl(runtimeUrl) {
@@ -227,6 +236,59 @@ function createYodaManClient(runtimeUrl, options = {}) {
             const params = new URLSearchParams({ path, limit: String(limit) });
             return request(`/api/graphify/map?${params.toString()}`);
         },
+        // ── Runtime health ──────────────────────────────────────────────
+        health() {
+            return request(API_PATHS.health);
+        },
+        readiness(projectId) {
+            const params = projectId ? `?${new URLSearchParams({ projectId }).toString()}` : '';
+            return request(`${API_PATHS.readiness}${params}`);
+        },
+        plugins() {
+            return request(API_PATHS.plugins);
+        },
+        sessions() {
+            return request(API_PATHS.sessions);
+        },
+
+        // ── Stardust ────────────────────────────────────────────────────
+        // The desktop dashboard's read surface. Every one of these is a GET,
+        // so a phone can mirror the board without being able to mutate specs.
+        // These routes key off `projectRoot`, not `path` — the rest of the API
+        // uses `path`, so the mismatch is easy to get wrong and silently falls
+        // back to the runtime's process.cwd() rather than erroring.
+        stardustBoard(projectRoot) {
+            const params = projectRoot ? `?${new URLSearchParams({ projectRoot }).toString()}` : '';
+            return request(`${API_PATHS.stardustBoard}${params}`);
+        },
+        stardustDrift(projectRoot, minDependents = 2) {
+            const params = new URLSearchParams({
+                ...(projectRoot ? { projectRoot } : {}),
+                minDependents: String(minDependents)
+            });
+            return request(`${API_PATHS.stardustDrift}?${params.toString()}`);
+        },
+        stardustCompose(projectRoot, file, depth = 2, limit = 5) {
+            const params = new URLSearchParams({
+                ...(projectRoot ? { projectRoot } : {}),
+                ...(file ? { file } : {}),
+                depth: String(depth),
+                limit: String(limit)
+            });
+            return request(`${API_PATHS.stardustCompose}?${params.toString()}`);
+        },
+        stardustContext(projectRoot, files = []) {
+            const params = new URLSearchParams({
+                ...(projectRoot ? { projectRoot } : {}),
+                ...(files.length ? { files: files.join(',') } : {})
+            });
+            return request(`${API_PATHS.stardustContext}?${params.toString()}`);
+        },
+        stardustDiagnose(projectRoot) {
+            const params = projectRoot ? `?${new URLSearchParams({ projectRoot }).toString()}` : '';
+            return request(`${API_PATHS.stardustDiagnose}${params}`);
+        },
+
         clearTasks() {
             return request(API_PATHS.tasks, {
                 method: 'DELETE'
