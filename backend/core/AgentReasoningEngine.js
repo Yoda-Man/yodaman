@@ -60,6 +60,8 @@ ${defaultCodingSkill}
 - Use tools to gather information or make changes. To call one, write a line of
   literal text in exactly this form — do not use native function calling:
 TOOL_CALL {"name": "toolName", "parameters": { "param1": "value1" }}
+- If the user names a tool to run ("Run CodeTrooper"), call it immediately as
+  your entire reply, using the active workspace path given below.
 - After a tool call the system provides the result. Continue until the task is done, then give a final summary.
 - Be concise and precise.
 
@@ -99,6 +101,8 @@ ${toolBox.getBriefToolDefinitions()}
 Rules:
 - Read the Stardust Brief first — it has graph structure, specs, and per-file risks.
 - Call (literal text, never native function calling): TOOL_CALL {"name":"tool","parameters":{}}
+- If the user names a tool to run ("Run CodeTrooper"), call it immediately as
+  your entire reply, using the active workspace path given below.
 - Before editing: impactOf(file). No tests covering → say so.
 - Multi-file features: specPropose → specValidate → specArchive.
 - Check specDrift first to avoid re-implementing documented work.
@@ -244,8 +248,17 @@ Rules:
             // silent failure here downgrades every prompt without explanation.
             logger.warn('agent_model_detect_failed', { taskId, reason: err?.message });
         }
+        // Several plugins declare workspacePath as a required ABSOLUTE path, and
+        // neither the system prompt nor the Stardust Brief ever stated it — the
+        // brief describes files workspace-relative. Asked to "Run CodeTrooper"
+        // the agent correctly replied that it needed an absolute path nobody had
+        // given it, and never called the tool. Say it plainly.
+        const workspaceContext = metadata.projectId
+            ? `\n\nActive workspace (absolute path — use this for any tool needing workspacePath, projectPath or a project root): ${metadata.projectId}`
+            : '';
+
         const conversation = new ConversationBuffer({
-            system: (compact ? this.getCompactSystemPrompt() : this.getSystemPrompt()) + uploadedFileContext,
+            system: (compact ? this.getCompactSystemPrompt() : this.getSystemPrompt()) + workspaceContext + uploadedFileContext,
             brief,
             task,
         });
@@ -472,6 +485,21 @@ Rules:
                     }
                     // ---------------------------
 
+
+                    // A small model that has been told the workspace path still
+                    // drops it sometimes. The active project is not ambiguous —
+                    // the user selected it — so supply it rather than failing the
+                    // call and burning an iteration on a question we can answer.
+                    if (metadata.projectId && toolCall.parameters && typeof toolCall.parameters === 'object') {
+                        for (const key of ['workspacePath', 'projectPath', 'projectRoot']) {
+                            const declared = toolBox.plugins?.get?.(toolCall.name)?.parameters?.[key];
+                            const missing = toolCall.parameters[key] === undefined || toolCall.parameters[key] === '';
+                            if (declared && missing) {
+                                toolCall.parameters[key] = metadata.projectId;
+                                logger.info('agent_workspace_param_filled', { taskId, tool: toolCall.name, key });
+                            }
+                        }
+                    }
 
                     const startEvent = { type: 'tool_start', taskId, tool: toolCall.name, params: toolCall.parameters };
                     this.recordTaskEvent(taskId, startEvent);

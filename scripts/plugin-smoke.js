@@ -72,6 +72,15 @@ async function runTask(task) {
         });
         body = await response.text();
     } catch (err) {
+        // Distinguish "the runtime went away" from "this plugin failed". A dead
+        // runtime makes every remaining plugin look broken, which sends whoever
+        // reads this output hunting through plugin code for a fault that is not
+        // there. Observed for real: a second gate instance killed the shared
+        // runtime mid-run and five plugins were reported failing.
+        const stillUp = await reachable(`${RUNTIME_URL}/api/health`, 3000);
+        if (!stillUp) {
+            return { ok: false, fatal: true, reason: `runtime became unreachable (${err.message})` };
+        }
         return { ok: false, reason: `request failed: ${err.message}` };
     }
 
@@ -93,6 +102,10 @@ async function main() {
 
     let child = null;
     const alreadyUp = await reachable(`${RUNTIME_URL}/api/health`, 2000);
+    if (alreadyUp) {
+        log(`Using the runtime already listening at ${RUNTIME_URL}.`);
+        log('If another gate run owns it, results will be unreliable — run one at a time.');
+    }
     if (!alreadyUp) {
         log(`Starting a runtime for the gate at ${RUNTIME_URL}...`);
         child = spawn(process.execPath, [path.resolve(__dirname, '..', 'server.js')], {
@@ -120,6 +133,11 @@ async function main() {
             const result = await runTask(phrase);
             log(result.ok ? `ok (${result.reason})` : `FAILED — ${result.reason}`);
             if (!result.ok) failures.push({ name: plugin.name, phrase, reason: result.reason });
+            if (result.fatal) {
+                log('\nAborting: the runtime is gone, so the remaining plugins cannot be judged.');
+                log('Check for another runtime on this port, then re-run.');
+                break;
+            }
         }
 
         if (failures.length) {
