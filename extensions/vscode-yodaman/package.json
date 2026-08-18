@@ -31,7 +31,14 @@
     "onCommand:yodaman.openLogs",
     "onCommand:yodaman.clearTasks",
     "onCommand:yodaman.clearAudit",
-    "onView:yodaman.sidebar"
+    "onView:yodaman.sidebar",
+    "onCommand:yodaman.impactForFile",
+    "onCommand:yodaman.stardustBoard",
+    "onCommand:yodaman.showDrift",
+    "onCommand:yodaman.clearDrift",
+    "onCommand:yodaman.runtimeDiagnostics",
+    "onCommand:yodaman.showApprovals",
+    "onCommand:yodaman.listPlugins"
   ],
   "main": "./src/extension.js",
   "contributes": {
@@ -98,6 +105,35 @@
       {
         "command": "yodaman.clearAudit",
         "title": "YodaMan: Clear Audit Logs"
+      },
+      {
+        "command": "yodaman.impactForFile",
+        "title": "YodaMan: Blast Radius For This File",
+        "icon": "$(radio-tower)"
+      },
+      {
+        "command": "yodaman.stardustBoard",
+        "title": "YodaMan: Stardust Change Board"
+      },
+      {
+        "command": "yodaman.showDrift",
+        "title": "YodaMan: Check Spec Drift"
+      },
+      {
+        "command": "yodaman.clearDrift",
+        "title": "YodaMan: Clear Spec Drift Markers"
+      },
+      {
+        "command": "yodaman.runtimeDiagnostics",
+        "title": "YodaMan: Runtime Diagnostics"
+      },
+      {
+        "command": "yodaman.showApprovals",
+        "title": "YodaMan: Pending Approvals"
+      },
+      {
+        "command": "yodaman.listPlugins",
+        "title": "YodaMan: List Plugins"
       }
     ],
     "viewsContainers": {
@@ -154,6 +190,27 @@
         },
         {
           "command": "yodaman.clearAudit"
+        },
+        {
+          "command": "yodaman.impactForFile"
+        },
+        {
+          "command": "yodaman.stardustBoard"
+        },
+        {
+          "command": "yodaman.showDrift"
+        },
+        {
+          "command": "yodaman.clearDrift"
+        },
+        {
+          "command": "yodaman.runtimeDiagnostics"
+        },
+        {
+          "command": "yodaman.showApprovals"
+        },
+        {
+          "command": "yodaman.listPlugins"
         }
       ],
       "view/title": [
@@ -168,6 +225,19 @@
           "command": "yodaman.checkStatus",
           "when": "view == yodaman.sidebar && viewItem == yodamanAction",
           "group": "inline"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "yodaman.impactForFile",
+          "group": "navigation@9",
+          "when": "editorTextFocus"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "yodaman.impactForFile",
+          "group": "navigation@9"
         }
       ]
     }

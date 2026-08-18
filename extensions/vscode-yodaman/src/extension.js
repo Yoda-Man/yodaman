@@ -14,8 +14,10 @@
  *
  */
 const vscode = require('vscode');
+const path = require('path');
 // Access the client singleton
 const { createYodaManClient } = require('../../../shared/yodamanClient');
+const coreSurface = require('./coreSurface');
 
 let output;
 let statusBar;
@@ -23,7 +25,6 @@ let sidebarProvider;
 let activeTaskId = null;
 let runtimeTerminal = null;
 let runtimeAvailable = false;
-let storedMode = 'code'; // legacy — mode toggle removed in 0.4.1
 let lastStatus = null;
 let extensionContext = null;
 
@@ -38,23 +39,6 @@ function getRuntimeCommand() {
 function getWorkspaceProjectId() {
     const folder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
     return folder ? folder.uri.fsPath : undefined;
-}
-
-async function switchMode() {
-    const selection = await vscode.window.showQuickPick([
-        { label: 'Code', value: 'code', description: 'Answer from code' },
-        { label: 'Documentation', value: 'doc', description: 'Answer from docs' }
-    ], {
-        placeHolder: 'Select query mode',
-        canPickMany: false,
-        ignoreFocusOut: true
-    });
-    if (!selection) return;
-    const mode = selection.value;
-    storedMode = mode;
-    await extensionContext.globalState.update('yodamanMode', mode);
-    if (!await ensureRuntimeAvailable()) return;
-    vscode.window.showInformationMessage(`YodaMan mode set to ${mode}`);
 }
 
 function getClient() { return createYodaManClient(getRuntimeUrl()); }
@@ -138,22 +122,8 @@ async function askWorkspace() {
     if (!question) return;
     if (!await ensureRuntimeAvailable()) return;
 
-    // Prompt user to select mode if not already set
-    const mode = await vscode.window.showQuickPick([
-        { label: 'Code', value: 'code', description: 'Answer from code context' },
-        { label: 'Documentation', value: 'doc', description: 'Answer from docs and comments' }
-    ], {
-        placeHolder: 'Select query mode',
-        canPickMany: false,
-        ignoreFocusOut: true
-    }).then(item => item ? item.value : storedMode);
-
-    // Persist selected mode
-    storedMode = mode;
-    extensionContext.globalState.update('yodamanMode', mode);
-
     output.show(true);
-    output.appendLine(`> ${question} (mode: ${mode})`);
+    output.appendLine(`> ${question}`);
 
     try {
         const result = await getClient().ask(question, getWorkspaceProjectId(), mode);
@@ -171,11 +141,6 @@ async function runAgentTask() {
     });
     if (!task) return;
     if (!await ensureRuntimeAvailable()) return;
-
-    // Use stored mode for agent tasks as well
-    const mode = storedMode;
-    if (mode) {
-    }
 
     output.show(true);
     output.appendLine(`\n[task] ${task}`);
@@ -244,9 +209,51 @@ async function searchWorkspace() {
     output.appendLine(`\n[search] ${query}`);
 
     try {
-        const results = await getClient().search(query, getWorkspaceProjectId());
+        const projectId = getWorkspaceProjectId();
+        const results = await getClient().search(query, projectId);
+        const hits = Array.isArray(results) ? results
+            : Array.isArray(results.results) ? results.results
+                : Array.isArray(results.hits) ? results.hits : [];
 
         output.appendLine(JSON.stringify(results, null, 2));
+
+        if (!hits.length) {
+            vscode.window.showInformationMessage(`YodaMan: no matches for "${query}".`);
+            return;
+        }
+
+        // Ranked results are only useful in an editor if they open the file.
+        // The score breakdown rides along as the description so the ranking
+        // stays inspectable — the same four signals the Trace tab shows.
+        const picked = await vscode.window.showQuickPick(
+            hits.map((hit) => {
+                const file = hit.file || hit.path || '';
+                return {
+                    label: file ? file.split('/').filter(Boolean).pop() : 'result',
+                    description: [
+                        hit.blended !== undefined ? `score ${Number(hit.blended).toFixed(3)}` : null,
+                        hit.specFlag && hit.specFlag.covered ? 'spec' : null,
+                        hit._source || null
+                    ].filter(Boolean).join(' · '),
+                    detail: file,
+                    file
+                };
+            }),
+            { title: `YodaMan search — ${hits.length} result(s)`, placeHolder: query, matchOnDetail: true }
+        );
+
+        if (picked && picked.file) {
+            const target = path.isAbsolute(picked.file) || !projectId
+                ? picked.file
+                : path.join(projectId, picked.file);
+            try {
+                const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
+                await vscode.window.showTextDocument(doc, { preview: true });
+            } catch (openError) {
+                output.appendLine(`[search] could not open ${target}: ${openError.message}`);
+                vscode.window.showWarningMessage(`YodaMan could not open ${picked.file}.`);
+            }
+        }
     } catch (error) {
         output.appendLine(`[error] ${error.message}`);
         vscode.window.showErrorMessage(`YodaMan search failed: ${error.message}`);
@@ -540,6 +547,7 @@ class YodaManSidebarProvider {
             return [
                 new SidebarItem('Status & Info', '', 'info', 'category', vscode.TreeItemCollapsibleState.Expanded, 'status'),
                 new SidebarItem('Actions', '', 'tools', 'category', vscode.TreeItemCollapsibleState.Expanded, 'actions'),
+                new SidebarItem('Pillar & Stardust', '', 'symbol-structure', 'category', vscode.TreeItemCollapsibleState.Expanded, 'pillar'),
                 new SidebarItem('Recent Tasks', '', 'history', 'category', vscode.TreeItemCollapsibleState.Expanded, 'tasks')
             ];
         }
@@ -585,6 +593,19 @@ class YodaManSidebarProvider {
                 SidebarItem.action('Cancel Active Task', 'circle-slash', 'yodaman.cancelAgentTask'),
                 SidebarItem.action('Clear Task History', 'trash', 'yodaman.clearTasks'),
                 SidebarItem.action('Clear Audit Logs', 'shield', 'yodaman.clearAudit')
+            ];
+        }
+
+        // The three-tool pillar, reachable by click rather than only from the
+        // palette. These are the reads the desktop Stardust tabs perform.
+        if (item.category === 'pillar') {
+            return [
+                SidebarItem.action('Blast Radius For This File', 'radio-tower', 'yodaman.impactForFile'),
+                SidebarItem.action('Stardust Change Board', 'layout', 'yodaman.stardustBoard'),
+                SidebarItem.action('Check Spec Drift', 'git-compare', 'yodaman.showDrift'),
+                SidebarItem.action('Pending Approvals', 'shield', 'yodaman.showApprovals'),
+                SidebarItem.action('Runtime Diagnostics', 'pulse', 'yodaman.runtimeDiagnostics'),
+                SidebarItem.action('List Plugins', 'extensions', 'yodaman.listPlugins')
             ];
         }
 
@@ -656,14 +677,17 @@ class SidebarItem extends vscode.TreeItem {
 
 function activate(context) {
     extensionContext = context;
-    // Retrieve stored mode or default to 'code'
-    storedMode = context.globalState.get('yodamanMode') || 'code';
     output = vscode.window.createOutputChannel('YodaMan');
     sidebarProvider = new YodaManSidebarProvider();
     statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     statusBar.command = 'yodaman.checkStatus';
     statusBar.text = '$(sync~spin) YodaMan';
     statusBar.show();
+
+    // The full-core commands take the same helpers extension.js uses, so both
+    // halves share one client, one output channel and one availability check.
+    const surfaceDeps = { getClient, getWorkspaceProjectId, ensureRuntimeAvailable, output };
+    coreSurface.init(context);
 
     context.subscriptions.push(
         output,
@@ -682,11 +706,16 @@ function activate(context) {
         vscode.commands.registerCommand('yodaman.viewTaskDetails', viewTaskDetails),
         vscode.commands.registerCommand('yodaman.clearTasks', clearTasks),
         vscode.commands.registerCommand('yodaman.clearAudit', clearAudit),
-        // New command to switch query mode
-        vscode.commands.registerCommand('yodaman.switchMode', switchMode)
-    );
 
-    // Store mode in global state for persistence (already handled on changes)
+        // ── Full core surface ────────────────────────────────────────────
+        vscode.commands.registerCommand('yodaman.impactForFile', () => coreSurface.impactForActiveFile(surfaceDeps)),
+        vscode.commands.registerCommand('yodaman.stardustBoard', () => coreSurface.showStardustBoard(surfaceDeps)),
+        vscode.commands.registerCommand('yodaman.showDrift', () => coreSurface.publishDrift(surfaceDeps)),
+        vscode.commands.registerCommand('yodaman.clearDrift', () => coreSurface.clearDrift()),
+        vscode.commands.registerCommand('yodaman.runtimeDiagnostics', () => coreSurface.runtimeDiagnostics(surfaceDeps)),
+        vscode.commands.registerCommand('yodaman.showApprovals', () => coreSurface.showPendingApprovals(surfaceDeps)),
+        vscode.commands.registerCommand('yodaman.listPlugins', () => coreSurface.listPlugins(surfaceDeps))
+    );
 
     contextStorageUri.value = context.globalStorageUri;
     checkStatus(false);
