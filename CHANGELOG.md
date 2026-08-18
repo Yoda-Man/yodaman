@@ -2,6 +2,41 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.4.5] - 2026-08-18
+
+### Fixed — runtime wedged at 100% CPU on any workspace containing a Flutter project
+
+The desktop app opened to an empty diagnostics window. The runtime logged a clean startup — seven projects, `startup_health_summary healthy: true` — and then answered nothing. It held port 3090, accepted TCP connections, and never replied, so relaunching could not take the port either. One such process had been spinning for 17 hours and ignored `SIGTERM`.
+
+- **Root cause**: `latestSourceMtime()` in `GraphifyService.js` recursed using `fs.statSync()`, which resolves a symlink to its target. A symlinked directory therefore reported `isDirectory() === true` and the walk followed it. Flutter writes `.plugin_symlinks/` and `.symlinks/` entries that point back into an ancestor directory, so any watched project containing a Flutter app produced an infinite descent. There was no depth cap and no cycle detection.
+- **Why it took the whole runtime down**: the walk is synchronous. A cycle blocks the event loop outright, which is why the process could bind and accept but never respond, and why `SIGTERM` did nothing — the signal handler needs the same blocked loop. `SIGKILL` was the only way out.
+- **The trigger path**: Electron's startup poll calls `GET /api/readiness`, which reaches `WorkspaceReadiness.js` → `graphifyService.freshness()` without `scanSources: false`. Six of the eight `freshness()` call sites already passed that flag, so the cost of this scan had been worked around piecemeal rather than fixed at the source.
+- **Fix**: skip symlinks using the dirent's `isSymbolicLink()`, which describes the link rather than its target, and cap recursion depth as a backstop for any cycle that check would miss. Fixing the walker covers every caller at once.
+- **Measured**: a watched project reached 121,674 directories at depth 84 before a probe gave up, the path repeating `.plugin_symlinks/atomic_webview/example/linux/flutter/ephemeral/`. The same project now resolves in 150 ms, and `/api/readiness`, `/api/health`, `/api/status` and `/api/projects` all answer in under a second with CPU returning to idle.
+
+### Fixed — website claimed four things the code does not do
+
+Every claim on the site was checked against the code. Four were wrong:
+
+- **Search ranking**: the Trace section advertised three signals blended `0.6 + 0.25 + 0.15`. `GraphRanker.DEFAULT_WEIGHTS` is four signals at `0.50 / 0.20 / 0.15 / 0.15` — `specCoverage` was missing from the page entirely.
+- **Impact Analysis**: advertised a hop depth of 1–5; `ImpactAnalysisTab.jsx` offers 1–4.
+- **Stardust**: described as "four cross-tool views"; it ships eight tabs.
+- **Mobile**: the docs page promised push notifications. The Expo app contains no notification code at all.
+
+### Fixed — the docs page was unreachable on mobile
+
+`styles.css` hides the header nav below 820px and reveals it only via `.nav-open`, but `docs.html` shipped without a `.nav-toggle` button and without the toggle script that `index.html` has. On any phone the navigation was `display: none` with nothing able to open it. The button and script are now present on both pages.
+
+### Changed — Windows artifacts are no longer published from a macOS build
+
+`release.yml` documents that a macOS-hosted NSIS build can die mid-package and leave a truncated stub `.exe` that looks plausible and does not install, and the site states that no Windows build ships from here. `sync-website-downloads.js` was nonetheless copying one into `website/downloads/`, where it is fetchable by URL whether or not a card links to it. The sync step now skips Windows artifacts unless it is running on a Windows host, and says why.
+
+### Changed — documentation reframed around the three-tool pillar
+
+- The README opening now states what YodaMan is before describing the architecture, and no longer describes Ollama as optional — the same file lists it under Prerequisites and as a required dependency of `yodaman doctor`.
+- The legacy "Core Pillars" section (four principles already covered by the "Why YodaMan" bullets) was removed from both the README and the site, which had drifted out of agreement.
+- `docs.html` gained the three-tool pillar and Stardust sections it never had, and its API reference now covers the Stardust routes, search, health, readiness, plugins, and the WebSocket feed, with paths and methods checked against `backend/`.
+
 ## [0.4.4] - 2026-08-04
 
 ### Fixed — black window on launch

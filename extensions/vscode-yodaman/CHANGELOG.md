@@ -1,3 +1,15 @@
+# Changelog
+
+## 0.4.5 - 2026-08-18
+
+- Align extension package version with the YodaMan `0.4.5` release.
+- No extension code changed in this release. The fixes in `0.4.5` are in the runtime the
+  extension talks to — most importantly a workspace scan that could wedge the runtime at
+  100% CPU, leaving every request from this extension to hang. See the core changelog.
+
+_Entries for 0.4.1 through 0.4.4 were never recorded here; the core `CHANGELOG.md` covers
+those releases._
+
 ## 0.4.0 - 2026-08-04
 
 - Synchronized with core v0.4.0
@@ -5,8 +17,6 @@
 ## 0.4.0 - 2026-08-03
 
 - Synchronized with core v0.4.0
-
-# Changelog
 
 ## 0.3.8
 
