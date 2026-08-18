@@ -41,8 +41,19 @@ function pluginInvocation(plugin) {
   const description = plugin?.description || ''
   const hintIndex = description.indexOf('Chat usage:')
   if (hintIndex !== -1) {
-    const quoted = description.slice(hintIndex).match(/"([^"]+)"/)
-    if (quoted && quoted[1].trim()) return quoted[1].trim()
+    const quoted = [...description.slice(hintIndex).matchAll(/"([^"]+)"/g)]
+      .map(match => match[1].trim())
+      .filter(Boolean)
+
+    // Prefer the explicit "Run <plugin>" phrasing over the conversational one.
+    // Picking the first hint inserted "How many lines of code?" for CodeTrooper,
+    // and the agent went looking for documentation about code size instead of
+    // calling the tool. The conversational phrasings exist for people who do not
+    // know the plugin exists — but selecting from this menu is already that
+    // discovery, and by then what you want is the invocation that lands.
+    const explicit = quoted.find(phrase => /^run\b/i.test(phrase))
+    if (explicit) return explicit
+    if (quoted.length) return quoted[0]
   }
   return `Run ${plugin?.name || 'plugin'}`
 }
