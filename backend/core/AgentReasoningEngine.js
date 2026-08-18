@@ -57,13 +57,9 @@ ${defaultCodingSkill}
 ### Process:
 - Read the Stardust Brief below the system prompt first — it contains the workspace's structural state,
   OpenSpec intent, and per-file risk analysis. Do not re-derive what it already tells you.
-- Use tools to gather information or make changes. To call one:
-<tool_call>
-{
-  "name": "toolName",
-  "parameters": { "param1": "value1" }
-}
-</tool_call>
+- Use tools to gather information or make changes. To call one, write a line of
+  literal text in exactly this form — do not use native function calling:
+TOOL_CALL {"name": "toolName", "parameters": { "param1": "value1" }}
 - After a tool call the system provides the result. Continue until the task is done, then give a final summary.
 - Be concise and precise.
 
@@ -102,7 +98,7 @@ ${toolBox.getBriefToolDefinitions()}
 
 Rules:
 - Read the Stardust Brief first — it has graph structure, specs, and per-file risks.
-- Call: <tool_call>{"name":"tool","parameters":{}}</tool_call>
+- Call (literal text, never native function calling): TOOL_CALL {"name":"tool","parameters":{}}
 - Before editing: impactOf(file). No tests covering → say so.
 - Multi-file features: specPropose → specValidate → specArchive.
 - Check specDrift first to avoid re-implementing documented work.
@@ -343,14 +339,27 @@ Rules:
                     chars: response.length,
                     hint: 'ctx returned citations with no generated text. Retrying with an explicit instruction.',
                 });
-                conversation.addNote('Your previous response contained only citations and no answer. Reply with exactly ONE of: a direct answer in prose, or a single <tool_call>{"name":"readFile","parameters":{"filePath":"path/to/file"}}</tool_call> block.');
+                conversation.addNote('Your previous response contained only citations and no answer. Reply with exactly ONE of: a direct answer in prose, or a single TOOL_CALL {"name":"readFile","parameters":{"filePath":"path/to/file"}} line.');
                 if (iteration < this.maxIterations) continue;
 
                 finalAnswer = 'Context Expert returned source citations but no generated answer, on every attempt. Check that the configured model is reachable (`yodaman doctor`) and that the prompt is within its context window. For reliable tool-calling, use a model with ≥14B parameters (e.g. qwen2.5:14b, codestral:22b, deepseek-coder-v2). Current model: see Health dashboard.';
                 break;
             }
 
-            const toolCallMatch = response.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+            // TOOL_CALL is the wire format; the angle-bracket form is still parsed
+            // because a model may emit it from habit.
+            //
+            // The delimiter is load-bearing, not cosmetic. Prompting qwen3.5:9b
+            // with the literal string "<tool_call>" flips it into Ollama's native
+            // function-calling mode, and ctx 1.4.0 mishandles the result: it puts
+            // an undefined into the follow-up messages array, its Ollama provider
+            // dereferences .content on it (message-mapper.ts:46), and the
+            // resulting TypeError is reported as "Failed to connect to Ollama
+            // server" because errors.ts:118 classifies every TypeError as a
+            // connection fault. Every agent task needing a tool died there. The
+            // plain-text delimiter never triggers native mode, so the loop works.
+            const toolCallMatch = response.match(/TOOL_CALL\s*(\{[\s\S]*?\})\s*(?:\n|$)/)
+                || response.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
 
             if (toolCallMatch) {
                 try {

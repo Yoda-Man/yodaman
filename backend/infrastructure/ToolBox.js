@@ -804,7 +804,25 @@ class ToolBox {
     }
 
     resolveAllowedPath(inputPath) {
-        const resolvedPath = path.resolve(inputPath || '.');
+        let resolvedPath = path.resolve(inputPath || '.');
+
+        // A relative path from the agent is relative to a *workspace*, not to
+        // wherever the runtime happened to be started. The Stardust Brief and the
+        // knowledge graph both describe files as workspace-relative, so the agent
+        // asks for "core/package.json" and path.resolve() silently anchored that
+        // to process.cwd() — producing .../core/core/package.json and a
+        // "File not found" for a file that plainly exists. Try each allowed root
+        // before giving up. Containment is still enforced below, so this widens
+        // where we look, never what is permitted.
+        if (inputPath && !path.isAbsolute(inputPath) && !fs.existsSync(resolvedPath)) {
+            for (const root of this.getAllowedRoots()) {
+                const candidate = path.resolve(root, inputPath);
+                if (fs.existsSync(candidate)) {
+                    resolvedPath = candidate;
+                    break;
+                }
+            }
+        }
 
         // Resolve symlinks BEFORE testing containment. path.resolve() is purely
         // lexical, so a symlink inside a watched directory pointing at
