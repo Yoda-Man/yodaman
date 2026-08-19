@@ -45,7 +45,9 @@
     "audit:vendored": "node scripts/audit-vendored.js",
     "test:plugins": "node scripts/plugin-smoke.js",
     "release:verify": "npm run lint && npm test && npm run audit:prod && npm run audit:vendored && npm run release:smoke && npm run test:plugins && npm run test:approval",
-    "test:approval": "node scripts/approval-smoke.js"
+    "test:approval": "node scripts/approval-smoke.js",
+    "health:watch": "node scripts/health-watchdog.js",
+    "health:check": "node scripts/health-watchdog.js --once"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
