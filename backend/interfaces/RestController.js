@@ -2,7 +2,6 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const crypto = require('crypto');
 const { execFile } = require('child_process');
 
 // Infrastructure Layer
@@ -15,6 +14,10 @@ const auditLog = require('../infrastructure/AuditLog');
 const pairingService = require('../infrastructure/PairingService');
 const originPolicy = require('../infrastructure/OriginPolicy');
 const logger = require('../infrastructure/Logger');
+const {
+    getConfigPath,
+    validateIndexableDirectory
+} = require('./support/workspaces');
 const graphifyService = require('../infrastructure/GraphifyService');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
 const ollamaConfig = require('../infrastructure/OllamaConfig');
@@ -28,7 +31,6 @@ const queueService = require('../core/QueueService');
 const agentEngine = require('../core/AgentReasoningEngine');
 
 const router = express.Router();
-const DEFAULT_CONFIG_PATH = path.join(__dirname, '../../config.json');
 const PLUGINS_DIR = path.resolve(__dirname, '../../plugins');
 const DEFAULT_PLUGINS = new Set(['graphify', 'Grand-Inquisitor', 'CodeTrooper', 'Droid-Sweep', 'lightsaber']);
 
@@ -54,90 +56,11 @@ const upload = multer({ storage });
  */
 
 let config = { watchedDirectories: [], removedDirectories: [] };
-const graphifyBuildJobs = new Map();
-
-function getConfigPath() {
-    return process.env.YODAMAN_CONFIG_PATH || DEFAULT_CONFIG_PATH;
-}
 
 function jsonError(res, status, message, code) {
     return res.status(status).json({ error: message, code });
 }
 
-function setGraphifyArtifactHeaders(res) {
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-    res.setHeader('Referrer-Policy', 'no-referrer');
-    // vis-network is served from /vendor (see GraphifyService.localizeVendorScripts),
-    // so this no longer needs to allow unpkg.com or 'unsafe-eval'.
-    // 'unsafe-inline' for scripts remains required: Graphify writes the graph
-    // data and init call as inline <script> blocks we do not control, and they
-    // cannot be nonced without rewriting third-party output.
-    res.setHeader(
-        'Content-Security-Policy',
-        "default-src 'self' data: blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'"
-    );
-}
-
-function publicBuildJob(job) {
-    if (!job) return null;
-    return {
-        id: job.id,
-        path: job.path,
-        state: job.state,
-        message: job.message,
-        startedAt: job.startedAt,
-        completedAt: job.completedAt,
-        durationMs: job.durationMs,
-        error: job.error
-    };
-}
-
-function latestBuildJobForPath(dirPath) {
-    return Array.from(graphifyBuildJobs.values())
-        .filter(job => job.path === dirPath)
-        .sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')))[0] || null;
-}
-
-function startGraphifyBuildJob(dirPath) {
-    const runningJob = Array.from(graphifyBuildJobs.values())
-        .find(job => job.path === dirPath && (job.state === 'queued' || job.state === 'running'));
-    if (runningJob) return runningJob;
-
-    const job = {
-        id: crypto.randomUUID(),
-        path: dirPath,
-        state: 'queued',
-        message: 'Graphify build queued',
-        startedAt: new Date().toISOString()
-    };
-    graphifyBuildJobs.set(job.id, job);
-
-    Promise.resolve().then(async () => {
-        const startedAt = new Date();
-        job.state = 'running';
-        job.message = 'Graphify build running';
-        job.startedAt = startedAt.toISOString();
-        try {
-            const result = await graphifyService.build(dirPath, { update: true });
-            const buildState = result.build?.state === 'partial' ? 'partial' : 'succeeded';
-            job.state = buildState;
-            job.message = result.build?.message || 'Graphify build completed';
-            job.completedAt = new Date().toISOString();
-            job.durationMs = new Date(job.completedAt).getTime() - startedAt.getTime();
-        } catch (err) {
-            job.state = 'failed';
-            job.message = err.message;
-            job.error = err.message;
-            job.completedAt = new Date().toISOString();
-            job.durationMs = new Date(job.completedAt).getTime() - startedAt.getTime();
-            logger.error('graphify_build_job_failed', err, { path: dirPath, jobId: job.id });
-        }
-    });
-
-    return job;
-}
 
 function validateString(value, name, { required = true, max = 4000 } = {}) {
     if (!required && (value === undefined || value === null || value === '')) return undefined;
@@ -354,25 +277,6 @@ async function removeFromCtxIndex(dirPath) {
     return false;
 }
 
-function validateIndexableDirectory(dirPath) {
-    let stat;
-    try {
-        stat = fs.statSync(dirPath);
-    } catch (_err) {
-        const error = new Error(`Workspace path does not exist: ${dirPath}`);
-        error.status = 404;
-        error.code = 'workspace_missing';
-        throw error;
-    }
-
-    if (!stat.isDirectory()) {
-        const error = new Error(`Workspace path is not a directory: ${dirPath}`);
-        error.status = 400;
-        error.code = 'workspace_not_directory';
-        throw error;
-    }
-}
-
 function resolveProjectPath(projectId) {
     if (!projectId) return undefined;
     const resolved = path.resolve(projectId);
@@ -424,18 +328,6 @@ async function buildLocalAskFallbackAnswer({ question, projectPath, graphInsight
         '',
         `Question: ${question}`
     ].join('\n');
-}
-
-function resolveRegisteredProjectPath(value) {
-    const resolved = resolveUserPath(value);
-    loadConfig();
-    if (!config.watchedDirectories.includes(resolved)) {
-        const err = new Error(`Workspace is not registered: ${resolved}`);
-        err.status = 404;
-        err.code = 'workspace_not_registered';
-        throw err;
-    }
-    return resolved;
 }
 
 // --- Project Management ---
@@ -1094,169 +986,7 @@ router.get('/desktop/diagnostics', (req, res) => {
     });
 });
 
-router.get('/graphify/status', (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.query.path);
-    } catch (err) {
-        return jsonError(res, err.status || 400, err.message, err.code || 'invalid_path');
-    }
-
-    res.json(graphifyService.freshness(dirPath, { scanSources: false }));
-});
-
-router.post('/graphify/build', (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.body?.path);
-        validateIndexableDirectory(dirPath);
-        const job = startGraphifyBuildJob(dirPath);
-        res.status(202).json({
-            message: job.state === 'queued' ? 'Graphify build queued' : 'Graphify build already running',
-            path: dirPath,
-            jobId: job.id,
-            job: publicBuildJob(job),
-            build: graphifyService.readBuildStatus(dirPath)
-        });
-    } catch (err) {
-        logger.error('graphify_build_request_failed', err, { requestId: req.id, path: dirPath });
-        jsonError(res, err.status || 500, err.message, err.code || 'graphify_build_failed');
-    }
-});
-
-router.get('/graphify/build/status', (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.query.path);
-        const jobId = validateString(req.query.jobId, 'jobId', { required: false, max: 100 });
-        const job = jobId ? graphifyBuildJobs.get(jobId) : latestBuildJobForPath(dirPath);
-        if (jobId && (!job || job.path !== dirPath)) {
-            return jsonError(res, 404, `Graphify build job not found: ${jobId}`, 'graphify_build_job_missing');
-        }
-        res.json({
-            path: dirPath,
-            job: publicBuildJob(job),
-            build: graphifyService.readBuildStatus(dirPath),
-            graph: graphifyService.freshness(dirPath, { scanSources: false })
-        });
-    } catch (err) {
-        logger.error('graphify_build_status_request_failed', err, { requestId: req.id, path: dirPath });
-        jsonError(res, err.status || 500, err.message, err.code || 'graphify_build_status_failed');
-    }
-});
-
-router.get('/graphify/artifact', (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.query.path);
-        const type = validateString(req.query.type, 'type', { max: 100 });
-        const html = graphifyService.readArtifact(dirPath, type);
-        setGraphifyArtifactHeaders(res);
-        res.send(html);
-    } catch (err) {
-        logger.error('graphify_artifact_request_failed', err, { requestId: req.id, path: dirPath });
-        jsonError(res, err.status || 500, err.message, err.code || 'graphify_artifact_failed');
-    }
-});
-
-router.get('/graphify/report', (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.query.path);
-        const report = graphifyService.readReport(dirPath, { maxChars: 120000 });
-        if (!report) {
-            return jsonError(res, 404, `Graphify report not found: ${graphifyService.reportPath(dirPath)}`, 'graphify_report_missing');
-        }
-        res.json({
-            path: dirPath,
-            report,
-            reportPath: graphifyService.reportPath(dirPath)
-        });
-    } catch (err) {
-        logger.error('graphify_report_request_failed', err, { requestId: req.id, path: dirPath });
-        jsonError(res, err.status || 500, err.message, err.code || 'graphify_report_failed');
-    }
-});
-
-router.post('/graphify/query', async (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.body?.path);
-        const query = validateString(req.body?.query, 'query', { max: 20000 });
-        const insights = await graphifyService.query(query, dirPath);
-        res.json({ path: dirPath, insights, graphPath: graphifyService.graphPath(dirPath) });
-    } catch (err) {
-        logger.error('graphify_query_request_failed', err, { requestId: req.id, path: dirPath });
-        jsonError(res, err.status || 500, err.message, err.code || 'graphify_query_failed');
-    }
-});
-
-router.post('/graphify/explain', async (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.body?.path);
-        const node = validateString(req.body?.node, 'node', { max: 1000 });
-        const explanation = await graphifyService.explain(node, dirPath);
-        res.json({ path: dirPath, node, explanation, graphPath: graphifyService.graphPath(dirPath) });
-    } catch (err) {
-        logger.error('graphify_explain_request_failed', err, { requestId: req.id, path: dirPath });
-        jsonError(res, err.status || 500, err.message, err.code || 'graphify_explain_failed');
-    }
-});
-
-router.post('/graphify/path', async (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.body?.path);
-        const source = validateString(req.body?.source, 'source', { max: 1000 });
-        const target = validateString(req.body?.target, 'target', { max: 1000 });
-        const graphPathResult = await graphifyService.pathBetween(source, target, dirPath);
-        res.json({ path: dirPath, source, target, graphPath: graphifyService.graphPath(dirPath), result: graphPathResult });
-    } catch (err) {
-        logger.error('graphify_path_request_failed', err, { requestId: req.id, path: dirPath });
-        jsonError(res, err.status || 500, err.message, err.code || 'graphify_path_failed');
-    }
-});
-
-router.post('/graphify/affected', async (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.body?.path);
-        const node = validateString(req.body?.node, 'node', { max: 1000 });
-        const depth = Number(req.body?.depth || 2);
-        const relations = Array.isArray(req.body?.relations)
-            ? req.body.relations.map(relation => validateString(relation, 'relation', { max: 100 }))
-            : [];
-        const impact = await graphifyService.affected(node, dirPath, { depth, relations });
-        res.json({ path: dirPath, node, depth, relations, graphPath: graphifyService.graphPath(dirPath), impact });
-    } catch (err) {
-        logger.error('graphify_affected_request_failed', err, { requestId: req.id, path: dirPath });
-        jsonError(res, err.status || 500, err.message, err.code || 'graphify_affected_failed');
-    }
-});
-
-router.get('/graphify/map', async (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.query.path);
-        const limit = Number(req.query.limit || 80);
-        res.json(await graphifyService.map(dirPath, { limit }));
-    } catch (err) {
-        logger.error('graphify_map_request_failed', err, { requestId: req.id, path: dirPath });
-        jsonError(res, err.status || 500, err.message, err.code || 'graphify_map_failed');
-    }
-});
-
-router.post('/graphify/tree', async (req, res) => {
-    let dirPath;
-    try {
-        dirPath = resolveRegisteredProjectPath(req.body?.path);
-        res.json(await graphifyService.tree(dirPath));
-    } catch (err) {
-        logger.error('graphify_tree_request_failed', err, { requestId: req.id, path: dirPath });
-        jsonError(res, err.status || 500, err.message, err.code || 'graphify_tree_failed');
-    }
-});
+router.use(require('./routes/graphifyRoutes'));
 
 router.post('/pairing', (req, res) => {
     const host = req.get('host');
