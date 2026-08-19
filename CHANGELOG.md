@@ -2,6 +2,69 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.4.9] - 2026-08-19
+
+Error handling and documentation, both taken to the standard where a guard
+enforces them rather than a good intention.
+
+### Fixed — a broken config.json silently threw away your setup
+
+Two catch blocks discarded the same error, and between them they produced the
+worst kind of failure: the product behaving differently with nothing anywhere
+saying why.
+
+- `SettingsProvider` fell back to defaults when `config.json` would not parse.
+  Falling back is right — the defaults are the safe values — but in silence it
+  means every setting the user chose is being ignored, security toggles
+  included.
+- `server.js` did the same at startup, so `watchedDirectories` came back empty
+  and every project vanished from the sync. You would open YodaMan to find your
+  workspaces gone.
+
+Both now log at high severity with the path and how to fix it.
+
+### Changed — every caught error is now used or explained
+
+An audit of all 213 catch blocks found 41 that discarded an error with no
+logging and no explanation. The two above were bugs; the rest were legitimate —
+a stat on a file that may not exist, a probe whose whole job is to answer yes or
+no. But *legitimate* and *silent* are indistinguishable to the next reader, so
+each now says why silence is correct.
+
+`tests/infrastructure/ErrorHandling.test.js` holds the line: a catch must log,
+rethrow, use the bound error, or carry a comment. The comment requirement is not
+box-ticking — writing one forces the question "is silence actually correct
+here?", which is precisely the question nobody asked for those two config bugs.
+
+Getting that guard honest took three attempts. The first passed on a
+deliberately silent catch, because a six-line comment window let unrelated JSDoc
+satisfy it. Tightened to two lines it immediately found seven more real cases
+the loose version had been hiding, two of which turned out to be release scripts
+handling errors through `console.error` — legitimate, and now recognised.
+
+### Added — documentation that cannot rot quietly
+
+AGENT.md opens by warning that hand-maintained counts and paths drift. They had:
+current docs still claimed 0.4.4 four releases on, the publishing guide named a
+`.vsix` from a version nobody ships, and the release gates, the error-handling
+standard and `OLLAMA_CONTEXT_LENGTH` were documented nowhere outside the
+changelog.
+
+- The Development Guide covers all four release gates and what each proves, and
+  records that a version bump must be followed by a build before
+  `release:verify` means anything.
+- The configuration guide covers `OLLAMA_CONTEXT_LENGTH` — what Ollama defaults
+  to, why 4,096 against a 262,144-token model quietly degraded every answer, and
+  how to check and change it.
+- `tests/infrastructure/DocumentationAccuracy.test.js` enforces three things:
+  every repository path named in current docs exists, every documented npm
+  script exists, and no current doc claims a version other than the one
+  shipping.
+
+History is deliberately exempt. A changelog recording the removal of
+`ModeToggle.jsx` must name the file it removed; rewriting that to satisfy a
+linter would falsify the record.
+
 ## [0.4.8] - 2026-08-19
 
 ### Fixed — 0.4.7's desktop app could not start
