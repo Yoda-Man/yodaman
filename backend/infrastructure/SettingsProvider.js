@@ -34,7 +34,18 @@ function load() {
     } else {
       cache = { ...DEFAULTS };
     }
-  } catch {
+  } catch (err) {
+    // Falling back to defaults is right — they are the safe values — but doing
+    // it silently is not. A malformed config.json means every setting the user
+    // chose is being ignored, security toggles included, and the only symptom
+    // is behaviour they did not ask for.
+    logger.error('settings_unreadable_using_defaults', err, {
+      path: currentPath,
+      userAction: 'load_settings',
+      severity: 'high',
+      hint: 'config.json could not be parsed, so all settings reverted to defaults. '
+        + 'Fix the JSON and restart, or delete the file to start from a clean copy.'
+    });
     cache = { ...DEFAULTS };
   }
 

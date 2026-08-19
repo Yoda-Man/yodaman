@@ -11,19 +11,19 @@ YodaMan is a local-first workspace intelligence platform for software developers
 | **Semantic Code Search** | Search indexed code and documentation using natural language | ✅ Stable |
 | **Agent Tasks** | Autonomous AI agent for multi-step coding work | ✅ Stable |
 | **Graphify Knowledge Graphs** | Mandatory graph construction from project structure | ✅ Stable |
-| **Plugin System** | Extend the agent with JavaScript plugins | ✅ Stable (0.4.4) |
-| **Pre-Installed Plugins** | CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, Holocron VR, Graphify | ✅ Stable (0.4.4) |
-| **Legacy Plugin Support** | Auto-wraps onLoad/onEnable plugins | ✅ Stable (0.4.4) |
-| **Zip Plugin Upload** | Upload plugins as .zip files | ✅ Stable (0.4.4) |
-| **Centralized Settings** | All developer settings managed from UI | ✅ Stable (0.4.4) |
+| **Plugin System** | Extend the agent with JavaScript plugins | ✅ Stable (0.5.0) |
+| **Pre-Installed Plugins** | CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, Holocron VR, Graphify | ✅ Stable (0.5.0) |
+| **Legacy Plugin Support** | Auto-wraps onLoad/onEnable plugins | ✅ Stable (0.5.0) |
+| **Zip Plugin Upload** | Upload plugins as .zip files | ✅ Stable (0.5.0) |
+| **Centralized Settings** | All developer settings managed from UI | ✅ Stable (0.5.0) |
 | **Desktop App** | Electron shell with managed runtime | ✅ Stable |
 | **VS Code Extension** | Editor-native agent access | ✅ Stable |
 | **Mobile Companion** | React Native app for monitoring | ⚠️ Beta |
 | **Website + Downloads** | Public site with platform builds | ✅ Stable |
 
-## Current Status (0.4.4)
+## Current Status (0.5.0)
 
-- **Version**: 0.4.4
+- **Version**: 0.5.0
 - **License**: MIT
 - **Runtime**: Node.js 18+ / Express
 - **Frontend**: React 18 + Vite + Tailwind CSS
@@ -79,9 +79,9 @@ The YodaMan ecosystem includes:
 - Audit log tracks all tool calls
 - Pairing token required for non-local clients (configurable)
 
-### Upgrade Path (0.2.2 → 0.4.4)
+### Upgrade Path (0.2.2 → 0.4.8)
 - Backward compatible — no breaking API changes
-- Plugins from 0.2.2 continue to work; plugin.json `minYodaManVersion` must be ≤ 0.4.4
+- Plugins from 0.2.2 continue to work; plugin.json `minYodaManVersion` must be ≤ 0.4.8
 - Legacy plugins (onLoad format) now auto-detected
 - Settings migrate automatically from env vars to config.json
 
@@ -101,5 +101,5 @@ The YodaMan ecosystem includes:
 
 - **Author**: Marwa Trust Mutemasango
 - **Repository**: github.com/Yoda-Man/yodaman
-- **npm**: `yodaman` (0.4.4)
+- **npm**: `yodaman` (0.5.0)
 - **License**: MIT

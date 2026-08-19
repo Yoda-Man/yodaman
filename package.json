@@ -1,6 +1,6 @@
 {
   "name": "yodaman",
-  "version": "0.4.8",
+  "version": "0.5.0",
   "description": "YodaMan — local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
@@ -44,12 +44,13 @@
     "release:smoke": "node scripts/release-smoke.js",
     "audit:vendored": "node scripts/audit-vendored.js",
     "test:plugins": "node scripts/plugin-smoke.js",
-    "release:verify": "npm run lint && npm test && npm run audit:prod && npm run audit:vendored && npm run release:smoke && npm run test:journeys && npm run test:plugins && npm run test:approval && npm run test:packaged",
+    "release:verify": "npm run build && npm run lint && npm test && npm run test:coverage && npm run audit:prod && npm run audit:vendored && npm run release:smoke && npm run test:journeys && npm run test:plugins && npm run test:approval && npm run test:packaged",
     "test:approval": "node scripts/approval-smoke.js",
     "health:watch": "node scripts/health-watchdog.js",
     "health:check": "node scripts/health-watchdog.js --once",
     "test:journeys": "node scripts/journey-smoke.js",
-    "test:packaged": "node scripts/packaged-smoke.js"
+    "test:packaged": "node scripts/packaged-smoke.js",
+    "test:coverage": "jest --coverage --coverageReporters=text-summary"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
@@ -134,6 +135,19 @@
       "<rootDir>/dist",
       "<rootDir>/extensions/vscode-yodaman/node_modules",
       "<rootDir>/.claude/worktrees"
-    ]
+    ],
+    "collectCoverageFrom": [
+      "backend/**/*.js",
+      "shared/**/*.js",
+      "!**/node_modules/**"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 62,
+        "branches": 51,
+        "functions": 58,
+        "lines": 63
+      }
+    }
   }
 }

@@ -3,6 +3,7 @@ const path = require('path');
 const os = require('os');
 const { execFile } = require('child_process');
 const logger = require('./Logger');
+const { IGNORED_DIRECTORIES } = require('../../shared/ignoredPaths');
 const dependencyChecker = require('./DependencyChecker');
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 300000);
@@ -129,6 +130,9 @@ function safeFilePath(filePath, baseDir) {
     try {
         baseStat = fs.lstatSync(baseDir);
     } catch (_err) {
+        // A base directory that cannot be stat'd is not an error to report — it is
+        // the answer. This is a containment check, and "the path is not there"
+        // and "the path is not allowed" both mean refuse.
         return '';
     }
 
@@ -140,6 +144,7 @@ function safeFilePath(filePath, baseDir) {
     try {
         stat = fs.lstatSync(filePath);
     } catch (_err) {
+        // Same as the base-directory check above: absent is a refusal, not a fault.
         return '';
     }
 
@@ -156,6 +161,8 @@ function safeFilePath(filePath, baseDir) {
         }
         return filePath;
     } catch (_err) {
+        // Containment check: anything that cannot be resolved is refused. Empty is
+        // the refusal, and it must not depend on why resolution failed.
         return '';
     }
 }
@@ -212,7 +219,10 @@ function latestSourceMtime(projectPath) {
 }
 
 function scanSourceMtime(projectPath) {
-    const ignored = new Set(['node_modules', '.git', 'dist', 'build', 'release', 'graphify-out']);
+    // Shared with the watcher and the indexer. Scanning our own generated
+    // output here is not just slow: a newer chunk file reads as "the source
+    // changed", so the graph looks stale on work nothing did to the source.
+    const ignored = new Set(IGNORED_DIRECTORIES);
     let latest = 0;
 
     function walk(dir, depth) {
@@ -222,6 +232,9 @@ function scanSourceMtime(projectPath) {
         try {
             entries = fs.readdirSync(dir, { withFileTypes: true });
         } catch (_err) {
+            // One unreadable directory must not abort a whole-workspace scan. A
+            // permission-denied subfolder is normal; reporting it per directory
+            // would bury the log on every scan of a real machine.
             return;
         }
 
@@ -242,6 +255,8 @@ function scanSourceMtime(projectPath) {
             try {
                 stat = fs.statSync(entryPath);
             } catch (_err) {
+                // A dangling symlink or a file removed mid-walk. Skip the entry; the
+                // freshness scan only needs the newest mtime it can see.
                 continue;
             }
             latest = Math.max(latest, stat.mtimeMs);
@@ -479,6 +494,9 @@ function enhanceArtifactHtml(html) {
         nodes = JSON.parse(nodesBlock.json);
         legend = JSON.parse(legendBlock.json);
     } catch {
+        // Enhancement is optional: if Graphify's embedded JSON is not shaped the
+        // way this expects, return the artifact untouched. A viewable graph
+        // without our additions beats a failed request.
         return html;
     }
 
@@ -659,6 +677,9 @@ module.exports = {
         try {
             return JSON.parse(fs.readFileSync(currentBuildStatusPath, 'utf8'));
         } catch (_err) {
+            // The status file is written by a build in flight, so a partial or
+            // absent read is expected mid-write. The caller is told plainly via
+            // the returned message rather than through a log nobody reads.
             return { state: 'idle', message: 'Build status could not be read' };
         }
     },

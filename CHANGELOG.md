@@ -2,6 +2,150 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.5.0] - 2026-08-19
+
+### Fixed — a file-descriptor leak that silently disabled every tool
+
+The watcher and the indexer each kept their own list of directories to skip, the
+two drifted, and neither listed `.yodaman-doc-chunks` — a directory YodaMan
+generates itself. chokidar 4 dropped the fsevents backend, so on macOS it holds
+one descriptor per watched path; watching our own output meant a runtime four
+minutes old held **10,307 open descriptors, 5,264 of them chunk files**.
+
+A process that fills its descriptor table cannot allocate pipes, so `spawn`
+begins failing with `EBADF`. The symptom appears nowhere near the cause: the
+agent stops being able to run ctx, graphify, or any plugin, and a desktop app
+left open long enough simply stops working. This is what made the approval gate
+report INCONCLUSIVE — the agent could not reach the writeFile tool to propose
+anything.
+
+There is now one shared list (`shared/ignoredPaths.js`) covering generated
+output, build caches, and vendored trees, read by both the watcher and the
+indexer. Held descriptors dropped from **10,307 to 3,572**, and the approval
+gate now passes against a real workspace: the write pauses, and rejecting it
+leaves the file untouched.
+
+`bin`, `packages`, and `target` are deliberately *not* ignored. Each is build
+output in one ecosystem and hand-written source in another, and silently
+refusing to index someone's source is a worse failure than watching some output.
+A test asserts they stay off the list, and another asserts both consumers read
+the shared one so the copies cannot drift again.
+
+The verification story, finished. Three days ago this project had never had a
+green CI run and shipped an agent that could not call a tool; it now proves the
+artifact starts, the safety gate holds, and the docs describe what exists.
+
+### Added — tests for the modules that had none
+
+The audit listed six untested modules. Size was not the risk:
+
+- **OllamaConfig** writes a launchd plist and restarts a system service, and I
+  wrote it in 0.4.7 without tests. 13 now cover the guarantees that make it safe
+  to expose from a web UI: only values on a fixed list are accepted, the plist
+  edit produces balanced XML, an existing value is replaced rather than
+  duplicated, and an unrelated variable in the same block survives.
+- **stardustRoutes** is 614 lines and holds the H-1 path-traversal fix.
+  `proposeChange` builds a directory from a caller-supplied name, so the guard
+  against separators and `..` now has a regression test — including an assertion
+  that nothing was written outside the workspace.
+- **PluginAPI, DefaultCodingSkill, StardustWrapper, gitRoutes,
+  SettingsProvider** — covered, including that every security default is the
+  safe value, since those defaults are the posture of an unconfigured install.
+
+`DefaultCodingSkill` is asserted not to contain `<tool_call>`. That literal
+flips qwen3.5 into native function calling, which ctx 1.4.0 crashes on, so a
+prompt fragment reintroducing it would bring back the bug 0.4.6 fixed.
+
+### Added — a coverage floor
+
+Enforced at just under the measured numbers and verified by raising it to 95%
+and watching the build fail. It exists to catch a slide. Raise it deliberately;
+never lower it to make a build pass.
+
+### Fixed — release:verify no longer fails for a reason unrelated to the code
+
+`DisplayedVersion` and `Downloads` assert on build output, so running them
+against the previous version's artifacts failed immediately after a bump. It
+caught people out twice. `release:verify` now builds first, and the failure
+message names the remedy.
+
+### The gates, as they now stand
+
+```
+npm run release:verify
+```
+
+build · lint · 532 tests · coverage floor · production audit · vendored audit ·
+release smoke · search and readiness journeys · plugin journey · approval gate ·
+packaged runtime
+
+The last four drive the running product, and the last one drives the built
+artifact rather than the source — the distinction that let 0.4.7 ship a desktop
+app which could not start while every other gate was green.
+
+## [0.4.9] - 2026-08-19
+
+Error handling and documentation, both taken to the standard where a guard
+enforces them rather than a good intention.
+
+### Fixed — a broken config.json silently threw away your setup
+
+Two catch blocks discarded the same error, and between them they produced the
+worst kind of failure: the product behaving differently with nothing anywhere
+saying why.
+
+- `SettingsProvider` fell back to defaults when `config.json` would not parse.
+  Falling back is right — the defaults are the safe values — but in silence it
+  means every setting the user chose is being ignored, security toggles
+  included.
+- `server.js` did the same at startup, so `watchedDirectories` came back empty
+  and every project vanished from the sync. You would open YodaMan to find your
+  workspaces gone.
+
+Both now log at high severity with the path and how to fix it.
+
+### Changed — every caught error is now used or explained
+
+An audit of all 213 catch blocks found 41 that discarded an error with no
+logging and no explanation. The two above were bugs; the rest were legitimate —
+a stat on a file that may not exist, a probe whose whole job is to answer yes or
+no. But *legitimate* and *silent* are indistinguishable to the next reader, so
+each now says why silence is correct.
+
+`tests/infrastructure/ErrorHandling.test.js` holds the line: a catch must log,
+rethrow, use the bound error, or carry a comment. The comment requirement is not
+box-ticking — writing one forces the question "is silence actually correct
+here?", which is precisely the question nobody asked for those two config bugs.
+
+Getting that guard honest took three attempts. The first passed on a
+deliberately silent catch, because a six-line comment window let unrelated JSDoc
+satisfy it. Tightened to two lines it immediately found seven more real cases
+the loose version had been hiding, two of which turned out to be release scripts
+handling errors through `console.error` — legitimate, and now recognised.
+
+### Added — documentation that cannot rot quietly
+
+AGENT.md opens by warning that hand-maintained counts and paths drift. They had:
+current docs still claimed 0.4.4 four releases on, the publishing guide named a
+`.vsix` from a version nobody ships, and the release gates, the error-handling
+standard and `OLLAMA_CONTEXT_LENGTH` were documented nowhere outside the
+changelog.
+
+- The Development Guide covers all four release gates and what each proves, and
+  records that a version bump must be followed by a build before
+  `release:verify` means anything.
+- The configuration guide covers `OLLAMA_CONTEXT_LENGTH` — what Ollama defaults
+  to, why 4,096 against a 262,144-token model quietly degraded every answer, and
+  how to check and change it.
+- `tests/infrastructure/DocumentationAccuracy.test.js` enforces three things:
+  every repository path named in current docs exists, every documented npm
+  script exists, and no current doc claims a version other than the one
+  shipping.
+
+History is deliberately exempt. A changelog recording the removal of
+`ModeToggle.jsx` must name the file it removed; rewriting that to satisfy a
+linter would falsify the record.
+
 ## [0.4.8] - 2026-08-19
 
 ### Fixed — 0.4.7's desktop app could not start

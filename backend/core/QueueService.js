@@ -9,17 +9,10 @@ const graphifyService = require('../infrastructure/GraphifyService');
  * It interacts with the Infrastructure layer to spawn background processes.
  */
 // Generated or vendored directories that must never enter the search index.
-// graphify-out is ours; the rest are the usual noise that crowds out source.
-const INDEX_IGNORE_PATTERNS = [
-    'graphify-out',
-    'node_modules',
-    'dist',
-    'build',
-    'release',
-    'coverage',
-    '.git',
-    '.yodaman-approval-smoke'
-].join(',');
+// Shared with FileSystemWatcher so the indexer and the watcher cannot drift.
+const { IGNORED_DIRECTORIES } = require('../../shared/ignoredPaths');
+
+const INDEX_IGNORE_PATTERNS = IGNORED_DIRECTORIES.join(',');
 
 class QueueService {
     constructor() {

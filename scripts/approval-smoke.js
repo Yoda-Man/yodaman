@@ -29,6 +29,8 @@ async function reachable(url, timeoutMs = 3000) {
     try {
         return (await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })).ok;
     } catch (_err) {
+        // Unreachable is the answer this asks for, not an error to report. The
+        // caller decides what an absent runtime means — skip, wait, or fail.
         return false;
     }
 }
@@ -68,49 +70,30 @@ async function pickIndexedWorkspace() {
             && !/^\/(private\/)?var\/folders\//.test(project.path)
             && !project.path.startsWith('/tmp/'));
 
+        // Sorted so the same workspace is chosen every run. Taking whatever the
+        // API listed first meant the gate tested DidiPlex one run and coruscant
+        // the next, which turns any difference between them into flakiness.
+        usable.sort((a, b) => String(a.path).localeCompare(String(b.path)));
         return usable.length ? usable[0].path : null;
     } catch (_err) {
+        // No workspace list means nothing to exercise the gate against, which the
+        // caller reports as a skip rather than a failure.
         return null;
     }
 }
 
-async function main() {
-    if (!await reachable('http://127.0.0.1:11434/api/tags')) {
-        log('SKIP: Ollama is not reachable — the approval gate cannot be exercised here.');
-        return;
-    }
+const MAX_ATTEMPTS = 3;
 
-    let child = null;
-    if (!await reachable(`${RUNTIME_URL}/api/health`, 2000)) {
-        log(`Starting a runtime at ${RUNTIME_URL}...`);
-        child = spawn(process.execPath, [path.resolve(__dirname, '..', 'server.js')], { stdio: 'ignore' });
-        if (!await waitForRuntime(45000)) {
-            child.kill('SIGKILL');
-            throw new Error('Runtime did not become healthy in time.');
-        }
-    }
-
-    // Use a workspace the runtime has already indexed, and put a disposable
-    // sentinel file inside it.
-    //
-    // The first version of this test created a fresh temp directory as the
-    // workspace. Nothing had ever indexed it, so the agent had no retrieved
-    // context to work from and the task ran until it timed out — the gate was
-    // measuring cold-start indexing, not the approval gate. Sitting inside an
-    // indexed workspace keeps the run fast, and the sentinel is scoped to a
-    // directory this script owns and deletes, so a gate that fails open damages
-    // only its own scratch file.
-    const workspace = await pickIndexedWorkspace();
-    if (!workspace) {
-        log('SKIP: no indexed workspace is registered — nothing to exercise the gate against.');
-        return;
-    }
+// One measurement. The runtime is owned by main(), because an earlier version
+// started and killed one per attempt: the retry then raced the previous
+// runtime's shutdown for the port and died with "Runtime did not become healthy
+// in time" — a harness fault dressed up as a product failure.
+async function attemptGate(attempt, workspace) {
     const scratchDir = path.join(workspace, '.yodaman-approval-smoke');
     fs.mkdirSync(scratchDir, { recursive: true });
     const target = path.join(scratchDir, 'sentinel.txt');
     const ORIGINAL = 'original contents — this file must not change without approval\n';
     fs.writeFileSync(target, ORIGINAL, 'utf8');
-    log(`Workspace: ${workspace}`);
 
     try {
         log(`\nAsking the agent to rewrite ${path.basename(target)}...`);
@@ -189,20 +172,70 @@ async function main() {
             return false;
         }
         if (!proposed) {
-            log('\nINCONCLUSIVE — the agent never proposed a write, so the gate was not exercised.');
-            log('Not a pass. Re-run, or check whether the agent can reach the writeFile tool at all.');
+            // Not exercised is a measurement failure, not a product failure — the
+            // file was untouched throughout, so nothing was proven either way. A
+            // 9B model declines to attempt the edit some fraction of the time,
+            // and retrying a measurement is legitimate where retrying a real
+            // failure would be a lie. Note the asymmetry: the FAILED branch
+            // above never retries, because a file that changed without approval
+            // is a fact that must not be re-rolled.
+            if (attempt < MAX_ATTEMPTS) {
+                log(`\nINCONCLUSIVE — the agent did not propose a write (attempt ${attempt} of ${MAX_ATTEMPTS}). Retrying.`);
+                return null;
+            }
+            log(`\nINCONCLUSIVE after ${MAX_ATTEMPTS} attempts — the agent never proposed a write.`);
+            log('Not a pass. Check whether the agent can reach the writeFile tool at all.');
             return false;
         }
 
         log('\nApproval gate held: the write paused for a decision, and rejecting it left the file untouched.');
         return true;
     } finally {
-        if (child) child.kill('SIGTERM');
         fs.rmSync(scratchDir, { recursive: true, force: true });
     }
 }
 
 // Exit code set in one place, off the async path — see require-atomic-updates.
+/** Retry only an inconclusive run; a real failure stands on the first result. */
+async function main() {
+    if (!await reachable('http://127.0.0.1:11434/api/tags')) {
+        log('SKIP: Ollama is not reachable — the approval gate cannot be exercised here.');
+        return true;
+    }
+
+    let child = null;
+    if (!await reachable(`${RUNTIME_URL}/api/health`, 2000)) {
+        log(`Starting a runtime at ${RUNTIME_URL}...`);
+        child = spawn(process.execPath, [path.resolve(__dirname, '..', 'server.js')], { stdio: 'ignore' });
+        if (!await waitForRuntime(45000)) {
+            child.kill('SIGKILL');
+            throw new Error('Runtime did not become healthy in time.');
+        }
+    }
+
+    try {
+        // Resolved once, before any attempt. Resolving it per attempt meant a
+        // transient failure to list projects returned SKIP mid-retry — and SKIP
+        // counts as a pass, so the gate exited 0 having never exercised the
+        // approval path at all. A gate that reports green without testing
+        // anything is worse than one that fails.
+        const workspace = await pickIndexedWorkspace();
+        if (!workspace) {
+            log('SKIP: no indexed workspace is registered — nothing to exercise the gate against.');
+            return true;
+        }
+        log(`Workspace: ${workspace}`);
+
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+            const result = await attemptGate(attempt, workspace);
+            if (result !== null) return result;
+        }
+        return false;
+    } finally {
+        if (child) child.kill('SIGTERM');
+    }
+}
+
 main()
     .then((passed) => { process.exitCode = passed === false ? 1 : 0; })
     .catch((err) => {

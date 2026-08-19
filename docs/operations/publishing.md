@@ -32,7 +32,7 @@ cd extensions/vscode-yodaman
 npm run package
 ```
 
-The generated `vscode-yodaman-0.4.4.vsix` file is ignored by git and should be uploaded or attached to releases outside the source tree.
+The generated `vscode-yodaman-<version>.vsix` file is ignored by git and should be uploaded or attached to releases outside the source tree.
 
 Publish:
 

@@ -179,7 +179,18 @@ async function initialize() {
         if (fs.existsSync(CONFIG_PATH)) {
             try {
                 config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-            } catch (_) {
+            } catch (err) {
+                // Continuing with an empty config is survivable; doing it in
+                // silence is not. Every watched directory disappears from the
+                // startup sync, so the user opens YodaMan to find their projects
+                // gone and nothing anywhere saying why.
+                logger.error('config_unreadable_at_startup', err, {
+                    path: CONFIG_PATH,
+                    userAction: 'startup_sync',
+                    severity: 'high',
+                    hint: 'config.json could not be parsed, so no watched directories were loaded. '
+                        + 'Fix the JSON and restart, or copy config.example.json over it.'
+                });
                 config = { watchedDirectories: [], removedDirectories: [] };
             }
         }

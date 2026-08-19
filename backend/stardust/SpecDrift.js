@@ -71,6 +71,8 @@ function readSpecs(projectRoot) {
     const walk = (dir, depth = 0) => {
         if (depth > 6) return;
         let entries;
+        // Skip an unreadable directory rather than abandoning the scan: a partial
+        // set of specs still detects real drift.
         try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
         for (const entry of entries) {
             const full = path.join(dir, entry.name);

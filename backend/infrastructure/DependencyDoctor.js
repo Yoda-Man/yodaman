@@ -134,6 +134,8 @@ async function runDependencyDoctor({ now = new Date() } = {}) {
     try {
         context = await dependencyChecker.detectOllamaContext();
     } catch (_err) {
+        // Advisory: the report is about dependencies, and an unreachable Ollama is
+        // already reported by the ollama check itself. Null just omits the line.
         context = null;
     }
 

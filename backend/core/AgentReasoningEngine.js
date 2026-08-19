@@ -20,6 +20,9 @@ function safeToolName(rawToolCall) {
     try {
         return JSON.parse(rawToolCall).name;
     } catch {
+        // Used only to label a malformed tool call in an error message. If the
+        // JSON will not parse there is no name to report, and the caller is
+        // already handling the parse failure that brought us here.
         return undefined;
     }
 }

@@ -48,6 +48,10 @@ function isLocalOrigin(origin) {
     try {
         parsed = new URL(origin);
     } catch {
+        // An origin that will not parse is not a local origin. This is the C-1
+        // security boundary, so an unparseable value must fail closed and say
+        // nothing more — logging every malformed Origin header would hand an
+        // outside caller a way to fill the log.
         return false;
     }
 

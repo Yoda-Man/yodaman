@@ -169,6 +169,56 @@ describe('ToolBox', () => {
 });
 ```
 
+### Release gates — testing the product, not just the code
+
+Jest tests the code. They mock the model, ctx and Ollama, so they prove the code
+would behave correctly *if* the pieces around it did. That is not the same as the
+product working, and the difference is not academic: 0.4.5 shipped with the agent
+unable to call a single tool while 492 tests passed, because every gate inspected
+artifacts and none drove the product.
+
+Four gates close that. They need the full local stack and are slower than the
+unit suite, so they run before a release rather than on every save.
+
+| Command | What it proves |
+|---------|----------------|
+| `npm run test:journeys` | Search returns the documented four-signal blend and is genuinely graph-ranked; every workspace reports state and a remediation. Fast — no agent loop. |
+| `npm run test:plugins` | Every chat-invokable plugin is reachable through the agent, using the exact phrase the chat dropdown inserts. |
+| `npm run test:approval` | A proposed write pauses for a decision and the file is untouched both while pending and after a rejection. This is the product's central safety claim. |
+| `npm run test:packaged` | The `server.js` **inside the built `.app`** starts and answers `/api/health`. A test of the source is not a test of the artifact — 0.4.7 shipped a desktop app that could not start because `shared/` was missing from the package while every other gate passed. |
+
+Run them all in ascending cost:
+
+```bash
+npm run release:verify   # lint, tests, both audits, release smoke, then the four gates
+```
+
+**Order matters after a version bump.** `Downloads.test.js` and
+`DisplayedVersion.test.js` assert on build output, so a bump must be followed by a
+build before `release:verify` is meaningful:
+
+```bash
+npm version <next> --no-git-tag-version
+npm run desktop:dist:all     # regenerates dist/ and website/downloads/
+npm run release:verify
+```
+
+The journey gates print `SKIP` where Ollama is unavailable, so a CI runner without
+a model does not fail on an environment it cannot provide. **A skip is not a
+pass** — run them where the stack is live before shipping.
+
+### Error handling standard
+
+`tests/infrastructure/ErrorHandling.test.js` requires every `catch` block to do
+one of: log it, rethrow it, use the bound error, or carry a comment explaining
+why there is nothing to handle.
+
+The comment requirement is not box-ticking. A malformed `config.json` used to
+revert every setting to its default and empty the watched directory list in
+silence — a user opened YodaMan to find their projects gone with nothing anywhere
+saying why. Both catches looked unremarkable. Writing the comment forces the
+question "is silence actually correct here?", which is the question nobody asked.
+
 ## Environment Variables
 
 | Variable | Default | Purpose |

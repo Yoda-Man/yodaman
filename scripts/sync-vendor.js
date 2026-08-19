@@ -46,6 +46,8 @@ function resolveVersion(asset) {
     try {
         return require(`${asset.packageName}/package.json`).version;
     } catch (_err) {
+        // The package is not installed, so there is no version to record. The
+        // caller writes null into the manifest, which is honest.
         return null;
     }
 }
