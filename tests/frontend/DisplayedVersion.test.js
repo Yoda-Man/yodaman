@@ -39,6 +39,18 @@ describe('displayed version', () => {
             fs.readFileSync(path.join(assetsDir, name), 'utf8').includes(version)
         );
 
+        // A stale bundle is a real failure — the app would show the wrong version
+        // — but the cause is almost always a bump that has not been rebuilt yet.
+        // Say that, because "expected true, received false" sent people looking
+        // in the wrong place twice.
+        if (!carriesVersion) {
+            throw new Error(
+                `The built bundle in dist/ does not carry version ${version}. `
+                + 'If you have just bumped the version, run "npm run build" — '
+                + 'release:verify now does this for you before testing.'
+            );
+        }
+
         expect(carriesVersion).toBe(true);
     });
 });
