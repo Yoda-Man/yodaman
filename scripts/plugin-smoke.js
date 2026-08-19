@@ -37,10 +37,16 @@ const { pluginInvocation } = require('../shared/pluginInvocation');
 
 const RUNTIME_URL = process.env.YODAMAN_SMOKE_URL || 'http://127.0.0.1:3090';
 const PROJECT = process.env.YODAMAN_SMOKE_PROJECT || path.resolve(__dirname, '..', '..');
-// Measured, not guessed: a clean "Run CodeTrooper" completes in ~75s in two
-// iterations once the prompt fits the model's context. 180s leaves generous head
-// room without letting a genuinely stuck task hold the release up for minutes.
-const TASK_TIMEOUT_MS = Number(process.env.YODAMAN_SMOKE_TASK_TIMEOUT || 180000);
+// Set from a full sequential run of every plugin, not from one sample. Measured
+// on this machine: CodeTrooper 52s, Droid-Sweep 52s, Grand-Inquisitor 45s,
+// graphify 128s, lightsaber 41s. graphify is the outlier, so the ceiling is
+// anchored to it with better than 2x head room for model variance.
+//
+// An earlier 180s was taken from CodeTrooper alone and looked generous against a
+// 75s sample — but it left graphify only 1.4x, and a neighbouring plugin tipped
+// over it. Timing the first case and calling it "measured" is how a gate becomes
+// flaky, and a flaky gate gets ignored.
+const TASK_TIMEOUT_MS = Number(process.env.YODAMAN_SMOKE_TASK_TIMEOUT || 300000);
 const BOOT_TIMEOUT_MS = 45000;
 
 const log = (msg) => process.stdout.write(`${msg}\n`);

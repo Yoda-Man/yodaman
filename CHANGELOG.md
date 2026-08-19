@@ -4,8 +4,13 @@ All notable changes to **YodaMan** will be documented in this file.
 
 ## [0.4.6] - 2026-08-18
 
-A handover audit found the verification machinery, not the product, was the
-weak part. Every finding below was reproduced before it was fixed.
+A handover audit started here, and what it found went deeper than expected: the
+verification machinery was broken, and because it was broken it had been hiding
+a product that could not perform its central function. The agent could not call
+a single tool. Prose questions worked, so nothing looked wrong.
+
+Every finding below was reproduced before it was fixed, and each fix was
+verified by driving the real product rather than a mock.
 
 ### Added — plugins are reachable from the chat composer
 
@@ -33,6 +38,67 @@ hiding it.
   matters.
 - Nothing here bypasses the approval gate. A plugin that writes still stops for
   the same diff, dependents and test-coverage review as any agent write.
+
+### Fixed — the agent could not call a single tool
+
+0.4.5 shipped with every agent task that needed a tool failing. Prose questions
+worked, so the runtime looked healthy right up to the moment a user asked for
+real work. Four separate defects, each sufficient on its own:
+
+- **The tool-call delimiter.** Prompting qwen3.5:9b with the literal string
+  `<tool_call>` flips it into Ollama's native function-calling mode. ctx 1.4.0
+  mishandles that and reports the resulting `TypeError` as "Failed to connect to
+  Ollama server", which sent us to inspect an Ollama that was healthy the whole
+  time. The wire format is now `TOOL_CALL {...}` as literal text; the old form is
+  still parsed. Reported upstream in
+  `docs/upstream/ctx-1.4.0-tool-call-crash.md`.
+- **The prompt did not fit the model's context.** Ollama runs qwen3.5:9b at 4096
+  tokens. Our prompt was ~2200 and ctx prepended five retrieved chunks on top, so
+  the total overflowed — and llama-server runs with `--context-shift`, which
+  drops from the *front*: the system prompt carrying the tool instructions. The
+  model answered with its instructions truncated away. Small models now get a
+  tighter budget and fewer chunks. Measured on the same task: 280s timeout → 74s,
+  8–10 iterations → 2, 9-of-22 empty answers → 0.
+- **Relative paths resolved against the wrong root.** `resolveAllowedPath()`
+  anchored them to the runtime's working directory, so the agent asking for
+  `core/package.json` got `.../core/core/package.json` and "File not found" for a
+  file plainly on disk. They now resolve against each allowed workspace;
+  containment is unchanged and still refuses traversal.
+- **The workspace path was never stated.** Plugins declare `workspacePath` as a
+  required absolute path and nothing told the agent what it was, so it correctly
+  replied that it needed a path nobody had given it. The prompt now states it,
+  and an omitted value is filled from the active project.
+
+Also: the prompt's tool-call example used a placeholder literally named `tool`,
+and the model copied it — three `Tool not found: tool` iterations on every task
+before it found the real one. It is now a real worked example.
+
+### Added — release gates that exercise the product, not just the code
+
+Every existing gate inspected artifacts: code, dependencies, configuration,
+packaging. None asked the product to do the thing it exists to do, which is how
+the agent shipped completely broken with 492 tests green.
+
+- **`npm run test:plugins`** drives every installed plugin through the agent
+  using the exact phrase the chat dropdown inserts, and fails if the agent never
+  reaches a tool. The phrase derivation moved to `shared/pluginInvocation.js` so
+  the gate and the UI cannot drift.
+- **`npm run test:approval`** drives the agent into proposing a write, snapshots
+  the file at the moment it pauses, rejects the proposal, and asserts the file
+  was untouched both while pending and after the rejection — the product's
+  central safety claim, verified end to end for the first time.
+- **`npm run release:verify`** chains all seven gates in ascending cost.
+
+Both journey gates skip where Ollama is unavailable, and the runbook states
+plainly that a skip is not a pass. Timeouts are set from a full sequential run
+of every plugin rather than a single sample.
+
+### Fixed — spawned worktrees corrupted lint and tests
+
+Jest and eslint both scanned `.claude/worktrees`, so a background task's
+worktree ran as part of verification: 984 tests instead of 492, and an older
+commit's already-fixed lint errors reported as current. Any background task
+running during a release check produced a false red in two independent gates.
 
 ### Fixed — CI had never passed, and it was hiding a real regression
 

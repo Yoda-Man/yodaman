@@ -3,6 +3,7 @@ const { stripCliNoise, hasSubstantiveAnswer } = require('../infrastructure/CliOu
 const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
 const specDrift = require('../stardust/SpecDrift');
 const toolBox = require('../infrastructure/ToolBox');
+const { pluginCapability } = require('../../shared/pluginInvocation');
 const taskStore = require('../infrastructure/TaskStore');
 const graphifyService = require('../infrastructure/GraphifyService');
 const logger = require('../infrastructure/Logger');
@@ -210,6 +211,80 @@ Rules:
         this.recordTask(taskId, { events });
     }
 
+    /**
+     * The plugin a task names outright, or null when there is any doubt.
+     *
+     * Matches "run <name>", tolerating the separator drift between a plugin's
+     * registered name and how a person writes it (Droid-Sweep vs "Droid Sweep"),
+     * and a trailing qualifier such as "on this workspace". Everything else —
+     * two candidates, a plugin that can modify anything, an unloaded name —
+     * returns null and takes the normal reasoning path.
+     */
+    resolveDirectPluginCall(task) {
+        const text = String(task || '').trim();
+        const match = /^run\s+(.+?)(?:\s+(?:on|for|against|in)\s+.*)?$/i.exec(text);
+        if (!match) return null;
+
+        const wanted = match[1].trim().toLowerCase().replace(/[\s_-]+/g, '');
+        if (!wanted) return null;
+
+        // toolBox.plugins is absent in test doubles and before plugins load.
+        if (!toolBox.plugins || typeof toolBox.plugins.entries !== 'function') return null;
+
+        const candidates = [...toolBox.plugins.entries()].filter(([name]) =>
+            name.toLowerCase().replace(/[\s_-]+/g, '') === wanted);
+        if (candidates.length !== 1) return null;
+
+        // Reuse the capability map the chat dropdown labels plugins with, rather
+        // than keeping a second list here. A hand-written check for 'write' and
+        // 'command' let holocron-vr through: it declares agent:invoke,
+        // task:create and audit:write, none of which match those bare strings,
+        // and a plugin that can start agent tasks is exactly what should take
+        // the path with the approval gate on it.
+        const [name, plugin] = candidates[0];
+        if (pluginCapability(plugin)) return null;
+
+        return { name, plugin };
+    }
+
+    /** Invoke a named plugin without a model round-trip, emitting the usual events. */
+    async runPluginDirectly({ name, plugin }, { taskId, task, onStep, metadata }) {
+        const parameters = {};
+        for (const key of ['workspacePath', 'projectPath', 'projectRoot']) {
+            if (plugin.parameters && plugin.parameters[key]) parameters[key] = metadata.projectId;
+        }
+
+        logger.info('agent_plugin_routed_directly', { taskId, plugin: name, task });
+
+        const emit = (event) => {
+            this.recordTaskEvent(taskId, event);
+            if (onStep) onStep(event);
+        };
+
+        emit({ type: 'tool_start', taskId, tool: name, params: parameters, routed: 'direct' });
+
+        try {
+            const result = await toolBox.callTool(name, parameters);
+            const output = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+            emit({ type: 'tool_end', taskId, tool: name, result: output });
+
+            // Say so in the transcript. A turn that behaves differently from a
+            // normal one should not look identical to it.
+            const answer = `Ran **${name}** directly (no model call — you named the tool).\n\n${output}`;
+            this.recordTask(taskId, { status: 'completed', finalAnswer: answer });
+            // Recorded for task history but NOT emitted: RestController sends
+            // final_answer from the returned value, and emitting here too put
+            // two of them on the stream.
+            this.recordTaskEvent(taskId, { type: 'final_answer', taskId, answer });
+            return answer;
+        } catch (err) {
+            logger.error('agent_plugin_direct_failed', err, { taskId, plugin: name });
+            this.recordTask(taskId, { status: 'error', error: err.message });
+            emit({ type: 'error', taskId, message: err.message });
+            return null;
+        }
+    }
+
     async executeTask(task, taskId, onStep, metadata = {}) {
         const now = new Date().toISOString();
         this.recordTask(taskId, {
@@ -222,6 +297,24 @@ Rules:
             finalAnswer: null,
             error: null
         });
+
+        // ── Direct plugin routing ────────────────────────────────────────
+        // "Run CodeTrooper" names the tool outright. Asking a 9B model to infer
+        // which tool that means costs a retrieval, a model round-trip and about
+        // 50 seconds — and it gets it wrong often enough to fail a release gate:
+        // Grand-Inquisitor passed twice and then answered in prose instead of
+        // calling anything. There is nothing to infer here, so we do not infer.
+        //
+        // Deliberately narrow. Only an exact name match on a loaded, read-only
+        // plugin routes directly. Anything that can write, run commands or holds
+        // unrestricted permission goes the long way round, because that path
+        // carries the approval gate and speed is never worth skipping consent.
+        // Anything ambiguous also goes the long way: this replaces guessing with
+        // certainty, and a fuzzy match would just be guessing again.
+        const routed = this.resolveDirectPluginCall(task);
+        if (routed && metadata.projectId) {
+            return this.runPluginDirectly(routed, { taskId, task, onStep, metadata });
+        }
 
         // The workspace's own state, composed from all three tools and scoped to
         // the files this task names. Replaces the blind 4,000-character dump of
