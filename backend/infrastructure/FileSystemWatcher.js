@@ -3,8 +3,9 @@ const path = require('path');
 const queueService = require('../core/QueueService');
 const logger = require('./Logger');
 
-/** Directory names that are never worth indexing. Single source of truth. */
-const IGNORED_DIRECTORIES = ['node_modules', '.git', 'dist', 'build', 'release', 'graphify-out'];
+/** Never watched: generated output, vendored code, and VCS internals.
+ * Shared with QueueService so the watcher and the indexer cannot drift apart. */
+const { IGNORED_DIRECTORIES } = require('../../shared/ignoredPaths');
 
 /**
  * FileSystemWatcher (Infrastructure Layer)

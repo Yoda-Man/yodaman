@@ -4,6 +4,33 @@ All notable changes to **YodaMan** will be documented in this file.
 
 ## [0.5.0] - 2026-08-19
 
+### Fixed — a file-descriptor leak that silently disabled every tool
+
+The watcher and the indexer each kept their own list of directories to skip, the
+two drifted, and neither listed `.yodaman-doc-chunks` — a directory YodaMan
+generates itself. chokidar 4 dropped the fsevents backend, so on macOS it holds
+one descriptor per watched path; watching our own output meant a runtime four
+minutes old held **10,307 open descriptors, 5,264 of them chunk files**.
+
+A process that fills its descriptor table cannot allocate pipes, so `spawn`
+begins failing with `EBADF`. The symptom appears nowhere near the cause: the
+agent stops being able to run ctx, graphify, or any plugin, and a desktop app
+left open long enough simply stops working. This is what made the approval gate
+report INCONCLUSIVE — the agent could not reach the writeFile tool to propose
+anything.
+
+There is now one shared list (`shared/ignoredPaths.js`) covering generated
+output, build caches, and vendored trees, read by both the watcher and the
+indexer. Held descriptors dropped from **10,307 to 3,572**, and the approval
+gate now passes against a real workspace: the write pauses, and rejecting it
+leaves the file untouched.
+
+`bin`, `packages`, and `target` are deliberately *not* ignored. Each is build
+output in one ecosystem and hand-written source in another, and silently
+refusing to index someone's source is a worse failure than watching some output.
+A test asserts they stay off the list, and another asserts both consumers read
+the shared one so the copies cannot drift again.
+
 The verification story, finished. Three days ago this project had never had a
 green CI run and shipped an agent that could not call a tool; it now proves the
 artifact starts, the safety gate holds, and the docs describe what exists.
