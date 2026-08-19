@@ -9,6 +9,7 @@ const impactAnalyzer = require('./ImpactAnalyzer');
 const specDrift = require('../stardust/SpecDrift');
 const stardustWrapper = require('../stardust/StardustWrapper');
 const logger = require('./Logger');
+const { IGNORED_DIRECTORIES } = require('../../shared/ignoredPaths');
 
 /**
  * Baseline executables the agent may invoke. See getAllowedExecutables().
@@ -495,7 +496,9 @@ class ToolBox {
         const needle = String(query || '').trim().toLowerCase();
         if (!needle) return [];
 
-        const ignoredDirs = new Set(['.git', 'node_modules', 'dist', 'build', 'release', 'graphify-out', '.next', '.cache']);
+        // Shared with the watcher and the indexer, so the agent never surfaces
+        // generated text as if it were the user's source.
+        const ignoredDirs = new Set(IGNORED_DIRECTORIES);
         const ignoredFiles = new Set(['.env', '.env.local', '.env.development', '.env.production', '.env.test']);
         const maxResults = Math.min(Math.max(Number(top || 10), 1), 50);
         const results = [];

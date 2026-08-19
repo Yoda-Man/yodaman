@@ -67,10 +67,15 @@ describe('ignored paths', () => {
      */
     it.each([
         ['backend/infrastructure/FileSystemWatcher.js', 'the watcher'],
-        ['backend/core/QueueService.js', 'the indexer']
+        ['backend/core/QueueService.js', 'the indexer'],
+        ['backend/infrastructure/GraphifyService.js', 'the staleness scan'],
+        ['backend/infrastructure/ToolBox.js', 'the agent filesystem search']
     ])('%s reads the shared list rather than declaring its own', (relPath) => {
         const source = fs.readFileSync(path.join(__dirname, '..', '..', relPath), 'utf8');
         expect(source).toMatch(/require\(['"].*shared\/ignoredPaths['"]\)/);
+        // A fresh literal array of directory names is how the four copies got
+        // out of sync in the first place.
+        expect(source).not.toMatch(/new Set\(\[\s*['"](\.git|node_modules)/);
         expect(source).not.toMatch(/const\s+(IGNORED_DIRECTORIES|INDEX_IGNORE_PATTERNS)\s*=\s*\[/);
     });
 

@@ -3,6 +3,7 @@ const path = require('path');
 const os = require('os');
 const { execFile } = require('child_process');
 const logger = require('./Logger');
+const { IGNORED_DIRECTORIES } = require('../../shared/ignoredPaths');
 const dependencyChecker = require('./DependencyChecker');
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 300000);
@@ -218,7 +219,10 @@ function latestSourceMtime(projectPath) {
 }
 
 function scanSourceMtime(projectPath) {
-    const ignored = new Set(['node_modules', '.git', 'dist', 'build', 'release', 'graphify-out']);
+    // Shared with the watcher and the indexer. Scanning our own generated
+    // output here is not just slow: a newer chunk file reads as "the source
+    // changed", so the graph looks stale on work nothing did to the source.
+    const ignored = new Set(IGNORED_DIRECTORIES);
     let latest = 0;
 
     function walk(dir, depth) {
