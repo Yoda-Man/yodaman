@@ -24,7 +24,14 @@ describe('QueueService', () => {
         queueService.addToQueue('/path/1');
         expect(queueService.queue).toHaveLength(0); // Shifted immediately
         expect(queueService.isProcessing).toBe(true);
-        expect(spawn).toHaveBeenCalledWith(contextEngine.binary, ['index', '/path/1']);
+        // The ignore list is asserted, not just tolerated. Indexing our own
+        // generated output put graphify-out AST cache blobs at the top of search
+        // results and broke graph ranking, because those files are never in the
+        // knowledge graph. Losing these patterns silently would bring that back.
+        expect(spawn).toHaveBeenCalledWith(
+            contextEngine.binary,
+            ['index', '/path/1', '--force', '--ignore', expect.stringContaining('graphify-out')]
+        );
     });
 
     test('uses the configured ContextEngine binary for indexing', () => {
@@ -40,7 +47,10 @@ describe('QueueService', () => {
 
         try {
             queueService.addToQueue('/path/custom');
-            expect(spawn).toHaveBeenCalledWith('ctx-custom', ['index', '/path/custom']);
+            expect(spawn).toHaveBeenCalledWith(
+                'ctx-custom',
+                ['index', '/path/custom', '--force', '--ignore', expect.stringContaining('graphify-out')]
+            );
         } finally {
             contextEngine.binary = originalBinary;
         }

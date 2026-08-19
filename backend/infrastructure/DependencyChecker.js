@@ -554,7 +554,28 @@ async function probeCtxModel() {
  */
 const SMALL_CONTEXT_THRESHOLD = 8192;
 
+// Cached for the same reason the model probe is: it sits on the hot path of
+// every agent task, it makes a network call, and the answer changes only when
+// someone restarts Ollama with a different setting. Un-cached it also made the
+// unit suite hit the network, which is how it started failing in a full run
+// while passing in isolation.
+const CONTEXT_TTL_MS = 5 * 60 * 1000;
+let contextCache = { value: null, at: 0 };
+
+function resetOllamaContextCache() {
+    contextCache = { value: null, at: 0 };
+}
+
 async function detectOllamaContext(model) {
+    if (contextCache.at && (Date.now() - contextCache.at) < CONTEXT_TTL_MS) {
+        return contextCache.value;
+    }
+    const result = await probeOllamaContext(model);
+    contextCache = { value: result, at: Date.now() };
+    return result;
+}
+
+async function probeOllamaContext(model) {
     const configured = Number(process.env.OLLAMA_CONTEXT_LENGTH) || null;
     let declared = null;
     try {
@@ -597,5 +618,5 @@ function isWeakModel(model) {
 }
 
 module.exports = {
-    resetCtxModelCache, locate, check, checkAll, checkRunning, which, detectCtxModel, detectOllamaContext,
+    resetCtxModelCache, locate, check, checkAll, checkRunning, which, detectCtxModel, detectOllamaContext, resetOllamaContextCache,
     isWeakModel, SERVICES, PLATFORM_PATHS };

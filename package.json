@@ -44,10 +44,11 @@
     "release:smoke": "node scripts/release-smoke.js",
     "audit:vendored": "node scripts/audit-vendored.js",
     "test:plugins": "node scripts/plugin-smoke.js",
-    "release:verify": "npm run lint && npm test && npm run audit:prod && npm run audit:vendored && npm run release:smoke && npm run test:plugins && npm run test:approval",
+    "release:verify": "npm run lint && npm test && npm run audit:prod && npm run audit:vendored && npm run release:smoke && npm run test:journeys && npm run test:plugins && npm run test:approval",
     "test:approval": "node scripts/approval-smoke.js",
     "health:watch": "node scripts/health-watchdog.js",
-    "health:check": "node scripts/health-watchdog.js --once"
+    "health:check": "node scripts/health-watchdog.js --once",
+    "test:journeys": "node scripts/journey-smoke.js"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
