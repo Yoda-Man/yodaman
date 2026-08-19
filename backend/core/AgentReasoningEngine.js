@@ -368,12 +368,32 @@ Rules:
         // The model then answered with citations and no tool call, which is the
         // agent_empty_answer path. It accounted for 9 of 22 iterations measured.
         // Small models therefore get both a tighter budget and fewer chunks.
-        const promptChars = compact ? COMPACT_PROMPT_CHARS : undefined;
-        const topK = compact ? COMPACT_TOP_K : undefined;
+        // Compaction is a response to a small serving window, not to a small
+        // model. Where the window is genuinely large, trimming the prompt just
+        // throws away context the model could have used — so ask, and only
+        // compact when it is warranted.
+        let smallContext = true;
+        try {
+            const ctxWindow = await dependencyChecker.detectOllamaContext();
+            smallContext = ctxWindow.small;
+            if (!smallContext && compact) {
+                logger.info('agent_compact_relaxed', {
+                    taskId,
+                    configured: ctxWindow.configured,
+                    reason: 'serving context is large enough for the full prompt'
+                });
+            }
+        } catch (err) {
+            logger.warn('agent_context_probe_failed', { taskId, reason: err?.message });
+        }
+
+        const trim = compact && smallContext;
+        const promptChars = trim ? COMPACT_PROMPT_CHARS : undefined;
+        const topK = trim ? COMPACT_TOP_K : undefined;
 
         const conversation = new ConversationBuffer({
             ...(promptChars ? { maxPromptChars: promptChars } : {}),
-            system: (compact ? this.getCompactSystemPrompt() : this.getSystemPrompt()) + workspaceContext + uploadedFileContext,
+            system: (trim ? this.getCompactSystemPrompt() : this.getSystemPrompt()) + workspaceContext + uploadedFileContext,
             brief,
             task,
         });

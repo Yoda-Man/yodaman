@@ -98,6 +98,17 @@ function formatDependencyReport(report) {
         lines.push(`✓ ${dep.label}${version}${state} — ${dep.path}`);
     }
 
+    // A serving window far below the model's capability degrades every answer
+    // silently: the prompt is trimmed to fit and nothing says so. Worth a line
+    // in the health report, because the fix is one environment variable.
+    if (report.context && report.context.small && report.context.advice) {
+        lines.push('');
+        lines.push(`⚠️ Ollama context window${report.context.declared ? ` — model supports ${report.context.declared.toLocaleString()} tokens` : ''}`);
+        lines.push(`    ${report.context.advice}`);
+    } else if (report.context && report.context.effective) {
+        lines.push(`✓ Ollama context window — ${report.context.effective.toLocaleString()} tokens configured`);
+    }
+
     lines.push('');
     if (report.ok) {
         lines.push('✓ All required dependencies are installed and reachable.');
@@ -116,8 +127,19 @@ function formatDependencyReport(report) {
  * Check every required dependency and log a structured summary.
  */
 async function runDependencyDoctor({ now = new Date() } = {}) {
+    // Reported alongside the dependencies because it is a dependency in
+    // practice: the window Ollama serves decides how much of the prompt the
+    // model ever sees.
+    let context = null;
+    try {
+        context = await dependencyChecker.detectOllamaContext();
+    } catch (_err) {
+        context = null;
+    }
+
     const checks = await dependencyChecker.checkAll();
     const report = buildDependencyReport({ checks, now });
+    report.context = context;
 
     logger.info('dependency_doctor_completed', {
         ok: report.ok,
