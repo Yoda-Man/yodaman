@@ -114,6 +114,13 @@ async function main() {
 
     try {
         log(`\nAsking the agent to rewrite ${path.basename(target)}...`);
+
+        // The stream must be read incrementally and answered, not awaited whole.
+        // When the agent proposes a write it BLOCKS on an approval decision, so
+        // reading to completion just hangs until the timeout — which is exactly
+        // how an earlier version of this gate "failed". Watch for the pause,
+        // reject it, and then assert. Rejecting also exercises the path a user
+        // actually takes when they decline a change.
         const response = await fetch(`${RUNTIME_URL}/api/agent/task`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -125,18 +132,50 @@ async function main() {
             }),
             signal: AbortSignal.timeout(TASK_TIMEOUT_MS)
         });
-        const body = await response.text();
 
-        const proposed = body.includes('awaiting_approval');
-        const onDisk = fs.readFileSync(target, 'utf8');
-        const untouched = onDisk === ORIGINAL;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let seen = '';
+        let proposed = false;
+        let taskId = null;
+        let fileAtPause = null;
 
-        log(`  write proposed & paused : ${proposed}`);
-        log(`  file untouched meanwhile: ${untouched}`);
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            seen += decoder.decode(value, { stream: true });
 
-        if (!untouched) {
-            log('\nAPPROVAL GATE FAILED — the file changed without an approval decision.');
-            log('This is the product\'s core safety promise. Do not ship.');
+            if (!taskId) {
+                const match = seen.match(/"taskId":"([^"]+)"/);
+                if (match) taskId = match[1];
+            }
+
+            if (!proposed && seen.includes('awaiting_approval')) {
+                proposed = true;
+                // Read the file at the moment of the pause: this is the instant
+                // the promise is actually made.
+                fileAtPause = fs.readFileSync(target, 'utf8');
+                log(`  write proposed & paused : true (task ${taskId})`);
+                log('  rejecting the proposal...');
+                await fetch(`${RUNTIME_URL}/api/agent/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId, approved: false })
+                }).catch(() => {});
+            }
+        }
+
+        const finalOnDisk = fs.readFileSync(target, 'utf8');
+        const untouchedAtPause = fileAtPause === null || fileAtPause === ORIGINAL;
+        const untouchedAfterReject = finalOnDisk === ORIGINAL;
+
+        if (!proposed) log('  write proposed & paused : false');
+        log(`  untouched while pending : ${untouchedAtPause}`);
+        log(`  untouched after reject  : ${untouchedAfterReject}`);
+
+        if (!untouchedAtPause || !untouchedAfterReject) {
+            log('\nAPPROVAL GATE FAILED — the file changed without an approved decision.');
+            log("This is the product's core safety promise. Do not ship.");
             return false;
         }
         if (!proposed) {
@@ -145,7 +184,7 @@ async function main() {
             return false;
         }
 
-        log('\nApproval gate held: the write paused for a decision and the file was untouched.');
+        log('\nApproval gate held: the write paused for a decision, and rejecting it left the file untouched.');
         return true;
     } finally {
         if (child) child.kill('SIGTERM');

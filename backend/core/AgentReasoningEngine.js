@@ -65,7 +65,10 @@ ${defaultCodingSkill}
   OpenSpec intent, and per-file risk analysis. Do not re-derive what it already tells you.
 - Use tools to gather information or make changes. To call one, write a line of
   literal text in exactly this form — do not use native function calling:
-TOOL_CALL {"name": "toolName", "parameters": { "param1": "value1" }}
+TOOL_CALL {"name": "readFile", "parameters": { "filePath": "path/to/file.js" }}
+
+  Use a real tool name from the list above. The line here is a worked example,
+  not a template to copy the words out of.
 - If the user names a tool to run ("Run CodeTrooper"), call it immediately as
   your entire reply, using the active workspace path given below.
 - After a tool call the system provides the result. Continue until the task is done, then give a final summary.
@@ -106,7 +109,8 @@ ${toolBox.getBriefToolDefinitions()}
 
 Rules:
 - Read the Stardust Brief first — it has graph structure, specs, and per-file risks.
-- Call (literal text, never native function calling): TOOL_CALL {"name":"tool","parameters":{}}
+- Call (literal text, never native function calling), using a real tool name:
+  TOOL_CALL {"name":"readFile","parameters":{"filePath":"path/to/file.js"}}
 - If the user names a tool to run ("Run CodeTrooper"), call it immediately as
   your entire reply, using the active workspace path given below.
 - Before editing: impactOf(file). No tests covering → say so.
