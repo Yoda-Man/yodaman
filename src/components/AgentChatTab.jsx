@@ -584,6 +584,21 @@ export default function AgentChatTab({ selectedProject }) {
   const [error, setError] = useState('')
   const [preset, setPreset] = useState('')
   const [plugins, setPlugins] = useState([])
+
+  // Only plugins that can actually be driven from chat belong in a menu whose
+  // entries become chat messages. holocron-vr is the VR viewer: it declares no
+  // parameters and no `💡 Chat usage:` hint, so selecting it inserted
+  // "Run holocron-vr", which does nothing dependable. Offering an option that
+  // usually fails teaches people the menu is unreliable.
+  //
+  // The rule follows the project's own convention (AGENT.md rule 5): a plugin
+  // meant for chat documents how to invoke it. Anything that routes directly is
+  // also included, since naming it is guaranteed to work.
+  const chatPlugins = useMemo(
+    () => plugins.filter(plugin =>
+      /Chat usage:/.test(plugin.description || '') || !pluginCapability(plugin)),
+    [plugins]
+  )
   const [vrStatus, setVrStatus] = useState(null)
   const [isOpeningVr, setIsOpeningVr] = useState(false)
   const [holocronAvailable, setHolocronAvailable] = useState(false)
@@ -1171,7 +1186,7 @@ export default function AgentChatTab({ selectedProject }) {
                 // contract as anything else typed into this box.
                 if (selected.startsWith('plugin:')) {
                   const name = selected.slice('plugin:'.length)
-                  const plugin = plugins.find(item => item.name === name)
+                  const plugin = chatPlugins.find(item => item.name === name)
                   if (plugin) setInputText(pluginInvocation(plugin))
                   return
                 }
@@ -1186,9 +1201,9 @@ export default function AgentChatTab({ selectedProject }) {
                   <option key={p.label} value={p.label}>{p.label}</option>
                 ))}
               </optgroup>
-              {plugins.length > 0 ? (
+              {chatPlugins.length > 0 ? (
                 <optgroup label="Plugins — inserts a command, does not run it">
-                  {plugins.map(plugin => (
+                  {chatPlugins.map(plugin => (
                     <option key={plugin.name} value={`plugin:${plugin.name}`}>
                       {`🔌 ${plugin.name}${pluginCapability(plugin) ? ` · ${pluginCapability(plugin)}` : ''}`}
                     </option>

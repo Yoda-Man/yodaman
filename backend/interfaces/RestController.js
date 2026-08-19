@@ -446,8 +446,12 @@ router.get('/projects', async (req, res) => {
             name: p.name,
             path: p.path,
             id: p.id || p.path,
-            files: p.files || 0,
-            chunks: p.chunks || 0,
+            // ctx reports these as fileCount/chunkCount. Reading p.files and
+            // p.chunks silently yielded 0 for every project, indexed or not, so
+            // the endpoint advertised an empty index for a fully indexed
+            // workspace. Both spellings are accepted in case ctx's shape moves.
+            files: p.fileCount ?? p.files ?? 0,
+            chunks: p.chunkCount ?? p.chunks ?? 0,
             indexed: true
         })).filter(p => !config.removedDirectories.includes(p.path) && !isGeneratedTempWorkspace(p.path));
 
