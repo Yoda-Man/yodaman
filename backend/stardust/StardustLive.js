@@ -130,6 +130,8 @@ function guessStatus(changeDir) {
         const hasTasks = fs.existsSync(path.join(changeDir, 'tasks.md'));
         if (hasProposal || hasTasks) return 'proposed';
         return 'proposed'; // default
+    // An unreadable or half-written validation file means the change has not been
+    // validated yet, which is what 'proposed' already says.
     } catch (_) { return 'proposed'; }
 }
 
@@ -146,6 +148,8 @@ function buildSnapshot(projectRoot) {
 
     if (fs.existsSync(changesDir)) {
         let entries;
+        // No changes directory yet is a workspace that has not proposed anything,
+        // not an error. The board renders empty for it.
         try { entries = fs.readdirSync(changesDir, { withFileTypes: true }); } catch { entries = []; }
         for (const e of entries) {
             if (!e.isDirectory()) continue;
@@ -200,6 +204,7 @@ function buildDeltas(projectRoot, changeName) {
     const walk = (dir, depth = 0) => {
         if (depth > 5) return;
         let entries;
+        // Skip an unreadable directory rather than abandoning the watch tree.
         try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
         for (const e of entries) {
             const full = path.join(dir, e.name);
@@ -259,6 +264,8 @@ function broadcastTo(openspecRoot, msg) {
     for (const [ws, meta] of clients) {
         if (meta.openspecRoot !== openspecRoot) continue;
         if (ws.readyState !== 1) continue;
+        // A send that throws means the socket is gone. Dropping the client IS
+        // the handling; logging a disconnect per broadcast would be noise.
         try { ws.send(payload); } catch (_) { clients.delete(ws); }
     }
 }

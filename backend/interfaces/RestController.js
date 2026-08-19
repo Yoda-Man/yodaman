@@ -1530,6 +1530,8 @@ router.get('/health', async (req, res) => {
     try {
         contextWindow = await dependencyChecker.detectOllamaContext();
     } catch (_err) {
+        // Advisory on a health endpoint that must always answer. A probe failure
+        // omits the field rather than degrading the whole health report.
         contextWindow = null;
     }
 

@@ -31,6 +31,8 @@ async function reachable(url, timeoutMs = 3000) {
     try {
         return (await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })).ok;
     } catch (_err) {
+        // Unreachable is the answer this asks for, not an error to report. The
+        // caller decides what an absent runtime means — skip, wait, or fail.
         return false;
     }
 }
@@ -69,6 +71,8 @@ async function graphTerm(projectPath) {
             .filter((stem) => stem.length > 4);
         return connected[0] || null;
     } catch (_err) {
+        // No graph to derive a term from, so there is nothing to assert against.
+        // The caller reports this as a skip rather than a failure.
         return null;
     }
 }

@@ -387,6 +387,8 @@ const APP_VERSION = (() => {
     try {
         return require('../package.json').version || 'unknown';
     } catch (_err) {
+        // Shown on the diagnostics screen. If package.json cannot be read the app
+        // is in deep trouble already; 'unknown' keeps that screen rendering.
         return 'unknown';
     }
 })();
@@ -687,7 +689,9 @@ function diagnosticsPage({ title, message, status, logs = '' }) {
         }
         showToast('Diagnostics copied to clipboard', 'success');
       } catch (err) {
-        showToast('Copy failed', 'error');
+        // Handled by telling the user, and the reason is worth showing: clipboard
+        // failures are usually a permission the user can grant.
+        showToast('Copy failed: ' + (err && err.message ? err.message : 'unknown error'), 'error');
       }
     });
 

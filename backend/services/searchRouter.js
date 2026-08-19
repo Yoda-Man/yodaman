@@ -204,6 +204,8 @@ function annotateSpecFlags(results, projectPath) {
       };
     });
   } catch (_) {
+    // Spec annotation is advisory. A workspace without OpenSpec still deserves
+    // its search results, unannotated, rather than a failed search.
     return results;
   }
 }

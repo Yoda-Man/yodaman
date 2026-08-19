@@ -18,6 +18,9 @@ function readGraph(projectPath) {
     try {
         return graphifyService.readGraph(projectPath);
     } catch (_err) {
+        // A workspace with no graph yet is the normal state before the first
+        // build, not a failure. The doctor reports it as "no graph" from the
+        // null rather than from a log line.
         return null;
     }
 }

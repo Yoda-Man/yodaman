@@ -506,6 +506,9 @@ class ToolBox {
             try {
                 entries = fs.readdirSync(dirPath, { withFileTypes: true });
             } catch {
+                // Skip directories the process cannot read rather than failing the
+                // search. A workspace with one protected folder should still be
+                // searchable, and the user asked for results, not an audit.
                 return;
             }
 
@@ -531,6 +534,9 @@ class ToolBox {
         try {
             stat = fs.statSync(filePath);
         } catch {
+            // A file that vanished between the directory listing and this stat, or
+            // one we may not read. Skip it; the search should still return what
+            // it can.
             return;
         }
         if (stat.size > 1024 * 1024) return;
@@ -539,6 +545,8 @@ class ToolBox {
         try {
             content = fs.readFileSync(filePath, 'utf8');
         } catch {
+            // Binary, deleted mid-scan, or unreadable. Skip it rather than failing a
+            // whole search over one file the user probably did not want anyway.
             return;
         }
         if (content.includes('\u0000')) return;

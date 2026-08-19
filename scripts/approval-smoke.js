@@ -29,6 +29,8 @@ async function reachable(url, timeoutMs = 3000) {
     try {
         return (await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })).ok;
     } catch (_err) {
+        // Unreachable is the answer this asks for, not an error to report. The
+        // caller decides what an absent runtime means — skip, wait, or fail.
         return false;
     }
 }
@@ -70,6 +72,8 @@ async function pickIndexedWorkspace() {
 
         return usable.length ? usable[0].path : null;
     } catch (_err) {
+        // No workspace list means nothing to exercise the gate against, which the
+        // caller reports as a skip rather than a failure.
         return null;
     }
 }

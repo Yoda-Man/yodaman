@@ -58,6 +58,10 @@ function buildIndex(projectPath) {
     try {
         graph = graphifyService.readGraph(projectPath);
     } catch (_err) {
+        // No graph, or an unreadable one, means ranking simply cannot contribute.
+        // The caller checks for null and falls back to semantic order, and
+        // searchRouter already warns when a graph exists but matched nothing —
+        // which is the case actually worth someone's attention.
         return null;
     }
 
@@ -127,6 +131,8 @@ function buildSpecIndex(projectPath) {
         }
         return covered.size > 0 ? covered : null;
     } catch (_) {
+        // No specs, or unreadable ones, means spec coverage contributes nothing to
+        // the blend. The other three signals still rank the results.
         return null;
     }
 }

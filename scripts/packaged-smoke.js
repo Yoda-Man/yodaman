@@ -40,6 +40,8 @@ async function reachable(url, timeoutMs = 2000) {
     try {
         return (await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })).ok;
     } catch (_err) {
+        // Unreachable is the answer this asks for, not an error to report. The
+        // caller decides what an absent runtime means — skip, wait, or fail.
         return false;
     }
 }

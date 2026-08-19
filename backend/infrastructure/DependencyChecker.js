@@ -174,6 +174,9 @@ function expandGlob(pattern) {
             .map(entry => path.join(base, entry, suffix))
             .filter(p => fs.existsSync(p));
     } catch {
+        // A glob over an install path this machine does not have. Every platform
+        // list contains paths for setups the user has not installed, so empty is
+        // the expected answer rather than a fault.
         return [];
     }
 }
@@ -268,6 +271,7 @@ const SERVICES = {
  * Check if a path is a real file (not a directory like Cellar/ollama).
  */
 function isFile(p) {
+    // Absent or unreadable both answer the yes/no question this asks.
     try { return fs.statSync(p).isFile(); } catch (_) { return false; }
 }
 
@@ -535,6 +539,9 @@ async function probeCtxModel() {
         const model = String(output).trim().split('\n').pop().trim();
         return model || null;
     } catch (_) {
+        // ctx may be missing, unconfigured, or too old for this subcommand. Null
+        // means "model unknown", and the caller treats that as "assume nothing"
+        // rather than failing a task over a hint.
         return null;
     }
 }
