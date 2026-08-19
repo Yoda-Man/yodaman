@@ -162,6 +162,16 @@ async function main() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ taskId, approved: false })
                 }).catch(() => {});
+
+                // Everything this gate asserts is settled once the rejection is
+                // in: the file either survived it or it did not. Waiting for the
+                // agent to finish narrating afterwards is what pushed the run
+                // past its timeout and lost the result — the gate would report a
+                // timeout on a check that had already succeeded. Give the write
+                // a moment to land if it were going to, then stop reading.
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                try { await reader.cancel(); } catch (_err) { /* already closed */ }
+                break;
             }
         }
 

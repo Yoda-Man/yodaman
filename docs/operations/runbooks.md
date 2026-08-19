@@ -153,9 +153,29 @@ fixed in 0.4.6). Assume any future variant has the same signature.
    symlink farms (Flutter `.plugin_symlinks/`, `node_modules/.bin`, pub caches)
    are the first to suspect. Escalate with the sample from step 2.
 
-**Detection is manual.** There is no alerting; nothing will page anyone when this
-happens. Until that changes, a periodic `curl -m 5 .../api/health` from outside
-the runtime is the only early warning available.
+### Detecting it automatically
+
+`npm run health:watch` polls from outside the runtime and names this state
+explicitly. It has to be external: the failure blocks the event loop, so an
+in-process check is blocked with everything else.
+
+```bash
+npm run health:watch     # continuous; prints only on a state change
+npm run health:check     # one probe; exit 0 healthy, 1 wedged, 2 down, 3 slow
+```
+
+The exit codes make it usable from cron, launchd, or a monitoring agent:
+
+```bash
+*/5 * * * * cd /path/to/yodaman/core && npm run health:check --silent || \
+  echo "YodaMan unhealthy" | mail -s "YodaMan" you@example.com
+```
+
+It distinguishes **wedged** (port listening, no answer — a blocked loop) from
+**down** (nothing listening). That distinction is the whole point: a wedged
+runtime looks alive to `lsof` and busy to `ps`, and both readings are true and
+useless. On detecting a wedge it prints the evidence-capture command before you
+restart and destroy the only record of the cause.
 
 ## Recover from `ctx` CLI failures
 

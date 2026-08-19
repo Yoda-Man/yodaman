@@ -292,6 +292,29 @@ process.on('unhandledRejection', (reason) => {
     });
 });
 process.on('uncaughtException', (err) => {
+    // A taken port is the one startup failure with an obvious cause and an
+    // obvious fix, and it deserves to say so. Reported as a generic uncaught
+    // exception it read as a crash — and to anyone launching the desktop app it
+    // read as nothing at all, because the shell simply showed a black window
+    // with no runtime behind it. Name it, and say what to do.
+    if (err && err.code === 'EADDRINUSE') {
+        const port = err.port || PORT;
+        logger.error('runtime_port_in_use', err, {
+            port,
+            userAction: 'runtime',
+            severity: 'critical',
+            hint: `Port ${port} is already in use — another YodaMan runtime is probably running. `
+                + `Find it with "lsof -nP -iTCP:${port} -sTCP:LISTEN" and stop it, or set YODAMAN_PORT to a free port.`
+        });
+        process.stderr.write(
+            `\nYodaMan cannot start: port ${port} is already in use.\n`
+            + `Another runtime is probably already running.\n\n`
+            + `  lsof -nP -iTCP:${port} -sTCP:LISTEN   # find it\n`
+            + `  YODAMAN_PORT=3091 yodaman             # or use another port\n\n`
+        );
+        process.exit(2);
+    }
+
     logger.error('runtime_uncaught_exception', err, {
         userAction: 'runtime',
         severity: 'critical'

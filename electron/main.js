@@ -381,6 +381,16 @@ function logoDataUri() {
     return '';
 }
 
+// Shown on the diagnostics screen. When this screen is all a user can see, the
+// build they are looking at is the first thing anyone needs to establish.
+const APP_VERSION = (() => {
+    try {
+        return require('../package.json').version || 'unknown';
+    } catch (_err) {
+        return 'unknown';
+    }
+})();
+
 function diagnosticsPage({ title, message, status, logs = '' }) {
     const logoSrc = logoDataUri();
     const runtimeUrl = RUNTIME_URL;
@@ -397,6 +407,7 @@ function diagnosticsPage({ title, message, status, logs = '' }) {
     *, *::before, *::after { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: #0b1020; color: #eef4ff; }
     .container { max-width: 840px; margin: 0 auto; padding: 48px 24px; }
+    .version { font-size: 0.5em; font-weight: 600; color: #7f8ea3; vertical-align: middle; letter-spacing: 0.04em; }
 
     .logo { width: 54px; height: 54px; border-radius: 14px; background: #101a2d; border: 1px solid #263244; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 0 28px rgba(46,144,250,0.22); overflow: hidden; }
     .logo img { width: 42px; height: 42px; object-fit: contain; }
@@ -452,7 +463,7 @@ function diagnosticsPage({ title, message, status, logs = '' }) {
   <div class="container">
     <div class="logo">${logoSrc ? `<img src="${logoSrc}" alt="YodaMan" />` : 'Y'}</div>
 
-    <h1>${escapeHtml(title)}</h1>
+    <h1>${escapeHtml(title)} <span class="version">v${escapeHtml(APP_VERSION)}</span></h1>
     <p class="subtitle">${escapeHtml(message)}</p>
 
     <div id="status-badge" class="status-badge status-loading">⟳ Checking dependencies…</div>

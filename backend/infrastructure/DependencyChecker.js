@@ -539,6 +539,85 @@ async function probeCtxModel() {
     }
 }
 
+/**
+ * What context window the agent actually gets, versus what the model can do.
+ *
+ * These are usually very far apart and nothing said so. qwen3.5:9b declares a
+ * 262,144-token context; Ollama served it at 4,096, because OLLAMA_CONTEXT_LENGTH
+ * defaults to "4k/32k/256k based on VRAM" and this machine got the smallest. The
+ * agent's prompt plus ctx's retrieved chunks overflowed that, llama-server runs
+ * --context-shift so it dropped from the front, and the model answered with its
+ * tool instructions truncated away. Every symptom looked like a weak model.
+ *
+ * YodaMan cannot set this — Ollama is a separate service — so the honest move is
+ * to measure it, say so, and adapt the prompt budget to what is really available.
+ */
+const SMALL_CONTEXT_THRESHOLD = 8192;
+
+// Cached for the same reason the model probe is: it sits on the hot path of
+// every agent task, it makes a network call, and the answer changes only when
+// someone restarts Ollama with a different setting. Un-cached it also made the
+// unit suite hit the network, which is how it started failing in a full run
+// while passing in isolation.
+const CONTEXT_TTL_MS = 5 * 60 * 1000;
+let contextCache = { value: null, at: 0 };
+let contextInFlight = null;
+
+function resetOllamaContextCache() {
+    contextCache = { value: null, at: 0 };
+    contextInFlight = null;
+}
+
+function detectOllamaContext(model) {
+    if (contextCache.at && (Date.now() - contextCache.at) < CONTEXT_TTL_MS) {
+        return Promise.resolve(contextCache.value);
+    }
+    if (contextInFlight) return contextInFlight;
+
+    contextInFlight = probeOllamaContext(model)
+        .then((result) => {
+            contextCache = { value: result, at: Date.now() };
+            return result;
+        })
+        .finally(() => { contextInFlight = null; });
+
+    return contextInFlight;
+}
+
+async function probeOllamaContext(model) {
+    const configured = Number(process.env.OLLAMA_CONTEXT_LENGTH) || null;
+    let declared = null;
+    try {
+        const response = await fetch('http://127.0.0.1:11434/api/show', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: model || 'qwen3.5:9b' }),
+            signal: AbortSignal.timeout(5000)
+        });
+        const payload = await response.json();
+        const info = payload.model_info || {};
+        const key = Object.keys(info).find((k) => k.endsWith('.context_length'));
+        if (key) declared = Number(info[key]) || null;
+    } catch (_err) {
+        // Ollama unreachable or an older API — the caller reports it as unknown.
+    }
+
+    // Unset means Ollama chose by VRAM, and the small tier is the common outcome.
+    const effective = configured || null;
+    return {
+        declared,
+        configured,
+        effective,
+        small: effective === null || effective < SMALL_CONTEXT_THRESHOLD,
+        advice: effective && effective >= SMALL_CONTEXT_THRESHOLD
+            ? null
+            : `Ollama is serving a small context window${configured ? ` (${configured})` : ' (OLLAMA_CONTEXT_LENGTH is unset, so it is chosen by VRAM — often 4096)'}`
+              + `${declared ? `, while this model supports ${declared.toLocaleString()}` : ''}. `
+              + 'The agent prompt is trimmed to fit, which costs answer quality. '
+              + 'Raise it with OLLAMA_CONTEXT_LENGTH=32768 in the environment Ollama runs under, then restart Ollama.'
+    };
+}
+
 /** Heuristic: models under ~14B params struggle with structured tool calls. */
 function isWeakModel(model) {
     if (!model) return null;
@@ -548,4 +627,5 @@ function isWeakModel(model) {
 }
 
 module.exports = {
-    resetCtxModelCache, locate, check, checkAll, checkRunning, which, detectCtxModel, isWeakModel, SERVICES, PLATFORM_PATHS };
+    resetCtxModelCache, locate, check, checkAll, checkRunning, which, detectCtxModel, detectOllamaContext, resetOllamaContextCache,
+    isWeakModel, SERVICES, PLATFORM_PATHS };

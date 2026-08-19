@@ -119,15 +119,57 @@ router.get('/', async (req, res) => {
       ...(Array.isArray(docResults) ? docResults : []).map(r => ({ ...r, _source: 'docs' })),
     ];
 
+    // Drop YodaMan's own generated output before ranking.
+    //
+    // ctx indexes whatever is in the workspace, and that includes graphify-out/
+    // — Graphify's AST cache, written by us. Those files then dominate results:
+    // a search for "Architecture_Overview_Document" returned five copies of
+    // graphify-out/cache/ast/86c41b74….json instead of the document itself. They
+    // are hash-named blobs of no use to a reader, they are never in the
+    // knowledge graph, so nothing matched and graph ranking silently fell back
+    // to semantic-only for the whole result set, and the agent was being handed
+    // them as context.
+    const generated = /(^|\/)(graphify-out|\.yodaman|node_modules|dist|release)\//;
+    const source = all.filter((hit) => !generated.test(String(hit.filePath || hit.path || '')));
+    const dropped = all.length - source.length;
+    if (dropped > 0) {
+      logger.info('search_generated_artifacts_filtered', {
+        requestId: req.id,
+        project: resolvedProject,
+        dropped,
+        kept: source.length
+      });
+    }
+
     // Rank the merged set through GraphRanker (now includes specCoverage)
-    const results = applyGraphRanking(all, { project: resolvedProject, activeFile, req, mode: 'unified' });
+    const results = applyGraphRanking(source, { project: resolvedProject, activeFile, req, mode: 'unified' });
 
     // Annotate with spec drift flags per hit
     const annotated = annotateSpecFlags(results, resolvedProject);
 
+    // Silent degradation is the failure mode here. When a graph exists but
+    // recognises none of the hits, ranking quietly falls back to semantic-only
+    // while the API still advertises the four-signal blend — so the Trace tab
+    // shows nothing and nobody learns why. Observed cause: ctx and Graphify
+    // rooted at different directories for the same project, so ctx returns
+    // "backend/x.js" while the graph holds "core/backend/x.js" and nothing
+    // matches. Say so once per search rather than never.
+    const graphRanked = wasGraphRanked(results);
+    if (!graphRanked && resolvedProject && source.length >= 2) {
+      logger.warn('search_graph_ranking_inactive', {
+        requestId: req.id,
+        project: resolvedProject,
+        hits: source.length,
+        hint: 'A graph exists but matched none of these hits. Usually ctx and Graphify '
+          + 'were indexed from different roots for this project — compare a search '
+          + 'result path against the keys in graphify-out/graph.json. Ranking has '
+          + 'fallen back to semantic relevance only.'
+      });
+    }
+
     return res.json({
       results: annotated,
-      graphRanked: wasGraphRanked(results),
+      graphRanked,
       weights: graphRanker.DEFAULT_WEIGHTS,
       activeFile: activeFile || null,
     });

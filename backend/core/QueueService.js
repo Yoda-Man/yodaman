@@ -8,6 +8,19 @@ const graphifyService = require('../infrastructure/GraphifyService');
  * Manages a FIFO queue of indexing tasks to prevent resource exhaustion.
  * It interacts with the Infrastructure layer to spawn background processes.
  */
+// Generated or vendored directories that must never enter the search index.
+// graphify-out is ours; the rest are the usual noise that crowds out source.
+const INDEX_IGNORE_PATTERNS = [
+    'graphify-out',
+    'node_modules',
+    'dist',
+    'build',
+    'release',
+    'coverage',
+    '.git',
+    '.yodaman-approval-smoke'
+].join(',');
+
 class QueueService {
     constructor() {
         this.queue = [];
@@ -48,13 +61,43 @@ class QueueService {
             // Let's ensure ContextEngine has spawn or just use execute for simplicity if we don't need real-time logs.
             // Wait, original used spawn for streaming logs.
             const { spawn } = require('child_process');
-            this.activeProcess = spawn(contextEngine.binary, ['index', targetDir]);
+            // Never index our own generated output. ctx indexes whatever is in
+            // the workspace, and graphify-out/ is Graphify's AST cache — written
+            // by us. Left in, those hash-named blobs dominate results: a search
+            // for "Architecture_Overview_Document" returned five copies of
+            // graphify-out/cache/ast/86c41b74….json instead of the document, and
+            // every hit for that query was a cache file. They are never in the
+            // knowledge graph either, so graph ranking matched nothing and the
+            // advertised four-signal blend silently fell back to semantic-only.
+            // The agent was being handed them as context.
+            // --force is required, not optional. Without it ctx refuses an
+            // already-indexed project with "Project already indexed ... Hint:
+            // Use --force to re-index" and exits, while YodaMan reported
+            // "Indexing and Graphify graph update queued" and logged the refusal
+            // as ordinary stdout. Every reindex of an existing workspace was a
+            // no-op that looked like success — including "Sync Repository" in
+            // the UI and the remediation the runbook gives support for a stale
+            // workspace, which is why stale workspaces stayed stale.
+            this.activeProcess = spawn(contextEngine.binary, [
+                'index', targetDir, '--force', '--ignore', INDEX_IGNORE_PATTERNS
+            ]);
             let stderr = '';
 
             this.activeProcess.stdout.on('data', (data) => {
                 const text = data.toString();
                 process.stdout.write(`[ctx]: ${text}`);
-                logger.info('ctx_index_stdout', { path: targetDir, output: text.trim() });
+                // ctx writes its failures to stdout, so logging everything at
+                // info hid "Project already indexed" for as long as that bug
+                // existed. Anything that announces itself as an error is logged
+                // as one.
+                if (/^\s*Error:/m.test(text)) {
+                    logger.error('ctx_index_reported_error', new Error(text.trim().slice(0, 400)), {
+                        path: targetDir,
+                        userAction: 'reindex'
+                    });
+                } else {
+                    logger.info('ctx_index_stdout', { path: targetDir, output: text.trim() });
+                }
             });
 
             this.activeProcess.stderr.on('data', (data) => {

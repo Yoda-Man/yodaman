@@ -2,6 +2,126 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.4.8] - 2026-08-19
+
+### Fixed — 0.4.7's desktop app could not start
+
+`shared/` was never in electron-builder's file list. 0.4.7 made the backend
+depend on it — `AgentReasoningEngine` requires `shared/pluginInvocation` for the
+plugin capability map — so the packaged runtime died immediately with
+`Cannot find module '../../shared/pluginInvocation'` and the app opened to a
+diagnostics screen with nothing behind it.
+
+Every release gate passed while that build was broken, and the reason is worth
+recording. Unit tests, the plugin and approval journeys, and release smoke all
+run `node server.js` from the source tree, where `shared/` obviously exists.
+None of them booted the thing that actually ships. **A test of the source is not
+a test of the artifact.**
+
+- `shared/**/*` added to `electron-builder.json`. The npm tarball already
+  included it, so only the desktop build was affected.
+- **`npm run test:packaged`** boots the `server.js` inside the built `.app` and
+  waits for `/api/health`. Any file missing from the package surfaces here as
+  the module resolution failure it is, and the output names the missing path and
+  the file list to add it to.
+- That gate now runs **inside `desktop:dist:all`**, immediately after packaging,
+  so a build that cannot start fails the build instead of reaching a user. It is
+  also the eighth step of `release:verify`.
+
+### Added — the version on the diagnostics screen
+
+When that screen is all a user can see, the build they are looking at is the
+first thing anyone needs to establish. It now reads
+"YodaMan — Diagnostics Dashboard v0.4.8".
+
+## [0.4.7] - 2026-08-19
+
+Observability and honesty. 0.4.6 fixed the agent's tool-call path; this makes the
+conditions that broke it visible, and closes the gaps the audit left open.
+
+### Added — the runtime tells you when it is unwell
+
+- **`npm run health:watch` / `health:check`** — an external watchdog. It has to
+  be external: the failure it looks for blocks the event loop, so an in-process
+  check is blocked with everything else. It names **wedged** — port listening,
+  request timing out — separately from **down**, because a wedged runtime looks
+  alive to `lsof` and busy to `ps`, and both readings are true and useless. On
+  detection it prints the evidence-capture command before a restart destroys the
+  cause. Exit codes suit cron or a monitoring agent. Detection had been manual,
+  and a wedged runtime once ran unnoticed for seventeen hours.
+- **A Diagnostics button** on the dashboard re-runs the dependency doctor and
+  shows the report. Those checks already ran at startup and fed `/api/health`,
+  but nothing could re-run them and show the output.
+- **A taken port** now fails with its own message and exit code 2, naming the
+  port and a command to find the culprit. Reported as a generic uncaught
+  exception it read as a crash — and to anyone launching the desktop app it read
+  as nothing at all: a black window with no runtime behind it.
+
+### Fixed — Ollama was serving 4,096 tokens against a model built for 262,144
+
+`OLLAMA_CONTEXT_LENGTH` defaults by VRAM and this class of machine gets the
+smallest tier. Everything the agent did was shaped by that ceiling: the prompt
+plus retrieved chunks overflowed, `llama-server` runs `--context-shift` so it
+dropped from the front, and the model answered with its tool instructions
+truncated away. It read as a weak model for months.
+
+YodaMan cannot set it — Ollama is a separate service — so it now measures it,
+reports it in `yodaman doctor`, the dashboard and `/api/health`, and **offers to
+fix it**: one button sets the recommended value and restarts Ollama. That path is
+deliberately narrow, because it writes a launchd plist and restarts a service —
+its own endpoint rather than the agent's command tool so no model can reach it,
+a value checked against a fixed list, the plist backed up and restored if the
+restart fails, and a confirmation that says Ollama will briefly be unavailable.
+
+The agent also stops trimming when the window is genuinely large: compaction was
+a response to a small serving window, not a small model.
+
+### Fixed — search was indexing and returning our own output
+
+- **ctx was indexing `graphify-out/`**, Graphify's AST cache. A search for
+  "Architecture_Overview_Document" returned five copies of
+  `graphify-out/cache/ast/86c41b74….json` instead of the document, and every hit
+  for that query was a cache file. The agent was being handed them as context.
+  Indexing now excludes generated directories, and any that slipped in already
+  are filtered before ranking.
+- **Graph ranking was therefore dead.** Cache files are never in the knowledge
+  graph, so nothing matched and ranking silently fell back to semantic-only
+  while the API kept advertising the four-signal blend — the product's headline
+  claim and the Trace tab's entire content. It now warns when a graph exists and
+  matched nothing.
+- **`ctx index` refuses an already-indexed project without `--force`**, and
+  YodaMan never passed it. Every reindex of an existing workspace was a no-op
+  that reported success — including Sync Repository, and the remediation the
+  runbook gives support for a stale workspace, which is why stale workspaces
+  stayed stale. ctx writes failures to stdout, so the refusal had been logged at
+  info level for as long as it existed; errors now log as errors.
+- **`GET /api/projects` reported `files: 0` and `chunks: 0`** for every project,
+  indexed or not: ctx returns those as `fileCount` and `chunkCount`.
+
+### Added — a third release gate, and a plugin that runs instantly
+
+- **`npm run test:journeys`** covers search ranking and workspace readiness
+  without the agent loop, so it is fast and deterministic. It found all three
+  search defects above.
+- **Naming a plugin now runs it directly.** "Run CodeTrooper" costs a retrieval,
+  a model round-trip and about 50 seconds to work out what the user already
+  said, and a 9B model got it wrong often enough to fail a release gate.
+  Measured: 52s to 2s, and deterministic. Narrow by design — exact name match on
+  a loaded plugin, and anything that can modify still takes the path with the
+  approval gate on it.
+- The chat dropdown no longer offers plugins that cannot be driven from chat.
+
+### Fixed — verification that lied
+
+Jest and eslint both scanned `.claude/worktrees`, so a background task's
+worktree ran as part of verification: 984 tests instead of 492, and an older
+commit's already-fixed lint errors reported as current. `Downloads.test.js`
+asserted build artifacts that are gitignored, so it failed every CI run on a
+fresh checkout — which is why this repository had no green CI run since at least
+4 August, and that red hid two genuinely failing agent tests for a fortnight.
+
+`npm run release:verify` now chains eight gates in ascending cost.
+
 ## [0.4.6] - 2026-08-18
 
 A handover audit started here, and what it found went deeper than expected: the
