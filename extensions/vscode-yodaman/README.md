@@ -39,13 +39,36 @@ Task state and event history now come from the persisted runtime task history, s
 
 ## Commands
 
+### Agent
+
+- `YodaMan: Ask About Workspace`
+- `YodaMan: Run Agent Task`
+- `YodaMan: Cancel Active Agent Task`
+- `YodaMan: Search Workspace` — ranked results open the file; the blended score
+  and OpenSpec coverage ride along so the ranking stays inspectable.
+
+### The three-tool pillar
+
+- `YodaMan: Blast Radius For This File` — dependents, centrality, spec coverage,
+  and test coverage for the active file. Also on the editor and explorer context
+  menus.
+- `YodaMan: Stardust Change Board` — active OpenSpec changes and graph freshness.
+- `YodaMan: Check Spec Drift` — publishes drift into the Problems panel as
+  diagnostics. Stale spec references land on the spec; undocumented load-bearing
+  modules land on the module.
+- `YodaMan: Clear Spec Drift Markers`
+- `YodaMan: Pending Approvals` — review and decide write proposals.
+- `YodaMan: Runtime Diagnostics` — pillar tool health, Ollama, and per-workspace
+  readiness with the remediation each stale workspace needs.
+- `YodaMan: List Plugins`
+
+### Runtime and workspace
+
 - `YodaMan: Check Runtime Status`
 - `YodaMan: Start Local Runtime`
-- `YodaMan: Ask About Workspace`
-- `YodaMan: Search Workspace`
 - `YodaMan: Add Workspace`
 - `YodaMan: Add Workspace From Path`
 - `YodaMan: Reindex Workspace`
 - `YodaMan: Open Runtime Logs`
-- `YodaMan: Run Agent Task`
-- `YodaMan: Cancel Active Agent Task`
+- `YodaMan: Clear Task History`
+- `YodaMan: Clear Audit Logs`

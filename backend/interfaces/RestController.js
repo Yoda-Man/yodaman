@@ -212,33 +212,50 @@ function safePluginFilename(originalName) {
  * @param {(entryName: string) => boolean} [accept] - Filter applied to files only.
  * @returns {string[]} Absolute paths of matching files.
  */
-function walkArchiveFiles(dir, accept = () => true) {
+// Depth cap and symlink refusal are both load-bearing, and this input is
+// attacker-shaped: the directory being walked is an archive somebody uploaded.
+//
+// The walk previously used fs.statSync, which resolves a symlink to its target,
+// so a link pointing at an ancestor reported isDirectory() === true and the
+// recursion never terminated. The same mistake in GraphifyService pinned the
+// whole runtime at 100% CPU for 17 hours — this walk is synchronous too, so a
+// crafted zip would wedge the event loop exactly the same way, and here the
+// cycle can be authored deliberately rather than arriving by accident.
+const MAX_ARCHIVE_DEPTH = 12;
+
+function walkArchiveFiles(dir, accept = () => true, depth = 0) {
     let found = [];
     let entries;
 
+    if (depth > MAX_ARCHIVE_DEPTH) {
+        logger.warn('plugin_archive_depth_exceeded', { dir, depth, max: MAX_ARCHIVE_DEPTH });
+        return found;
+    }
+
     try {
-        entries = fs.readdirSync(dir);
+        entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch (err) {
         logger.warn('plugin_archive_walk_skipped', { dir, reason: err.message });
         return found;
     }
 
     for (const entry of entries) {
-        if (entry.startsWith('._')) continue;
+        if (entry.name.startsWith('._')) continue;
 
-        const entryPath = path.join(dir, entry);
-        let stats;
-        try {
-            stats = fs.statSync(entryPath);
-        } catch (err) {
-            logger.warn('plugin_archive_stat_skipped', { path: entryPath, reason: err.message });
+        const entryPath = path.join(dir, entry.name);
+
+        // isSymbolicLink() comes off the dirent, so it describes the link
+        // itself. Do not reintroduce statSync() here — that follows the link
+        // and reports the target, which is the bug described above.
+        if (entry.isSymbolicLink()) {
+            logger.warn('plugin_archive_symlink_skipped', { path: entryPath });
             continue;
         }
 
-        if (stats.isDirectory()) {
-            if (entry.startsWith('__MACOSX') || entry.startsWith('.')) continue;
-            found = found.concat(walkArchiveFiles(entryPath, accept));
-        } else if (accept(entry)) {
+        if (entry.isDirectory()) {
+            if (entry.name.startsWith('__MACOSX') || entry.name.startsWith('.')) continue;
+            found = found.concat(walkArchiveFiles(entryPath, accept, depth + 1));
+        } else if (entry.isFile() && accept(entry.name)) {
             found.push(entryPath);
         }
     }
@@ -650,7 +667,7 @@ router.use(require('./routes/gitRoutes'));
 router.post('/agent/task', async (req, res) => {
     let task;
     let projectId;
-    let fileIds = [];
+    let fileIds;
     try {
         task = validateString(req.body?.task, 'task', { max: 20000 });
         projectId = validateProjectId(req.body?.projectId);

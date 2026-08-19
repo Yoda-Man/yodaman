@@ -15,6 +15,11 @@ module.exports = [
         ignores: [
             'dist/**',
             'release/**',
+            // Spawned git worktrees are full copies of the repo at some other
+            // commit. Linting them reports that older commit's problems as if
+            // they were current — which failed this gate on empty catch blocks
+            // that had already been fixed on the branch being verified.
+            '.claude/worktrees/**',
             'coverage/**',
             'node_modules/**',
             'extensions/*/node_modules/**',

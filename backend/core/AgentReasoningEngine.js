@@ -3,6 +3,7 @@ const { stripCliNoise, hasSubstantiveAnswer } = require('../infrastructure/CliOu
 const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
 const specDrift = require('../stardust/SpecDrift');
 const toolBox = require('../infrastructure/ToolBox');
+const { pluginCapability } = require('../../shared/pluginInvocation');
 const taskStore = require('../infrastructure/TaskStore');
 const graphifyService = require('../infrastructure/GraphifyService');
 const logger = require('../infrastructure/Logger');
@@ -30,6 +31,12 @@ function safeToolName(rawToolCall) {
  * It manages context, parses tool calls, and interacts with the infrastructure layer
  * to execute actions and gather information.
  */
+// Budgets for a small model, whose context the full prompt plus ctx's retrieved
+// chunks will not fit. Both are deliberately conservative: an answer that fits
+// beats a richer prompt that gets truncated from the front.
+const COMPACT_PROMPT_CHARS = 5000;
+const COMPACT_TOP_K = 3;
+
 class AgentReasoningEngine {
     constructor() {
         /** @type {Map<string, Function>} Pending approval resolvers. */
@@ -57,13 +64,14 @@ ${defaultCodingSkill}
 ### Process:
 - Read the Stardust Brief below the system prompt first — it contains the workspace's structural state,
   OpenSpec intent, and per-file risk analysis. Do not re-derive what it already tells you.
-- Use tools to gather information or make changes. To call one:
-<tool_call>
-{
-  "name": "toolName",
-  "parameters": { "param1": "value1" }
-}
-</tool_call>
+- Use tools to gather information or make changes. To call one, write a line of
+  literal text in exactly this form — do not use native function calling:
+TOOL_CALL {"name": "readFile", "parameters": { "filePath": "path/to/file.js" }}
+
+  Use a real tool name from the list above. The line here is a worked example,
+  not a template to copy the words out of.
+- If the user names a tool to run ("Run CodeTrooper"), call it immediately as
+  your entire reply, using the active workspace path given below.
 - After a tool call the system provides the result. Continue until the task is done, then give a final summary.
 - Be concise and precise.
 
@@ -102,7 +110,10 @@ ${toolBox.getBriefToolDefinitions()}
 
 Rules:
 - Read the Stardust Brief first — it has graph structure, specs, and per-file risks.
-- Call: <tool_call>{"name":"tool","parameters":{}}</tool_call>
+- Call (literal text, never native function calling), using a real tool name:
+  TOOL_CALL {"name":"readFile","parameters":{"filePath":"path/to/file.js"}}
+- If the user names a tool to run ("Run CodeTrooper"), call it immediately as
+  your entire reply, using the active workspace path given below.
 - Before editing: impactOf(file). No tests covering → say so.
 - Multi-file features: specPropose → specValidate → specArchive.
 - Check specDrift first to avoid re-implementing documented work.
@@ -200,6 +211,80 @@ Rules:
         this.recordTask(taskId, { events });
     }
 
+    /**
+     * The plugin a task names outright, or null when there is any doubt.
+     *
+     * Matches "run <name>", tolerating the separator drift between a plugin's
+     * registered name and how a person writes it (Droid-Sweep vs "Droid Sweep"),
+     * and a trailing qualifier such as "on this workspace". Everything else —
+     * two candidates, a plugin that can modify anything, an unloaded name —
+     * returns null and takes the normal reasoning path.
+     */
+    resolveDirectPluginCall(task) {
+        const text = String(task || '').trim();
+        const match = /^run\s+(.+?)(?:\s+(?:on|for|against|in)\s+.*)?$/i.exec(text);
+        if (!match) return null;
+
+        const wanted = match[1].trim().toLowerCase().replace(/[\s_-]+/g, '');
+        if (!wanted) return null;
+
+        // toolBox.plugins is absent in test doubles and before plugins load.
+        if (!toolBox.plugins || typeof toolBox.plugins.entries !== 'function') return null;
+
+        const candidates = [...toolBox.plugins.entries()].filter(([name]) =>
+            name.toLowerCase().replace(/[\s_-]+/g, '') === wanted);
+        if (candidates.length !== 1) return null;
+
+        // Reuse the capability map the chat dropdown labels plugins with, rather
+        // than keeping a second list here. A hand-written check for 'write' and
+        // 'command' let holocron-vr through: it declares agent:invoke,
+        // task:create and audit:write, none of which match those bare strings,
+        // and a plugin that can start agent tasks is exactly what should take
+        // the path with the approval gate on it.
+        const [name, plugin] = candidates[0];
+        if (pluginCapability(plugin)) return null;
+
+        return { name, plugin };
+    }
+
+    /** Invoke a named plugin without a model round-trip, emitting the usual events. */
+    async runPluginDirectly({ name, plugin }, { taskId, task, onStep, metadata }) {
+        const parameters = {};
+        for (const key of ['workspacePath', 'projectPath', 'projectRoot']) {
+            if (plugin.parameters && plugin.parameters[key]) parameters[key] = metadata.projectId;
+        }
+
+        logger.info('agent_plugin_routed_directly', { taskId, plugin: name, task });
+
+        const emit = (event) => {
+            this.recordTaskEvent(taskId, event);
+            if (onStep) onStep(event);
+        };
+
+        emit({ type: 'tool_start', taskId, tool: name, params: parameters, routed: 'direct' });
+
+        try {
+            const result = await toolBox.callTool(name, parameters);
+            const output = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+            emit({ type: 'tool_end', taskId, tool: name, result: output });
+
+            // Say so in the transcript. A turn that behaves differently from a
+            // normal one should not look identical to it.
+            const answer = `Ran **${name}** directly (no model call — you named the tool).\n\n${output}`;
+            this.recordTask(taskId, { status: 'completed', finalAnswer: answer });
+            // Recorded for task history but NOT emitted: RestController sends
+            // final_answer from the returned value, and emitting here too put
+            // two of them on the stream.
+            this.recordTaskEvent(taskId, { type: 'final_answer', taskId, answer });
+            return answer;
+        } catch (err) {
+            logger.error('agent_plugin_direct_failed', err, { taskId, plugin: name });
+            this.recordTask(taskId, { status: 'error', error: err.message });
+            emit({ type: 'error', taskId, message: err.message });
+            return null;
+        }
+    }
+
     async executeTask(task, taskId, onStep, metadata = {}) {
         const now = new Date().toISOString();
         this.recordTask(taskId, {
@@ -212,6 +297,24 @@ Rules:
             finalAnswer: null,
             error: null
         });
+
+        // ── Direct plugin routing ────────────────────────────────────────
+        // "Run CodeTrooper" names the tool outright. Asking a 9B model to infer
+        // which tool that means costs a retrieval, a model round-trip and about
+        // 50 seconds — and it gets it wrong often enough to fail a release gate:
+        // Grand-Inquisitor passed twice and then answered in prose instead of
+        // calling anything. There is nothing to infer here, so we do not infer.
+        //
+        // Deliberately narrow. Only an exact name match on a loaded, read-only
+        // plugin routes directly. Anything that can write, run commands or holds
+        // unrestricted permission goes the long way round, because that path
+        // carries the approval gate and speed is never worth skipping consent.
+        // Anything ambiguous also goes the long way: this replaces guessing with
+        // certainty, and a fuzzy match would just be guessing again.
+        const routed = this.resolveDirectPluginCall(task);
+        if (routed && metadata.projectId) {
+            return this.runPluginDirectly(routed, { taskId, task, onStep, metadata });
+        }
 
         // The workspace's own state, composed from all three tools and scoped to
         // the files this task names. Replaces the blind 4,000-character dump of
@@ -241,9 +344,36 @@ Rules:
         // tokens and eventually large enough to exceed ARG_MAX.
         // Models <14B get a shorter prompt + tighter budget automatically.
         let compact = false;
-        try { compact = dependencyChecker.isWeakModel(await dependencyChecker.detectCtxModel()); } catch (_) {}
+        try {
+            compact = dependencyChecker.isWeakModel(await dependencyChecker.detectCtxModel());
+        } catch (err) {
+            // Never block a task on model detection — but say so, because a
+            // silent failure here downgrades every prompt without explanation.
+            logger.warn('agent_model_detect_failed', { taskId, reason: err?.message });
+        }
+        // Several plugins declare workspacePath as a required ABSOLUTE path, and
+        // neither the system prompt nor the Stardust Brief ever stated it — the
+        // brief describes files workspace-relative. Asked to "Run CodeTrooper"
+        // the agent correctly replied that it needed an absolute path nobody had
+        // given it, and never called the tool. Say it plainly.
+        const workspaceContext = metadata.projectId
+            ? `\n\nActive workspace (absolute path — use this for any tool needing workspacePath, projectPath or a project root): ${metadata.projectId}`
+            : '';
+
+        // The prompt budget governs what WE send. ctx then prepends its retrieved
+        // chunks on top, and the two together have to fit the model's context —
+        // 4096 tokens for qwen3.5:9b. At the default budget plus five chunks the
+        // total overflowed, and llama-server runs with --context-shift, which
+        // drops from the FRONT: the system prompt carrying the tool instructions.
+        // The model then answered with citations and no tool call, which is the
+        // agent_empty_answer path. It accounted for 9 of 22 iterations measured.
+        // Small models therefore get both a tighter budget and fewer chunks.
+        const promptChars = compact ? COMPACT_PROMPT_CHARS : undefined;
+        const topK = compact ? COMPACT_TOP_K : undefined;
+
         const conversation = new ConversationBuffer({
-            system: (compact ? this.getCompactSystemPrompt() : this.getSystemPrompt()) + uploadedFileContext,
+            ...(promptChars ? { maxPromptChars: promptChars } : {}),
+            system: (compact ? this.getCompactSystemPrompt() : this.getSystemPrompt()) + workspaceContext + uploadedFileContext,
             brief,
             task,
         });
@@ -294,7 +424,7 @@ Rules:
                 });
             }
 
-            const raw = await contextEngine.ask(prompt, { project: metadata.projectId });
+            const raw = await contextEngine.ask(prompt, { project: metadata.projectId, topK });
             const output = stripCliNoise(raw.output);
 
             if (this.isCancelled(taskId)) {
@@ -337,14 +467,27 @@ Rules:
                     chars: response.length,
                     hint: 'ctx returned citations with no generated text. Retrying with an explicit instruction.',
                 });
-                conversation.addNote('Your previous response contained only citations and no answer. Reply with exactly ONE of: a direct answer in prose, or a single <tool_call>{"name":"readFile","parameters":{"filePath":"path/to/file"}}</tool_call> block.');
+                conversation.addNote('Your previous response contained only citations and no answer. Reply with exactly ONE of: a direct answer in prose, or a single TOOL_CALL {"name":"readFile","parameters":{"filePath":"path/to/file"}} line.');
                 if (iteration < this.maxIterations) continue;
 
                 finalAnswer = 'Context Expert returned source citations but no generated answer, on every attempt. Check that the configured model is reachable (`yodaman doctor`) and that the prompt is within its context window. For reliable tool-calling, use a model with ≥14B parameters (e.g. qwen2.5:14b, codestral:22b, deepseek-coder-v2). Current model: see Health dashboard.';
                 break;
             }
 
-            const toolCallMatch = response.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+            // TOOL_CALL is the wire format; the angle-bracket form is still parsed
+            // because a model may emit it from habit.
+            //
+            // The delimiter is load-bearing, not cosmetic. Prompting qwen3.5:9b
+            // with the literal string "<tool_call>" flips it into Ollama's native
+            // function-calling mode, and ctx 1.4.0 mishandles the result: it puts
+            // an undefined into the follow-up messages array, its Ollama provider
+            // dereferences .content on it (message-mapper.ts:46), and the
+            // resulting TypeError is reported as "Failed to connect to Ollama
+            // server" because errors.ts:118 classifies every TypeError as a
+            // connection fault. Every agent task needing a tool died there. The
+            // plain-text delimiter never triggers native mode, so the loop works.
+            const toolCallMatch = response.match(/TOOL_CALL\s*(\{[\s\S]*?\})\s*(?:\n|$)/)
+                || response.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
 
             if (toolCallMatch) {
                 try {
@@ -458,6 +601,21 @@ Rules:
                     // ---------------------------
 
 
+                    // A small model that has been told the workspace path still
+                    // drops it sometimes. The active project is not ambiguous —
+                    // the user selected it — so supply it rather than failing the
+                    // call and burning an iteration on a question we can answer.
+                    if (metadata.projectId && toolCall.parameters && typeof toolCall.parameters === 'object') {
+                        for (const key of ['workspacePath', 'projectPath', 'projectRoot']) {
+                            const declared = toolBox.plugins?.get?.(toolCall.name)?.parameters?.[key];
+                            const missing = toolCall.parameters[key] === undefined || toolCall.parameters[key] === '';
+                            if (declared && missing) {
+                                toolCall.parameters[key] = metadata.projectId;
+                                logger.info('agent_workspace_param_filled', { taskId, tool: toolCall.name, key });
+                            }
+                        }
+                    }
+
                     const startEvent = { type: 'tool_start', taskId, tool: toolCall.name, params: toolCall.parameters };
                     this.recordTaskEvent(taskId, startEvent);
                     if (onStep) onStep(startEvent);
@@ -569,7 +727,13 @@ function repairJSON(raw) {
     s = s.replace(/,\s*\]/g, ']');
     // Fix single-quoted keys and values (simple case)
     if (!s.includes('"') && s.includes("'")) {
-        try { JSON.parse(s.replace(/'/g, '"')); s = s.replace(/'/g, '"'); } catch (_) {}
+        try {
+            JSON.parse(s.replace(/'/g, '"'));
+            s = s.replace(/'/g, '"');
+        } catch (_) {
+            // The quote swap did not produce valid JSON, so keep the original
+            // and let the caller's final parse check reject it.
+        }
     }
     // Add missing closing brace
     if (s.startsWith('{') && !s.endsWith('}')) {

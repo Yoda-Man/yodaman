@@ -83,7 +83,7 @@ function analyzeFile(projectPath, filePath, { depth = DEFAULT_DEPTH } = {}) {
     }
 
     let graph;
-    let stale = false;
+    let stale;
     try {
         graph = graphifyService.readGraph(projectPath);
         stale = Boolean(graphifyService.freshness(projectPath, { scanSources: false }).stale);

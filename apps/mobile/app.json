@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "YodaMan",
+    "slug": "yodaman-mobile",
+    "version": "0.1.9",
+    "orientation": "portrait",
+    "scheme": "yodaman",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "primaryColor": "#6366f1",
+    "backgroundColor": "#020617",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#020617"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "bundleIdentifier": "africa.criticalpath.yodaman.mobile",
+      "supportsTablet": true,
+      "backgroundColor": "#020617",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "YodaMan connects to the YodaMan runtime running on your own computer over your local network. Nothing is sent anywhere else.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.yodaman.mobile",
+      "backgroundColor": "#020617",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#101828"
+      },
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ],
+      "usesCleartextTraffic": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 YodaMan is local-first workspace intelligence for developers. **Context Expert** (semantic search), **Graphify** (structure), and **OpenSpec** (architectural intent) form a single pillar: every search, every agent turn, and every plan draws on all three at once — none is optional, none runs alone.
 
-![Version](https://img.shields.io/badge/Version-0.4.4-gold) ![License](https://img.shields.io/badge/License-MIT-green)
+![Version](https://img.shields.io/badge/Version-0.4.6-gold) ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## The three-tool pillar
 
@@ -39,7 +39,7 @@ Every answer in YodaMan blends three mandatory tools. No silos, no optional feat
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - Python 3.10+
 - Context Expert CLI: `npm install -g @contextexpert/cli`
 - OpenSpec CLI: `npm install -g @fission-ai/openspec@latest`
@@ -99,7 +99,7 @@ yodaman/
 ├── backend/                    # Express runtime
 │   ├── core/                   # Agent engine, queue service, coding skill
 │   ├── infrastructure/         # ToolBox, Graphify, ContextEngine, Logger, GraphFacts, ImpactAnalyzer, etc.
-│   ├── interfaces/             # REST controller (all API routes, ~2300 lines)
+│   ├── interfaces/             # REST controller + extracted route groups (~1626 lines)
 │   ├── services/               # Git, search, file upload
 │   ├── stardust/               # SpecDrift, StardustWrapper (CLI), StardustLive (WebSocket)
 │   └── utils/                  # Doc preprocessing, query classification
@@ -112,7 +112,7 @@ yodaman/
 ├── scripts/                    # Build and release scripts
 ├── shared/                     # Shared protocol/types for external clients
 ├── src/                        # React UI source
-│   ├── components/             # 29 UI components (Stardust, AgentChat, GraphStudio, etc.)
+│   ├── components/             # 28 UI components (Stardust, AgentChat, GraphStudio, etc.)
 │   ├── hooks/                  # useHealthCheck, useStardustLive, useStardustPipeline
 │   └── api/                    # Frontend HTTP client
 ├── tests/                      # Jest test suites

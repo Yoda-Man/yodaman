@@ -2,6 +2,218 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.4.6] - 2026-08-18
+
+A handover audit started here, and what it found went deeper than expected: the
+verification machinery was broken, and because it was broken it had been hiding
+a product that could not perform its central function. The agent could not call
+a single tool. Prose questions worked, so nothing looked wrong.
+
+Every finding below was reproduced before it was fixed, and each fix was
+verified by driving the real product rather than a mock.
+
+### Added — plugins are reachable from the chat composer
+
+Every shipped plugin carried a `💡 Chat usage:` hint precisely because the only
+way to run one was knowing the phrase. The composer dropdown now lists them
+alongside the task presets.
+
+Selecting one **fills the box; it does not run anything.** A preset is a prompt
+template, but a plugin is a tool execution with declared permissions, and
+collapsing that difference into one click would have quietly turned a menu into
+a trigger. Inserting keeps the "you press Send" contract, leaves the text
+editable so parameters can be adjusted, and teaches the chat syntax rather than
+hiding it.
+
+- The list comes from `GET /api/plugins`, never a hardcoded array — plugins can
+  be uploaded or removed while the app is running, and a menu offering one that
+  is not loaded is a support ticket.
+- Plugins carry a short, literal statement of what their permissions allow —
+  "writes files", "runs commands", "starts agent tasks" — mapped explicitly
+  against the permission allowlist. The first attempt pattern-matched the
+  permission strings and called anything containing "write" able to modify your
+  code, which flagged `audit:write` (the audit log, nothing else) and so
+  described a VR graph viewer as capable of changing files. A label that
+  overstates is worse than none: it teaches people to ignore the one that
+  matters.
+- Nothing here bypasses the approval gate. A plugin that writes still stops for
+  the same diff, dependents and test-coverage review as any agent write.
+
+### Fixed — the agent could not call a single tool
+
+0.4.5 shipped with every agent task that needed a tool failing. Prose questions
+worked, so the runtime looked healthy right up to the moment a user asked for
+real work. Four separate defects, each sufficient on its own:
+
+- **The tool-call delimiter.** Prompting qwen3.5:9b with the literal string
+  `<tool_call>` flips it into Ollama's native function-calling mode. ctx 1.4.0
+  mishandles that and reports the resulting `TypeError` as "Failed to connect to
+  Ollama server", which sent us to inspect an Ollama that was healthy the whole
+  time. The wire format is now `TOOL_CALL {...}` as literal text; the old form is
+  still parsed. Reported upstream in
+  `docs/upstream/ctx-1.4.0-tool-call-crash.md`.
+- **The prompt did not fit the model's context.** Ollama runs qwen3.5:9b at 4096
+  tokens. Our prompt was ~2200 and ctx prepended five retrieved chunks on top, so
+  the total overflowed — and llama-server runs with `--context-shift`, which
+  drops from the *front*: the system prompt carrying the tool instructions. The
+  model answered with its instructions truncated away. Small models now get a
+  tighter budget and fewer chunks. Measured on the same task: 280s timeout → 74s,
+  8–10 iterations → 2, 9-of-22 empty answers → 0.
+- **Relative paths resolved against the wrong root.** `resolveAllowedPath()`
+  anchored them to the runtime's working directory, so the agent asking for
+  `core/package.json` got `.../core/core/package.json` and "File not found" for a
+  file plainly on disk. They now resolve against each allowed workspace;
+  containment is unchanged and still refuses traversal.
+- **The workspace path was never stated.** Plugins declare `workspacePath` as a
+  required absolute path and nothing told the agent what it was, so it correctly
+  replied that it needed a path nobody had given it. The prompt now states it,
+  and an omitted value is filled from the active project.
+
+Also: the prompt's tool-call example used a placeholder literally named `tool`,
+and the model copied it — three `Tool not found: tool` iterations on every task
+before it found the real one. It is now a real worked example.
+
+### Added — release gates that exercise the product, not just the code
+
+Every existing gate inspected artifacts: code, dependencies, configuration,
+packaging. None asked the product to do the thing it exists to do, which is how
+the agent shipped completely broken with 492 tests green.
+
+- **`npm run test:plugins`** drives every installed plugin through the agent
+  using the exact phrase the chat dropdown inserts, and fails if the agent never
+  reaches a tool. The phrase derivation moved to `shared/pluginInvocation.js` so
+  the gate and the UI cannot drift.
+- **`npm run test:approval`** drives the agent into proposing a write, snapshots
+  the file at the moment it pauses, rejects the proposal, and asserts the file
+  was untouched both while pending and after the rejection — the product's
+  central safety claim, verified end to end for the first time.
+- **`npm run release:verify`** chains all seven gates in ascending cost.
+
+Both journey gates skip where Ollama is unavailable, and the runbook states
+plainly that a skip is not a pass. Timeouts are set from a full sequential run
+of every plugin rather than a single sample.
+
+### Fixed — spawned worktrees corrupted lint and tests
+
+Jest and eslint both scanned `.claude/worktrees`, so a background task's
+worktree ran as part of verification: 984 tests instead of 492, and an older
+commit's already-fixed lint errors reported as current. Any background task
+running during a release check produced a false red in two independent gates.
+
+### Fixed — CI had never passed, and it was hiding a real regression
+
+Every CI run since 4 August failed, including the release workflow on tag
+`v0.4.3`. The pipeline died at `lint`, so the test step never ran, so nobody saw
+that two tests were also failing. Two defects, each concealing the other.
+
+- **Lint**: two empty `catch {}` blocks, added by `b2e1ae0` (compact mode) and
+  `852bb99` (JSON repair). Both feature commits broke the build; neither was
+  caught, because the pipeline was already red.
+- **Tests**: `b2e1ae0` put `ctx config get default_model` — a subprocess with a
+  5-second timeout — on the hot path of *every* agent task, re-probed each time,
+  for a value that changes when the user edits their ctx config. One task cost
+  ~1s before doing any work. In tests it delayed approval registration past the
+  window, so `should continue when a write approval is rejected` timed out; the
+  orphaned task then consumed a mock belonging to the next test, which is why
+  `should report malformed tool calls as task errors` failed too. Two failures,
+  one cause.
+- **Fix**: cache the detection with a 5-minute TTL, and share the in-flight
+  promise so concurrent tasks do not each spawn a probe. First call 908 ms,
+  every subsequent call 0 ms.
+
+Suite is 492/492 across 63 suites, lint is clean, `release:smoke` passes.
+
+### Fixed — a vulnerable bundle shipped while the audit gate reported clean
+
+`vis-network` is a devDependency, so `npm audit --omit=dev` reported **0
+vulnerabilities** — but `scripts/sync-vendor.js` copies its bundle into
+`public/vendor/`, and `public/` ships in both the npm tarball and the desktop
+app. A vulnerable 9.1.6 bundle had been reaching users while CI called the tree
+clean, and the comment justifying that gate asserted dev advisories "never reach
+a consumer of the published package", which was false for this package.
+
+- Upgraded to `vis-network@10.1.1`, outside the advisory range. Verified by
+  rendering a graph with the exact API Graphify's artifacts use (`new
+  vis.DataSet`, `new vis.Network`) — `afterDrawing` fires, no console errors.
+- Added `npm run audit:vendored`, a CI gate that cross-references
+  `public/vendor/MANIFEST.json` against `npm audit` so anything vendored is
+  audited regardless of which dependency block it sits in. Verified it exits 1
+  on a vulnerable package and 0 when clean.
+- The manifest recorded a **hardcoded** `9.1.6` and kept reporting it after the
+  upgrade while shipping different bytes. It now reads the installed version, so
+  the record cannot drift from the artifact.
+
+`nanoid` remains flagged, via `postcss`. It is build-time only and never ships,
+which is what `--omit=dev` is for.
+
+### Fixed — the same symlink cycle, on the plugin upload path
+
+`walkArchiveFiles` recursed with `fs.statSync`, which resolves a symlink to its
+target, with no depth cap and no cycle detection — the identical defect that
+pinned the runtime at 100% CPU for 17 hours in 0.4.5, except this walk runs over
+an archive somebody uploaded, so the cycle can be authored deliberately rather
+than arriving by accident. Now refuses symlinks via the dirent and caps depth. A
+crafted archive that would have wedged the loop completes in 0 ms.
+
+### Changed — readiness no longer rescans on every poll
+
+`GET /api/readiness` walked every watched tree synchronously, ~310 ms of blocked
+event loop per call, on a route the dashboard polls. Cached per project for 10
+seconds: ten polls now cost 2 ms in total.
+
+### Changed — operational and ownership gaps closed
+
+- **New runbook section**: "Runtime is listening but answers nothing (100% CPU)"
+  — the failure whose every ordinary check looks healthy. Covers how to
+  recognise it, how to capture a stack sample *before* restarting destroys the
+  evidence, and why `SIGTERM` does nothing (the handler needs the same blocked
+  loop). It also states plainly that detection is manual.
+- **Added `.github/CODEOWNERS`**, which the runbook already referenced as
+  existing.
+- **Node**: `engines` now says `>=20`, and CI moved from the deprecated Node 20
+  runner to 22, which is what development actually runs on.
+- Cleared all remaining lint warnings, so a clean run means something.
+
+### Changed — dependencies
+
+`fs-extra` and `ws` to current patches. `chokidar` stays on 4; the 5.x bump is a
+major on the file watcher and buys only a patch-level fix.
+
+## [0.4.5] - 2026-08-18
+
+### Fixed — runtime wedged at 100% CPU on any workspace containing a Flutter project
+
+The desktop app opened to an empty diagnostics window. The runtime logged a clean startup — seven projects, `startup_health_summary healthy: true` — and then answered nothing. It held port 3090, accepted TCP connections, and never replied, so relaunching could not take the port either. One such process had been spinning for 17 hours and ignored `SIGTERM`.
+
+- **Root cause**: `latestSourceMtime()` in `GraphifyService.js` recursed using `fs.statSync()`, which resolves a symlink to its target. A symlinked directory therefore reported `isDirectory() === true` and the walk followed it. Flutter writes `.plugin_symlinks/` and `.symlinks/` entries that point back into an ancestor directory, so any watched project containing a Flutter app produced an infinite descent. There was no depth cap and no cycle detection.
+- **Why it took the whole runtime down**: the walk is synchronous. A cycle blocks the event loop outright, which is why the process could bind and accept but never respond, and why `SIGTERM` did nothing — the signal handler needs the same blocked loop. `SIGKILL` was the only way out.
+- **The trigger path**: Electron's startup poll calls `GET /api/readiness`, which reaches `WorkspaceReadiness.js` → `graphifyService.freshness()` without `scanSources: false`. Six of the eight `freshness()` call sites already passed that flag, so the cost of this scan had been worked around piecemeal rather than fixed at the source.
+- **Fix**: skip symlinks using the dirent's `isSymbolicLink()`, which describes the link rather than its target, and cap recursion depth as a backstop for any cycle that check would miss. Fixing the walker covers every caller at once.
+- **Measured**: a watched project reached 121,674 directories at depth 84 before a probe gave up, the path repeating `.plugin_symlinks/atomic_webview/example/linux/flutter/ephemeral/`. The same project now resolves in 150 ms, and `/api/readiness`, `/api/health`, `/api/status` and `/api/projects` all answer in under a second with CPU returning to idle.
+
+### Fixed — website claimed four things the code does not do
+
+Every claim on the site was checked against the code. Four were wrong:
+
+- **Search ranking**: the Trace section advertised three signals blended `0.6 + 0.25 + 0.15`. `GraphRanker.DEFAULT_WEIGHTS` is four signals at `0.50 / 0.20 / 0.15 / 0.15` — `specCoverage` was missing from the page entirely.
+- **Impact Analysis**: advertised a hop depth of 1–5; `ImpactAnalysisTab.jsx` offers 1–4.
+- **Stardust**: described as "four cross-tool views"; it ships eight tabs.
+- **Mobile**: the docs page promised push notifications. The Expo app contains no notification code at all.
+
+### Fixed — the docs page was unreachable on mobile
+
+`styles.css` hides the header nav below 820px and reveals it only via `.nav-open`, but `docs.html` shipped without a `.nav-toggle` button and without the toggle script that `index.html` has. On any phone the navigation was `display: none` with nothing able to open it. The button and script are now present on both pages.
+
+### Changed — Windows artifacts are no longer published from a macOS build
+
+`release.yml` documents that a macOS-hosted NSIS build can die mid-package and leave a truncated stub `.exe` that looks plausible and does not install, and the site states that no Windows build ships from here. `sync-website-downloads.js` was nonetheless copying one into `website/downloads/`, where it is fetchable by URL whether or not a card links to it. The sync step now skips Windows artifacts unless it is running on a Windows host, and says why.
+
+### Changed — documentation reframed around the three-tool pillar
+
+- The README opening now states what YodaMan is before describing the architecture, and no longer describes Ollama as optional — the same file lists it under Prerequisites and as a required dependency of `yodaman doctor`.
+- The legacy "Core Pillars" section (four principles already covered by the "Why YodaMan" bullets) was removed from both the README and the site, which had drifted out of agreement.
+- `docs.html` gained the three-tool pillar and Stardust sections it never had, and its API reference now covers the Stardust routes, search, health, readiness, plugins, and the WebSocket feed, with paths and methods checked against `backend/`.
+
 ## [0.4.4] - 2026-08-04
 
 ### Fixed — black window on launch

@@ -4,9 +4,9 @@
     {
       "file": "vis-network.min.js",
       "source": "node_modules/vis-network/standalone/umd/vis-network.min.js",
-      "version": "9.1.6",
-      "bytes": 702611,
-      "sha256": "576bb887733eb01bb52ee75b90ef46d818454de5fddb5b616fb8a298d307ca12"
+      "version": "10.1.1",
+      "bytes": 652000,
+      "sha256": "d844963aa47eac1f12e3a3b1629d6de8ff9df5af14d46c2a01efd19be5faf2fe"
     },
     {
       "file": "vis-network.LICENSE.txt",

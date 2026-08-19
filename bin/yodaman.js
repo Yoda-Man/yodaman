@@ -85,7 +85,7 @@ describe('${pluginName} plugin', () => {
 `;
 
     // Generate README entry
-    let readmeContent = '';
+    let readmeContent;
     if (fs.existsSync(readmeFile)) {
         readmeContent = fs.readFileSync(readmeFile, 'utf8');
     } else {

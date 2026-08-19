@@ -180,30 +180,75 @@ function hasGraph(projectPath) {
     return fs.existsSync(graphPath(projectPath));
 }
 
+// Symlinked directories are NEVER followed here, and the depth is capped.
+// Both guards are load-bearing: Flutter writes .plugin_symlinks/ and .symlinks/
+// entries that point back into an ancestor directory, and statSync() resolves a
+// link to its target, so isDirectory() was true and the walk recursed forever.
+// That wedged the whole runtime — this walk is synchronous, so a cycle blocks
+// the event loop, and the process kept the port bound at 100% CPU while every
+// request hung. GET /api/readiness reaches this on the Electron startup poll.
+const MAX_SOURCE_SCAN_DEPTH = 12;
+
+// The scan is synchronous, so its cost is charged to the event loop: every
+// GET /api/readiness walked all watched trees before answering (~300ms across
+// seven projects here), and the desktop dashboard polls that route. Cache per
+// project for long enough to absorb a poll burst, but briefly enough that an
+// edit shows up as stale almost immediately.
+const SOURCE_MTIME_TTL_MS = 10 * 1000;
+const sourceMtimeCache = new Map();
+
+/** Drop cached scan results. Exposed for tests and post-write invalidation. */
+function resetSourceMtimeCache(projectPath) {
+    if (projectPath) sourceMtimeCache.delete(projectPath);
+    else sourceMtimeCache.clear();
+}
+
 function latestSourceMtime(projectPath) {
+    const cached = sourceMtimeCache.get(projectPath);
+    if (cached && (Date.now() - cached.at) < SOURCE_MTIME_TTL_MS) return cached.value;
+    const value = scanSourceMtime(projectPath);
+    sourceMtimeCache.set(projectPath, { value, at: Date.now() });
+    return value;
+}
+
+function scanSourceMtime(projectPath) {
     const ignored = new Set(['node_modules', '.git', 'dist', 'build', 'release', 'graphify-out']);
     let latest = 0;
 
-    function walk(dir) {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            if (ignored.has(entry.name)) continue;
+    function walk(dir, depth) {
+        if (depth > MAX_SOURCE_SCAN_DEPTH) return;
+
+        let entries;
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch (_err) {
+            return;
+        }
+
+        for (const entry of entries) {
+            // isSymbolicLink() comes off the dirent, so it describes the link
+            // itself. Do not swap this for a statSync() check — that follows the
+            // link and reports the target, which is exactly the bug above.
+            if (ignored.has(entry.name) || entry.isSymbolicLink()) continue;
             const entryPath = path.join(dir, entry.name);
+
+            if (entry.isDirectory()) {
+                walk(entryPath, depth + 1);
+                continue;
+            }
+            if (!entry.isFile()) continue;
+
             let stat;
             try {
                 stat = fs.statSync(entryPath);
             } catch (_err) {
                 continue;
             }
-
-            if (stat.isDirectory()) {
-                walk(entryPath);
-            } else {
-                latest = Math.max(latest, stat.mtimeMs);
-            }
+            latest = Math.max(latest, stat.mtimeMs);
         }
     }
 
-    if (fs.existsSync(projectPath)) walk(projectPath);
+    if (fs.existsSync(projectPath)) walk(projectPath, 0);
     return latest;
 }
 
@@ -476,6 +521,7 @@ function enhanceArtifactHtml(html) {
 }
 
 module.exports = {
+    resetSourceMtimeCache,
     // Set to true after assertAvailable() confirms Ollama is installed.
     _ollamaAvailable: false,
     graphPath,
