@@ -17,6 +17,8 @@ const originPolicy = require('../infrastructure/OriginPolicy');
 const logger = require('../infrastructure/Logger');
 const graphifyService = require('../infrastructure/GraphifyService');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
+const ollamaConfig = require('../infrastructure/OllamaConfig');
+const dependencyDoctor = require('../infrastructure/DependencyDoctor');
 const workspaceReadiness = require('../infrastructure/WorkspaceReadiness');
 
 const multer = require('multer');
@@ -1425,6 +1427,55 @@ let lastHealthSignature = null;
  * `pending` arrays naming the checks that need attention. The Electron
  * recovery page polls this on load to render the diagnostic dashboard.
  */
+/**
+ * Ollama context window — read, and change with a restart.
+ *
+ * These have their own endpoints rather than being reachable through the
+ * agent's command tool: changing this writes a launchd plist and restarts a
+ * service, and nothing a model decides should be able to reach that. The value
+ * is checked against a fixed list, the plist is backed up first, and a failed
+ * restart rolls the file back.
+ */
+router.get('/ollama/context', (req, res) => {
+    try {
+        return res.json(ollamaConfig.inspect());
+    } catch (err) {
+        return jsonError(res, 500, err.message, 'ollama_context_read_failed');
+    }
+});
+
+router.post('/ollama/context', async (req, res) => {
+    const tokens = Number(req.body?.tokens);
+    try {
+        const result = await ollamaConfig.setContextLength(tokens);
+        logger.info('ollama_context_set', { tokens, requestId: req.id, userAction: 'set_ollama_context' });
+        return res.json({ ok: true, ...result });
+    } catch (err) {
+        logger.error('ollama_context_set_failed', err, {
+            requestId: req.id,
+            tokens,
+            userAction: 'set_ollama_context',
+            severity: 'medium'
+        });
+        return jsonError(res, err.status || 500, err.message, 'ollama_context_set_failed');
+    }
+});
+
+/** Re-run the dependency doctor on demand and return its report. */
+router.get('/diagnostics/run', async (req, res) => {
+    try {
+        const report = await dependencyDoctor.runDependencyDoctor();
+        return res.json({
+            ok: report.ok,
+            report,
+            text: dependencyDoctor.formatDependencyReport(report)
+        });
+    } catch (err) {
+        logger.error('diagnostics_run_failed', err, { requestId: req.id, userAction: 'run_diagnostics' });
+        return jsonError(res, 500, err.message, 'diagnostics_run_failed');
+    }
+});
+
 router.get('/health', async (req, res) => {
     const healthState = req.app ? req.app.get('healthState') : null;
     const checks = healthState || {
@@ -1471,6 +1522,17 @@ router.get('/health', async (req, res) => {
         config: enrich(checks.config)
     };
 
+    // The context window Ollama serves is a health fact, not a curiosity: when it
+    // is far below the model's capability the agent's prompt is trimmed to fit
+    // and answer quality drops with nothing on screen to explain it. Advisory,
+    // so a probe failure never degrades the health report.
+    let contextWindow;
+    try {
+        contextWindow = await dependencyChecker.detectOllamaContext();
+    } catch (_err) {
+        contextWindow = null;
+    }
+
     // Report the state we actually observed. Previously this always said
     // "degraded" once startup finished, which hid genuine failures behind a
     // permanent warning and gave the diagnostics page nothing to act on.
@@ -1499,6 +1561,7 @@ router.get('/health', async (req, res) => {
 
     res.json({
         status,
+        contextWindow,
         started: checks.started,
         uptimeSeconds: Math.round(process.uptime()),
         checks: reportedChecks,

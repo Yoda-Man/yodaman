@@ -561,18 +561,27 @@ const SMALL_CONTEXT_THRESHOLD = 8192;
 // while passing in isolation.
 const CONTEXT_TTL_MS = 5 * 60 * 1000;
 let contextCache = { value: null, at: 0 };
+let contextInFlight = null;
 
 function resetOllamaContextCache() {
     contextCache = { value: null, at: 0 };
+    contextInFlight = null;
 }
 
-async function detectOllamaContext(model) {
+function detectOllamaContext(model) {
     if (contextCache.at && (Date.now() - contextCache.at) < CONTEXT_TTL_MS) {
-        return contextCache.value;
+        return Promise.resolve(contextCache.value);
     }
-    const result = await probeOllamaContext(model);
-    contextCache = { value: result, at: Date.now() };
-    return result;
+    if (contextInFlight) return contextInFlight;
+
+    contextInFlight = probeOllamaContext(model)
+        .then((result) => {
+            contextCache = { value: result, at: Date.now() };
+            return result;
+        })
+        .finally(() => { contextInFlight = null; });
+
+    return contextInFlight;
 }
 
 async function probeOllamaContext(model) {

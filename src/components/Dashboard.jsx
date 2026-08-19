@@ -146,6 +146,66 @@ function HealthPill({ checks }) {
 
 export default function Dashboard() {
     const [status, setStatus] = useState(null)
+    // Fetched separately from /api/health: the primary status path is
+    // /api/status, which does not carry it, and the card should appear whichever
+    // path succeeded.
+    const [contextWindow, setContextWindow] = useState(null)
+    const [applyingContext, setApplyingContext] = useState(false)
+    const [contextNotice, setContextNotice] = useState('')
+    const [diagnosticsText, setDiagnosticsText] = useState('')
+    const [runningDiagnostics, setRunningDiagnostics] = useState(false)
+
+    // Changing this restarts Ollama, which interrupts anything mid-flight, so it
+    // asks first and says exactly what it will do rather than acting on a click.
+    async function applyRecommendedContext() {
+        const tokens = contextWindow?.recommended || 32768
+        const confirmed = window.confirm(
+            `Set Ollama's context window to ${tokens.toLocaleString()} tokens and restart it?\n\n`
+            + 'Ollama will be unavailable for a few seconds, and any request in flight will fail.\n'
+            + 'Your launch settings are backed up first and restored if the restart fails.'
+        )
+        if (!confirmed) return
+
+        setApplyingContext(true)
+        setContextNotice('')
+        try {
+            const res = await fetch('/api/ollama/context', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tokens })
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Could not apply the change')
+            setContextNotice(`Applied ${tokens.toLocaleString()} and restarted Ollama.`)
+            const health = await fetch('/api/health').then(r => r.json()).catch(() => null)
+            if (health) setContextWindow(health.contextWindow || null)
+        } catch (err) {
+            setContextNotice(err.message)
+        } finally {
+            setApplyingContext(false)
+        }
+    }
+
+    async function runDiagnostics() {
+        setRunningDiagnostics(true)
+        try {
+            const data = await fetch('/api/diagnostics/run').then(r => r.json())
+            setDiagnosticsText(data.text || 'No output returned.')
+        } catch (err) {
+            setDiagnosticsText(`Diagnostics failed: ${err.message}`)
+        } finally {
+            setRunningDiagnostics(false)
+        }
+    }
+
+    useEffect(() => {
+        let cancelled = false
+        fetch('/api/health')
+            .then(res => res.json())
+            .then(data => { if (!cancelled) setContextWindow(data.contextWindow || null) })
+            .catch(() => { if (!cancelled) setContextWindow(null) })
+        return () => { cancelled = true }
+    }, [])
     const [diagnostics, setDiagnostics] = useState(null)
     const [pairing, setPairing] = useState(null)
     const [projects, setProjects] = useState([])
@@ -250,9 +310,35 @@ export default function Dashboard() {
                             <Link size={16} />
                             Pair Mobile
                         </button>
+                        {/* The same checks that run at startup, on demand and with the
+                            full report visible. They fed /api/health and this page, but
+                            there was no way to re-run them and read the output. */}
+                        <button
+                            onClick={runDiagnostics}
+                            disabled={runningDiagnostics}
+                            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-slate-300 uppercase tracking-widest hover:text-white hover:bg-white/10 disabled:opacity-50"
+                        >
+                            <Activity size={16} />
+                            {runningDiagnostics ? 'Running…' : 'Diagnostics'}
+                        </button>
                         <HealthPill checks={checks} />
                     </div>
                 </header>
+
+                {diagnosticsText ? (
+                    <section className="mb-6 rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="font-bold text-slate-300 uppercase tracking-widest text-xs">Diagnostics report</h3>
+                            <button
+                                onClick={() => setDiagnosticsText('')}
+                                className="text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-300"
+                            >
+                                Dismiss
+                            </button>
+                        </div>
+                        <pre className="text-[11px] leading-relaxed text-slate-300 font-mono whitespace-pre-wrap overflow-x-auto">{diagnosticsText}</pre>
+                    </section>
+                ) : null}
 
                 {pairing ? (
                     <div className="glass-panel p-5 space-y-2">
@@ -299,6 +385,43 @@ export default function Dashboard() {
                             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Provider</span>
                             <span className="text-[10px] text-slate-400 font-mono uppercase">{status.llm?.provider}</span>
                         </div>
+                        {/* The window Ollama serves decides how much of the prompt the
+                            model ever sees. It was 4,096 against a model capable of
+                            262,144, the prompt was trimmed to fit, and nothing on
+                            screen said so — answers were quietly worse. Shown in amber
+                            with the remedy when it is small, because it is fixable in
+                            one environment variable. */}
+                        {contextWindow ? (
+                            <div className="pt-4 border-t border-white/5 flex justify-between items-start gap-3">
+                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0">Context</span>
+                                <span className="text-right">
+                                    <span className={`text-[10px] font-mono ${contextWindow.small ? 'text-amber-300' : 'text-slate-400'}`}>
+                                        {contextWindow.effective
+                                            ? `${contextWindow.effective.toLocaleString()} tokens`
+                                            : 'default (often 4,096)'}
+                                        {contextWindow.declared ? ` of ${contextWindow.declared.toLocaleString()}` : ''}
+                                    </span>
+                                    {contextWindow.small ? (
+                                        <span className="block text-[9px] text-amber-400/70 mt-1 leading-snug">
+                                            Prompts are trimmed to fit, which costs answer quality.
+                                        </span>
+                                    ) : null}
+                                    {contextWindow.small ? (
+                                        <button
+                                            type="button"
+                                            disabled={applyingContext}
+                                            onClick={applyRecommendedContext}
+                                            className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-200 hover:bg-amber-400/20 disabled:opacity-50"
+                                        >
+                                            {applyingContext ? 'Restarting Ollama…' : 'Set 32,768 & restart Ollama'}
+                                        </button>
+                                    ) : null}
+                                    {contextNotice ? (
+                                        <span className="block text-[9px] text-slate-400 mt-1 leading-snug">{contextNotice}</span>
+                                    ) : null}
+                                </span>
+                            </div>
+                        ) : null}
                         <div className="pt-4 border-t border-white/5 flex justify-between items-center">
                             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Context Expert</span>
                             <span className="text-[10px] font-mono font-bold uppercase">

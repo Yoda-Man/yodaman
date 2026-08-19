@@ -130,7 +130,7 @@ async function runDependencyDoctor({ now = new Date() } = {}) {
     // Reported alongside the dependencies because it is a dependency in
     // practice: the window Ollama serves decides how much of the prompt the
     // model ever sees.
-    let context = null;
+    let context;
     try {
         context = await dependencyChecker.detectOllamaContext();
     } catch (_err) {
