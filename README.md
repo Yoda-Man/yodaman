@@ -76,13 +76,52 @@ yodaman doctor --graph
 
 The same dependency checks run at startup, appear in the Dashboard health panel and `GET /api/health`, and appear on the desktop startup diagnostics screen where missing components offer a one-click install.
 
+## Choosing a model
+
+**9B parameters is the floor, not the target.** YodaMan is built to run on a 9B
+model so it works on modest hardware, and to get better — not merely faster —
+when you give it more.
+
+| | Model | What you get |
+|---|---|---|
+| Minimum | `qwen3.5:9b` | Works. Tool-calling is occasionally unreliable; the agent sometimes answers with citations instead of running the tool. |
+| Recommended | `qwen2.5:14b`, `codestral:22b` | Reliable tool-calling. This is the point where the agent stops needing retries. |
+| Best | `deepseek-coder-v2`, 32B-class | Reasoning that holds across long multi-step tasks. |
+
+Set the model through Context Expert; YodaMan detects whichever one you have
+configured and reports it on the Health dashboard.
+
+### Give the model room to think
+
+The single highest-impact setting is **not** the model — it is the context
+window Ollama serves it:
+
+```bash
+export OLLAMA_CONTEXT_LENGTH=32768
+```
+
+When this is unset, Ollama picks a window based on available VRAM, often 4096
+tokens, **no matter how large a context the model itself supports**. YodaMan
+detects this and deliberately compacts its prompt to fit, which costs answer
+quality — a large model served through a small window performs like a small one.
+
+YodaMan scales what it sends to match the window it detects: a larger window
+means a larger prompt and more of each file kept verbatim, up to roughly
+thirteen times the prompt it sends at the default. It never sizes the prompt
+against the model's *declared* maximum, only the window actually being served,
+because overflowing the served window silently drops the system prompt from the
+front — and with it the tool instructions.
+
+Set it from the Dashboard (Settings → Ollama context) or with the variable
+above, then check the Health panel to confirm what is actually being served.
+
 ## Key Technologies
 
 | Layer | Technology |
 |-------|-----------|
 | Runtime | Node.js/Express |
 | Frontend | React 18 + Vite + Tailwind CSS |
-| AI/LLM | Ollama (qwen3.5:9b) |
+| AI/LLM | Ollama (qwen3.5:9b minimum — see [Choosing a model](#choosing-a-model)) |
 | Embeddings | HuggingFace (BAAI/bge-large-en-v1.5) |
 | Knowledge Graph | Graphify |
 | Code Indexing | Context Expert (ctx) |

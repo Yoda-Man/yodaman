@@ -567,38 +567,57 @@ const SMALL_CONTEXT_THRESHOLD = 8192;
 // unit suite hit the network, which is how it started failing in a full run
 // while passing in isolation.
 const CONTEXT_TTL_MS = 5 * 60 * 1000;
-let contextCache = { value: null, at: 0 };
-let contextInFlight = null;
+// Keyed by model. A single cache returned qwen3.5:9b's declared window for
+// whatever model was actually loaded, so anyone running something larger was
+// told their own model's capability was 9B's.
+const contextCache = new Map();
+const contextInFlight = new Map();
 
 function resetOllamaContextCache() {
-    contextCache = { value: null, at: 0 };
-    contextInFlight = null;
+    contextCache.clear();
+    contextInFlight.clear();
 }
 
 function detectOllamaContext(model) {
-    if (contextCache.at && (Date.now() - contextCache.at) < CONTEXT_TTL_MS) {
-        return Promise.resolve(contextCache.value);
+    const key = model || '@default';
+    const cached = contextCache.get(key);
+    if (cached && (Date.now() - cached.at) < CONTEXT_TTL_MS) {
+        return Promise.resolve(cached.value);
     }
-    if (contextInFlight) return contextInFlight;
+    const pending = contextInFlight.get(key);
+    if (pending) return pending;
 
-    contextInFlight = probeOllamaContext(model)
+    const probe = probeOllamaContext(model)
         .then((result) => {
-            contextCache = { value: result, at: Date.now() };
+            contextCache.set(key, { value: result, at: Date.now() });
             return result;
         })
-        .finally(() => { contextInFlight = null; });
+        .finally(() => { contextInFlight.delete(key); });
 
-    return contextInFlight;
+    contextInFlight.set(key, probe);
+    return probe;
 }
 
 async function probeOllamaContext(model) {
     const configured = Number(process.env.OLLAMA_CONTEXT_LENGTH) || null;
     let declared = null;
+    // The model the workspace is actually configured with. Falling back to a
+    // literal meant `declared` described a model the user may not be running.
+    let target = model;
+    if (!target) {
+        try {
+            target = await detectCtxModel();
+        } catch (_err) {
+            // Detection is best-effort; the probe below still needs a name, and
+            // the historical default is the safest guess.
+            target = null;
+        }
+    }
     try {
         const response = await fetch('http://127.0.0.1:11434/api/show', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: model || 'qwen3.5:9b' }),
+            body: JSON.stringify({ model: target || 'qwen3.5:9b' }),
             signal: AbortSignal.timeout(5000)
         });
         const payload = await response.json();

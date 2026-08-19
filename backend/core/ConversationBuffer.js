@@ -91,11 +91,14 @@ class ConversationBuffer {
      * @param {string} options.task        The user's task. Never elided.
      * @param {number} [options.maxPromptChars] Whole-prompt budget, not just the history.
      */
-    constructor({ system, brief = '', task, maxPromptChars = DEFAULT_MAX_PROMPT_CHARS }) {
+    constructor({ system, brief = '', task, maxPromptChars = DEFAULT_MAX_PROMPT_CHARS, maxEntryChars = MAX_ENTRY_CHARS }) {
         this.system = system || '';
         this.brief = brief || '';
         this.task = task || '';
         this.maxPromptChars = maxPromptChars;
+        // Scales with the serving window: on a large context a whole file is worth
+        // keeping verbatim, where 6,000 characters would cut it mid-function.
+        this.maxEntryChars = maxEntryChars;
         /** @type {Array<{role: string, text: string, digest: string}>} */
         this.turns = [];
         /** Turns dropped from the window, kept as one-line digests. */
@@ -120,7 +123,7 @@ class ConversationBuffer {
 
     /** Per-entry cap, scaled so a single result cannot fill the whole window. */
     entryCap() {
-        return Math.max(600, Math.min(MAX_ENTRY_CHARS, Math.floor(this.historyBudget() / 2)));
+        return Math.max(600, Math.min(this.maxEntryChars, Math.floor(this.historyBudget() / 2)));
     }
 
     addAssistant(text) {
