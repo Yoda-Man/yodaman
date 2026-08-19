@@ -2,6 +2,38 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.4.8] - 2026-08-19
+
+### Fixed — 0.4.7's desktop app could not start
+
+`shared/` was never in electron-builder's file list. 0.4.7 made the backend
+depend on it — `AgentReasoningEngine` requires `shared/pluginInvocation` for the
+plugin capability map — so the packaged runtime died immediately with
+`Cannot find module '../../shared/pluginInvocation'` and the app opened to a
+diagnostics screen with nothing behind it.
+
+Every release gate passed while that build was broken, and the reason is worth
+recording. Unit tests, the plugin and approval journeys, and release smoke all
+run `node server.js` from the source tree, where `shared/` obviously exists.
+None of them booted the thing that actually ships. **A test of the source is not
+a test of the artifact.**
+
+- `shared/**/*` added to `electron-builder.json`. The npm tarball already
+  included it, so only the desktop build was affected.
+- **`npm run test:packaged`** boots the `server.js` inside the built `.app` and
+  waits for `/api/health`. Any file missing from the package surfaces here as
+  the module resolution failure it is, and the output names the missing path and
+  the file list to add it to.
+- That gate now runs **inside `desktop:dist:all`**, immediately after packaging,
+  so a build that cannot start fails the build instead of reaching a user. It is
+  also the eighth step of `release:verify`.
+
+### Added — the version on the diagnostics screen
+
+When that screen is all a user can see, the build they are looking at is the
+first thing anyone needs to establish. It now reads
+"YodaMan — Diagnostics Dashboard v0.4.8".
+
 ## [0.4.7] - 2026-08-19
 
 Observability and honesty. 0.4.6 fixed the agent's tool-call path; this makes the

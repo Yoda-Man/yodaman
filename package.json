@@ -1,6 +1,6 @@
 {
   "name": "yodaman",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "YodaMan — local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
@@ -31,8 +31,8 @@
     "vendor:sync": "node scripts/sync-vendor.js",
     "desktop": "npm run build && electron electron/main.js",
     "desktop:pack": "npm run build && electron-builder --config electron-builder.json --dir",
-    "desktop:dist": "npm run build && npm run test:render && electron-builder --config electron-builder.json && npm run website:downloads",
-    "desktop:dist:all": "npm run build && npm run test:render && electron-builder --config electron-builder.json --mac --arm64 && electron-builder --config electron-builder.json --win --linux --x64 && npm run website:downloads",
+    "desktop:dist": "npm run build && npm run test:render && electron-builder --config electron-builder.json && npm run test:packaged && npm run website:downloads",
+    "desktop:dist:all": "npm run build && npm run test:render && electron-builder --config electron-builder.json --mac --arm64 && npm run test:packaged && electron-builder --config electron-builder.json --win --linux --x64 && npm run website:downloads",
     "test:render": "jest tests/electron/DesktopRenderSmoke.test.js",
     "website:downloads": "node scripts/sync-website-downloads.js",
     "preview": "vite preview",
@@ -44,11 +44,12 @@
     "release:smoke": "node scripts/release-smoke.js",
     "audit:vendored": "node scripts/audit-vendored.js",
     "test:plugins": "node scripts/plugin-smoke.js",
-    "release:verify": "npm run lint && npm test && npm run audit:prod && npm run audit:vendored && npm run release:smoke && npm run test:journeys && npm run test:plugins && npm run test:approval",
+    "release:verify": "npm run lint && npm test && npm run audit:prod && npm run audit:vendored && npm run release:smoke && npm run test:journeys && npm run test:plugins && npm run test:approval && npm run test:packaged",
     "test:approval": "node scripts/approval-smoke.js",
     "health:watch": "node scripts/health-watchdog.js",
     "health:check": "node scripts/health-watchdog.js --once",
-    "test:journeys": "node scripts/journey-smoke.js"
+    "test:journeys": "node scripts/journey-smoke.js",
+    "test:packaged": "node scripts/packaged-smoke.js"
   },
   "dependencies": {
     "chokidar": "^4.0.3",

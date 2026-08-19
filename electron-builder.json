@@ -8,6 +8,7 @@
   "files": [
     "electron/**/*",
     "backend/**/*",
+    "shared/**/*",
     "dist/**/*",
     "plugins/**/*",
     "public/**/*",

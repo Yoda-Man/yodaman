@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.8 - 2026-08-19
+
+- Align extension package version with the YodaMan `0.4.8` release.
+- No extension code changed. 0.4.7 shipped a desktop app that could not start —
+  `shared/` was missing from the package — and 0.4.8 fixes that and adds a gate
+  that boots the packaged runtime before a build is allowed to finish. The
+  extension talks to the runtime over HTTP and was unaffected.
+
 ## 0.4.6 - 2026-08-18
 
 - Align extension package version with the YodaMan `0.4.6` release.
