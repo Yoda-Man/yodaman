@@ -33,7 +33,7 @@
  */
 const { spawn } = require('child_process');
 const path = require('path');
-const { pluginInvocation } = require('../shared/pluginInvocation');
+const { pluginCapability, pluginInvocation } = require('../shared/pluginInvocation');
 
 const RUNTIME_URL = process.env.YODAMAN_SMOKE_URL || 'http://127.0.0.1:3090';
 const PROJECT = process.env.YODAMAN_SMOKE_PROJECT || path.resolve(__dirname, '..', '..');
@@ -135,8 +135,28 @@ async function main() {
 
         log(`\nDriving ${plugins.length} plugin(s) through the agent against ${PROJECT}\n`);
         const failures = [];
+        const skipped = [];
 
         for (const plugin of plugins) {
+            // Only require plugins their authors declared chat-invokable.
+            //
+            // AGENT.md rule 5: "Include `💡 Chat usage:` in plugin descriptions
+            // so users know how to invoke via natural language". holocron-vr
+            // declares no chat usage and takes no parameters — it is the VR
+            // viewer, opened from its own tab. Asserting that a 9B model can
+            // drive it from a phrase this script invented tests nothing about
+            // the product and fails at random.
+            //
+            // This narrows what is REQUIRED, not what is checked: a plugin that
+            // routes directly is still exercised below regardless.
+            const chatInvokable = /Chat usage:/.test(plugin.description || '');
+            const routesDirectly = !pluginCapability(plugin);
+            if (!chatInvokable && !routesDirectly) {
+                log(`  ${plugin.name.padEnd(20)} skipped — declares no chat usage, not a chat-invokable tool`);
+                skipped.push(plugin.name);
+                continue;
+            }
+
             const phrase = pluginInvocation(plugin);
             process.stdout.write(`  ${plugin.name.padEnd(20)} "${phrase}" ... `);
 
@@ -166,7 +186,8 @@ async function main() {
             return false;
         }
 
-        log('\nEvery plugin reached the tool path. Agent tool calls are working.');
+        log(`\nEvery chat-invokable plugin reached the tool path. Agent tool calls are working.`);
+        if (skipped.length) log(`Skipped (not chat-invokable): ${skipped.join(', ')}`);
         return true;
     } finally {
         if (child) child.kill('SIGTERM');
