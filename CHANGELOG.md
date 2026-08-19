@@ -2,6 +2,60 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.5.0] - 2026-08-19
+
+The verification story, finished. Three days ago this project had never had a
+green CI run and shipped an agent that could not call a tool; it now proves the
+artifact starts, the safety gate holds, and the docs describe what exists.
+
+### Added — tests for the modules that had none
+
+The audit listed six untested modules. Size was not the risk:
+
+- **OllamaConfig** writes a launchd plist and restarts a system service, and I
+  wrote it in 0.4.7 without tests. 13 now cover the guarantees that make it safe
+  to expose from a web UI: only values on a fixed list are accepted, the plist
+  edit produces balanced XML, an existing value is replaced rather than
+  duplicated, and an unrelated variable in the same block survives.
+- **stardustRoutes** is 614 lines and holds the H-1 path-traversal fix.
+  `proposeChange` builds a directory from a caller-supplied name, so the guard
+  against separators and `..` now has a regression test — including an assertion
+  that nothing was written outside the workspace.
+- **PluginAPI, DefaultCodingSkill, StardustWrapper, gitRoutes,
+  SettingsProvider** — covered, including that every security default is the
+  safe value, since those defaults are the posture of an unconfigured install.
+
+`DefaultCodingSkill` is asserted not to contain `<tool_call>`. That literal
+flips qwen3.5 into native function calling, which ctx 1.4.0 crashes on, so a
+prompt fragment reintroducing it would bring back the bug 0.4.6 fixed.
+
+### Added — a coverage floor
+
+Enforced at just under the measured numbers and verified by raising it to 95%
+and watching the build fail. It exists to catch a slide. Raise it deliberately;
+never lower it to make a build pass.
+
+### Fixed — release:verify no longer fails for a reason unrelated to the code
+
+`DisplayedVersion` and `Downloads` assert on build output, so running them
+against the previous version's artifacts failed immediately after a bump. It
+caught people out twice. `release:verify` now builds first, and the failure
+message names the remedy.
+
+### The gates, as they now stand
+
+```
+npm run release:verify
+```
+
+build · lint · 532 tests · coverage floor · production audit · vendored audit ·
+release smoke · search and readiness journeys · plugin journey · approval gate ·
+packaged runtime
+
+The last four drive the running product, and the last one drives the built
+artifact rather than the source — the distinction that let 0.4.7 ship a desktop
+app which could not start while every other gate was green.
+
 ## [0.4.9] - 2026-08-19
 
 Error handling and documentation, both taken to the standard where a guard
