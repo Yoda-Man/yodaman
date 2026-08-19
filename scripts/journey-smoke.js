@@ -53,16 +53,21 @@ async function getJson(pathname, timeoutMs = 90000) {
 /** A search term taken from a file the graph knows, so a match is expected. */
 async function graphTerm(projectPath) {
     try {
-        const graphFacts = require(path.resolve(__dirname, '..', 'backend', 'infrastructure', 'GraphFacts'));
-        const graph = graphFacts.load(projectPath);
-        const files = [...(graph.files || [])];
-        if (!files.length) return null;
-        // The longest basename is the most distinctive thing to search for.
-        const best = files
-            .map((file) => path.basename(file).replace(/\.[^.]+$/, ''))
-            .filter((stem) => stem.length > 4)
-            .sort((a, b) => b.length - a.length)[0];
-        return best || null;
+        // Must come from a file with dependency EDGES, not merely one the graph
+        // lists. A markdown document is in the graph but has no structural
+        // position, so centrality and proximity are legitimately zero for it and
+        // ranking cannot contribute — asserting graphRanked on a docs hit fails
+        // for a sound reason. buildIndex().degreeByFile holds exactly the
+        // connected files.
+        const graphRanker = require(path.resolve(__dirname, '..', 'backend', 'infrastructure', 'GraphRanker'));
+        const index = graphRanker.buildIndex(projectPath);
+        if (!index || !index.degreeByFile || index.degreeByFile.size === 0) return null;
+
+        const connected = [...index.degreeByFile.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([file]) => path.basename(file).replace(/\.[^.]+$/, ''))
+            .filter((stem) => stem.length > 4);
+        return connected[0] || null;
     } catch (_err) {
         return null;
     }
