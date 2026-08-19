@@ -65,7 +65,7 @@ async function waitForRuntime(deadlineMs) {
 
 /** Run one agent task and report what the event stream actually contained. */
 async function runTask(task) {
-    let body = '';
+    let body;
     try {
         const response = await fetch(`${RUNTIME_URL}/api/agent/task`, {
             method: 'POST',
@@ -157,17 +157,21 @@ async function main() {
                 log(`    phrase: "${failure.phrase}"`);
             }
             log('\nThe agent cannot reliably use tools. Do not ship.');
-            process.exitCode = 1;
-            return;
+            return false;
         }
 
         log('\nEvery plugin reached the tool path. Agent tool calls are working.');
+        return true;
     } finally {
         if (child) child.kill('SIGTERM');
     }
 }
 
-main().catch((err) => {
-    log(`Plugin smoke errored: ${err.message}`);
-    process.exitCode = 1;
-});
+// Set the exit code in one place, off the async path: assigning process.exitCode
+// after an await is what require-atomic-updates warns about.
+main()
+    .then((passed) => { process.exitCode = passed === false ? 1 : 0; })
+    .catch((err) => {
+        log(`Plugin smoke errored: ${err.message}`);
+        process.exitCode = 1;
+    });

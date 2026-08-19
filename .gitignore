@@ -71,3 +71,4 @@ yodaman.db-shm
 # Graphify generated workspace artifacts
 graphify-out/
 yodaman-0.2.2.tgz
+.yodaman-approval-smoke/
