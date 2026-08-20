@@ -2,7 +2,7 @@
 
 YodaMan is local-first workspace intelligence for developers. **Context Expert** (semantic search), **Graphify** (structure), and **OpenSpec** (architectural intent) form a single pillar: every search, every agent turn, and every plan draws on all three at once — none is optional, none runs alone.
 
-![Version](https://img.shields.io/badge/Version-0.5.1-gold) ![License](https://img.shields.io/badge/License-MIT-green)
+![Version](https://img.shields.io/badge/Version-0.5.2-gold) ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## The three-tool pillar
 

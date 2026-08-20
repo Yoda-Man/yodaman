@@ -2,6 +2,55 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.5.2] - 2026-08-20
+
+### Fixed — Graph Studio drew nothing
+
+Reported from a running 0.5.1 desktop app: the Graph tab showed an empty canvas
+while the panel beside it read "Graph ready — 2804 nodes / 3151 links" and
+listed every top node correctly. The data was never the problem. Nothing could
+draw it.
+
+Graphify emits its rendering library as a CDN tag carrying a subresource-
+integrity hash:
+
+    <script src="https://unpkg.com/vis-network@9.1.6/..."
+            integrity="sha384-Ux6phic9PEHJ38..." crossorigin="anonymous">
+
+YodaMan rewrites that `src` to a vendored copy so the app works offline and no
+part of your codebase is described to a CDN on page load. It left the
+`integrity` attribute in place — and the vendored copy is a different build,
+because vis-network was upgraded from 9.x to 10.1.1 to clear a vulnerability.
+The hashes could not match by construction. The browser did exactly as
+instructed and blocked the script, `vis` was never defined, and the canvas
+stayed empty.
+
+Two correct changes combined into a broken one. The localiser now drops
+`integrity` and `crossorigin` when it repoints a script at a same-origin file we
+ship and audit ourselves: SRI defends against a CDN serving something other than
+what was asked for, and a hash that can never match is not security, it is an
+outage.
+
+### Added — a gate that fails when the graph cannot be drawn
+
+Everything already in the pipeline passed while this shipped. The endpoint
+returned 200 with 2.1MB of correct HTML, and no test asked whether a browser
+could run it.
+
+`tests/electron/GraphRenderSmoke.test.js` drives a real Electron window, passes
+a realistic Graphify fixture through the REAL localiser, and asserts the library
+executed and produced a canvas. Verified by mutation: with the stale hash
+restored it fails and reports the browser's own reason — "The resource has been
+blocked" and "vis is not defined" — rather than a bare assertion failure.
+
+It runs in `npm test`, and `npm run test:render` now covers it too, so a build
+cannot be packaged without it.
+
+### Changed
+
+- vis-network 10.1.1 -> 10.1.2, verified by the new render gate rather than
+  assumed. Vendored copy audits clean.
+
 ## [0.5.1] - 2026-08-20
 
 ### Fixed — 9B was the floor, but the code treated it as the ceiling

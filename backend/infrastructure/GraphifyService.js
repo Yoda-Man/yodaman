@@ -442,6 +442,31 @@ const VENDOR_SCRIPT_REWRITES = [
     }
 ];
 
+
+/**
+ * Remove the subresource-integrity attributes from a script we have just
+ * repointed at a local copy.
+ *
+ * Graphify emits its CDN tag with an `integrity` hash computed for the file on
+ * unpkg. Rewriting `src` to our vendored copy left that hash in place, and the
+ * vendored copy is a DIFFERENT BUILD — vis-network was upgraded from 9.x to
+ * 10.1.1 to clear a vulnerability, so the hashes cannot match by construction.
+ * The browser did exactly what it was told and blocked the script, `vis` was
+ * never defined, and Graph Studio rendered an empty canvas while reporting the
+ * graph as ready. The data was fine; nothing could draw it.
+ *
+ * SRI exists to detect a CDN serving something other than what was asked for.
+ * A same-origin file we ship and audit ourselves is not that threat, and a hash
+ * that can never match is not security — it is an outage.
+ */
+function stripStaleIntegrity(html, localSrc) {
+    const escaped = localSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const scriptTag = new RegExp(`<script\\b[^>]*src=["']${escaped}["'][^>]*>`, 'gi');
+    return html.replace(scriptTag, (tag) => tag
+        .replace(/\s+integrity=(["'])[^"']*\1/gi, '')
+        .replace(/\s+crossorigin=(["'])[^"']*\1/gi, ''));
+}
+
 /**
  * Points a Graphify artifact's external <script> tags at locally served copies.
  *
@@ -468,6 +493,7 @@ function localizeVendorScripts(html) {
         const matches = result.match(rewrite.pattern);
         if (matches) {
             result = result.replace(rewrite.pattern, rewrite.local);
+            result = stripStaleIntegrity(result, rewrite.local);
             continue;
         }
         // Only worth reporting if the artifact still points somewhere remote.
@@ -540,6 +566,9 @@ function enhanceArtifactHtml(html) {
 
 module.exports = {
     resetSourceMtimeCache,
+    // Exported so the render gate can drive the real localiser rather than a
+    // copy of it — a test of a reimplementation proves nothing about shipping code.
+    localizeVendorScripts,
     // Set to true after assertAvailable() confirms Ollama is installed.
     _ollamaAvailable: false,
     graphPath,

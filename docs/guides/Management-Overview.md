@@ -11,19 +11,19 @@ YodaMan is a local-first workspace intelligence platform for software developers
 | **Semantic Code Search** | Search indexed code and documentation using natural language | ✅ Stable |
 | **Agent Tasks** | Autonomous AI agent for multi-step coding work | ✅ Stable |
 | **Graphify Knowledge Graphs** | Mandatory graph construction from project structure | ✅ Stable |
-| **Plugin System** | Extend the agent with JavaScript plugins | ✅ Stable (0.5.1) |
-| **Pre-Installed Plugins** | CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, Holocron VR, Graphify | ✅ Stable (0.5.1) |
-| **Legacy Plugin Support** | Auto-wraps onLoad/onEnable plugins | ✅ Stable (0.5.1) |
-| **Zip Plugin Upload** | Upload plugins as .zip files | ✅ Stable (0.5.1) |
-| **Centralized Settings** | All developer settings managed from UI | ✅ Stable (0.5.1) |
+| **Plugin System** | Extend the agent with JavaScript plugins | ✅ Stable (0.5.2) |
+| **Pre-Installed Plugins** | CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, Holocron VR, Graphify | ✅ Stable (0.5.2) |
+| **Legacy Plugin Support** | Auto-wraps onLoad/onEnable plugins | ✅ Stable (0.5.2) |
+| **Zip Plugin Upload** | Upload plugins as .zip files | ✅ Stable (0.5.2) |
+| **Centralized Settings** | All developer settings managed from UI | ✅ Stable (0.5.2) |
 | **Desktop App** | Electron shell with managed runtime | ✅ Stable |
 | **VS Code Extension** | Editor-native agent access | ✅ Stable |
 | **Mobile Companion** | React Native app for monitoring | ⚠️ Beta |
 | **Website + Downloads** | Public site with platform builds | ✅ Stable |
 
-## Current Status (0.5.1)
+## Current Status (0.5.2)
 
-- **Version**: 0.5.1
+- **Version**: 0.5.2
 - **License**: MIT
 - **Runtime**: Node.js 18+ / Express
 - **Frontend**: React 18 + Vite + Tailwind CSS
@@ -101,5 +101,5 @@ The YodaMan ecosystem includes:
 
 - **Author**: Marwa Trust Mutemasango
 - **Repository**: github.com/Yoda-Man/yodaman
-- **npm**: `yodaman` (0.5.1)
+- **npm**: `yodaman` (0.5.2)
 - **License**: MIT
