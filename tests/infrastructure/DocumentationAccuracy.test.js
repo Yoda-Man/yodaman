@@ -15,16 +15,19 @@ const { execSync } = require('child_process');
  *
  * One deliberate exemption: **history may reference things that no longer
  * exist.** A changelog entry recording the removal of `ModeToggle.jsx` must
- * name the file it removed, and design plans describe the codebase as it was.
- * Rewriting those to satisfy a linter would falsify the record, which is a worse
- * outcome than the rot this prevents.
+ * name the file it removed. Rewriting that to satisfy a linter would falsify
+ * the record, which is a worse outcome than the rot this prevents.
+ *
+ * The design plans under docs/superpowers were also exempt here until they were
+ * deleted: the project is past its planning phase and they described a codebase
+ * that has since moved on.
  */
 describe('Documentation accuracy', () => {
     const root = path.resolve(__dirname, '../..');
     const version = require(path.join(root, 'package.json')).version;
 
     // Historical records, exempt by design — see the note above.
-    const HISTORICAL = [/^CHANGELOG\.md$/, /^docs\/superpowers\//, /^extensions\/.*\/CHANGELOG\.md$/];
+    const HISTORICAL = [/^CHANGELOG\.md$/, /^extensions\/.*\/CHANGELOG\.md$/];
 
     const currentDocs = execSync("git ls-files '*.md'", { cwd: root, encoding: 'utf8' })
         .split('\n')
