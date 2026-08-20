@@ -112,3 +112,47 @@ describe('ConversationBuffer honours the budget', () => {
         expect(buffer.entryCap()).toBeGreaterThan(smallBuffer.entryCap());
     });
 });
+
+/**
+ * The README tells users which context window to set for their model and what
+ * YodaMan will send at each one. Those are numeric claims about this module's
+ * behaviour, and nothing else checks them — documentation drifting away from
+ * code is the same class of bug as the four ignore lists that drifted apart.
+ */
+describe('the README\'s documented figures are true', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const readme = fs.readFileSync(path.join(__dirname, '..', '..', 'README.md'), 'utf8');
+
+    /** [window the user sets, the approximate figure the README promises] */
+    const DOCUMENTED = [
+        [8192, 10000],
+        [16384, 20000],
+        [32768, 40000],
+        [65536, 80000],
+        [131072, 120000]
+    ];
+
+    it.each(DOCUMENTED)('a %i-token window really does send about %i characters', (window, claimed) => {
+        const actual = promptBudgetFor(window).maxPromptChars;
+        // Within 5%: the README rounds, but it must not mislead.
+        expect(Math.abs(actual - claimed) / claimed).toBeLessThan(0.05);
+    });
+
+    it.each(DOCUMENTED)('the README actually mentions the %i window', (window) => {
+        expect(readme).toContain(String(window));
+    });
+
+    it('only recommends windows the Dashboard will accept', () => {
+        // Telling someone to set a value the settings endpoint rejects sends
+        // them to a dead end. No fallback default here on purpose: an earlier
+        // draft read a name this module does not export and quietly compared
+        // against a literal, so it asserted nothing while reporting green.
+        const { ALLOWED_VALUES } = require('../../backend/infrastructure/OllamaConfig');
+        expect(Array.isArray(ALLOWED_VALUES)).toBe(true);
+        for (const [window] of DOCUMENTED) {
+            expect(ALLOWED_VALUES).toContain(window);
+        }
+    });
+});
+

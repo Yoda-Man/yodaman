@@ -170,3 +170,71 @@ describe('GraphRanker', () => {
         });
     });
 });
+
+/**
+ * A graph that exists but cannot be read is not the same as no graph at all.
+ *
+ * Both used to return null through a catch that discarded the error, so search
+ * silently dropped to semantic-only ordering while /api/search went on
+ * advertising all four weights. It surfaced as a journey gate failing once
+ * under a full release run and passing in isolation minutes later, with nothing
+ * recorded to explain the difference — a 435MB graph.json that failed to parse
+ * under memory pressure.
+ */
+describe('graph ranking reports why it could not contribute', () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const logger = require('../../backend/infrastructure/Logger');
+    const graphRanker = require('../../backend/infrastructure/GraphRanker');
+
+    let workspace;
+    let errorSpy;
+
+    beforeEach(() => {
+        workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'graphrank-'));
+        errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        errorSpy.mockRestore();
+        fs.rmSync(workspace, { recursive: true, force: true });
+    });
+
+    it('stays quiet when the workspace simply has no graph', () => {
+        // Ordinary and expected — most workspaces are not graphed. Logging here
+        // would bury the case that matters in noise.
+        expect(graphRanker.buildIndex(workspace)).toBeNull();
+        expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('logs when a graph exists but cannot be parsed', () => {
+        fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
+        fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), '{ not json', 'utf8');
+
+        expect(graphRanker.buildIndex(workspace)).toBeNull();
+        expect(errorSpy).toHaveBeenCalledWith(
+            'graph_ranking_unavailable',
+            expect.any(Error),
+            expect.objectContaining({ severity: 'high', projectPath: workspace })
+        );
+    });
+
+    it('records the graph size, since size is what makes parsing fail', () => {
+        fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
+        fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), '{ not json', 'utf8');
+
+        graphRanker.buildIndex(workspace);
+        expect(errorSpy.mock.calls[0][2].graphBytes).toBeGreaterThan(0);
+    });
+
+    it('still returns null, so callers behave exactly as before', () => {
+        fs.mkdirSync(path.join(workspace, 'graphify-out'), { recursive: true });
+        fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), '{ not json', 'utf8');
+
+        // Visibility must not change control flow: searchRouter still falls back
+        // to semantic ordering rather than failing the request.
+        expect(graphRanker.buildIndex(workspace)).toBeNull();
+    });
+});
+

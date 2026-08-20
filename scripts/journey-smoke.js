@@ -23,7 +23,19 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-const RUNTIME_URL = process.env.YODAMAN_SMOKE_URL || 'http://127.0.0.1:3090';
+// A dedicated port, NOT the 3090 the desktop app uses.
+//
+// These gates used to adopt whatever was already listening on 3090. If the
+// YodaMan desktop app was open — or a packaged build had been left running —
+// the gate silently measured THAT build instead of the working tree, and
+// reported the result as if it had tested your changes. It cost a full
+// misdiagnosis: a ranking failure was chased through the source for an hour
+// while every probe was answering from a nine-hour-old packaged app.
+//
+// Set YODAMAN_SMOKE_URL to deliberately point at an existing runtime.
+const SMOKE_PORT = Number(process.env.YODAMAN_SMOKE_PORT) || 3097;
+const ADOPT_EXISTING = Boolean(process.env.YODAMAN_SMOKE_URL);
+const RUNTIME_URL = process.env.YODAMAN_SMOKE_URL || `http://127.0.0.1:${SMOKE_PORT}`;
 const EXPECTED_WEIGHTS = ['semantic', 'proximity', 'centrality', 'specCoverage'];
 const log = (msg) => process.stdout.write(`${msg}\n`);
 
@@ -52,28 +64,43 @@ async function getJson(pathname, timeoutMs = 90000) {
     return response.json();
 }
 
-/** A search term taken from a file the graph knows, so a match is expected. */
-async function graphTerm(projectPath) {
+/**
+ * Search terms taken from files the graph knows, best candidates first.
+ *
+ * Returns several on purpose. Graphify and ctx index overlapping but DIFFERENT
+ * file sets: Graphify walks vendored trees that ctx excludes, so this
+ * workspace's highest-degree files were `third_party` and node_modules code
+ * that search legitimately never returns. Asserting on the single top-degree
+ * term therefore failed for a sound reason and blamed the product — the gate
+ * was measuring index overlap, not the ranking blend.
+ *
+ * With a list, the caller can keep trying until it finds a term both sides
+ * know. Ranking that is genuinely broken still fails, because then NO candidate
+ * ranks.
+ */
+async function graphTerms(projectPath, limit = 8) {
     try {
         // Must come from a file with dependency EDGES, not merely one the graph
         // lists. A markdown document is in the graph but has no structural
         // position, so centrality and proximity are legitimately zero for it and
-        // ranking cannot contribute — asserting graphRanked on a docs hit fails
-        // for a sound reason. buildIndex().degreeByFile holds exactly the
+        // ranking cannot contribute. buildIndex().degreeByFile holds exactly the
         // connected files.
         const graphRanker = require(path.resolve(__dirname, '..', 'backend', 'infrastructure', 'GraphRanker'));
         const index = graphRanker.buildIndex(projectPath);
-        if (!index || !index.degreeByFile || index.degreeByFile.size === 0) return null;
+        if (!index || !index.degreeByFile || index.degreeByFile.size === 0) return [];
 
-        const connected = [...index.degreeByFile.entries()]
+        return [...index.degreeByFile.entries()]
             .sort((a, b) => b[1] - a[1])
+            // Vendored and generated trees are in the graph but not in the
+            // search index, so a term drawn from one can never graph-rank.
+            .filter(([file]) => !/(^|[\\/])(node_modules|third_party|vendor|Pods|dist|build|graphify-out)[\\/]/.test(file))
             .map(([file]) => path.basename(file).replace(/\.[^.]+$/, ''))
-            .filter((stem) => stem.length > 4);
-        return connected[0] || null;
+            .filter((stem) => stem.length > 4)
+            .slice(0, limit);
     } catch (_err) {
         // No graph to derive a term from, so there is nothing to assert against.
         // The caller reports this as a skip rather than a failure.
-        return null;
+        return [];
     }
 }
 
@@ -92,14 +119,26 @@ async function checkSearchRanking(failures) {
     // sets — and asserting graphRanked on those would fail for a sound reason.
     // Deriving the term from a graph file makes a match the expected outcome, so
     // a failure means the blend is genuinely not working.
-    const term = await graphTerm(project.path);
-    if (!term) {
+    const terms = await graphTerms(project.path);
+    if (!terms.length) {
         log('  search ranking     SKIP — no knowledge graph for this workspace to rank against');
         return;
     }
 
-    const params = new URLSearchParams({ query: term, project: project.path });
-    const payload = await getJson(`/api/search?${params.toString()}`);
+    // Try candidates until one is a term BOTH sides know. A single term that
+    // fails proves nothing about the blend; every candidate failing does.
+    let payload = null;
+    let term = null;
+    const tried = [];
+    for (const candidate of terms) {
+        const attempt = new URLSearchParams({ query: candidate, project: project.path });
+        const result = await getJson(`/api/search?${attempt.toString()}`);
+        tried.push(candidate);
+        payload = result;
+        term = candidate;
+        if (result.graphRanked) break;
+    }
+
     const weights = payload.weights || {};
 
     const missing = EXPECTED_WEIGHTS.filter((signal) => typeof weights[signal] !== 'number');
@@ -120,14 +159,15 @@ async function checkSearchRanking(failures) {
         // Not a cosmetic failure: the product advertises a four-signal blend and
         // is returning semantic-only ordering while still reporting the weights.
         log('  search ranking     FAILED — weights advertised but graphRanked=false');
-        log(`                     ranking fell back to semantic only for ${path.basename(project.path)}.`);
+        log(`                     ${tried.length} graph-connected term(s) all fell back to`);
+        log(`                     semantic only for ${path.basename(project.path)}: ${tried.join(', ')}`);
         log('                     Usually ctx and Graphify were indexed from different');
         log('                     roots: compare a result path against graphify-out/graph.json.');
         failures.push('graph ranking inactive');
         return;
     }
 
-    log(`  search ranking     ok — four signals, graph-ranked, ${(payload.results || []).length} results`);
+    log(`  search ranking     ok — four signals, graph-ranked on "${term}", ${(payload.results || []).length} results`);
 }
 
 async function checkReadiness(failures) {
@@ -163,13 +203,25 @@ async function checkReadiness(failures) {
 
 async function main() {
     let child = null;
+    // Always say which runtime produced the result. A gate that measured a
+    // different build than the one you changed must never look like a gate that
+    // measured yours.
+    if (await reachable(`${RUNTIME_URL}/api/health`, 2000)) {
+        log(ADOPT_EXISTING
+            ? `Using the runtime you pointed at: ${RUNTIME_URL}`
+            : `WARNING: reusing a runtime already on ${RUNTIME_URL} that this gate did not start.`);
+    }
+
     if (!await reachable(`${RUNTIME_URL}/api/health`, 2000)) {
         if (!await reachable('http://127.0.0.1:11434/api/tags')) {
             log('SKIP: no runtime and no Ollama — these journeys need the local stack.');
             return true;
         }
-        log(`Starting a runtime at ${RUNTIME_URL}...`);
-        child = spawn(process.execPath, [path.resolve(__dirname, '..', 'server.js')], { stdio: 'ignore' });
+        log(`Starting a runtime from this working tree at ${RUNTIME_URL}...`);
+        child = spawn(process.execPath, [path.resolve(__dirname, '..', 'server.js')], {
+            stdio: 'ignore',
+            env: { ...process.env, YODAMAN_PORT: String(SMOKE_PORT) }
+        });
         if (!await waitForRuntime(45000)) {
             child.kill('SIGKILL');
             throw new Error('Runtime did not become healthy in time.');

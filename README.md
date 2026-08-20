@@ -78,42 +78,63 @@ The same dependency checks run at startup, appear in the Dashboard health panel 
 
 ## Choosing a model
 
-**9B parameters is the floor, not the target.** YodaMan is built to run on a 9B
-model so it works on modest hardware, and to get better — not merely faster —
-when you give it more.
+**9B parameters is the floor, not the target.** YodaMan runs on a 9B model so it
+works on modest hardware, and gets genuinely better — not merely faster — when
+you give it more.
 
-| | Model | What you get |
-|---|---|---|
-| Minimum | `qwen3.5:9b` | Works. Tool-calling is occasionally unreliable; the agent sometimes answers with citations instead of running the tool. |
-| Recommended | `qwen2.5:14b`, `codestral:22b` | Reliable tool-calling. This is the point where the agent stops needing retries. |
-| Best | `deepseek-coder-v2`, 32B-class | Reasoning that holds across long multi-step tasks. |
+**If you run a bigger model, raise the context window to match.** These are one
+decision, not two. Ollama serves whatever `OLLAMA_CONTEXT_LENGTH` says; when it
+is unset it picks by available VRAM, often **4096 tokens, no matter how large a
+context the model itself supports**. A 32B model served through a 4096-token
+window behaves like a 9B one, and you paid for the 32B.
 
-Set the model through Context Expert; YodaMan detects whichever one you have
-configured and reports it on the Health dashboard.
+| Model | Set `OLLAMA_CONTEXT_LENGTH` | YodaMan then sends | What you get |
+|---|---|---|---|
+| `qwen3.5:9b` *(minimum)* | `8192` | ~10,000 chars | Works. Tool-calling is occasionally unreliable — the agent sometimes answers with citations instead of running the tool. |
+| `qwen2.5:14b` | `16384` | ~20,000 chars | Reliable tool-calling. The point where the agent stops needing retries. |
+| `codestral:22b` | `32768` | ~40,000 chars | Holds context across multi-step tasks. **Recommended.** |
+| 32B-class, `deepseek-coder-v2` | `65536`–`131072` | ~80,000–120,000 chars | Whole files kept verbatim rather than clipped mid-function. |
 
-### Give the model room to think
+Leaving the window unset is not neutral — it is the small-window path, and
+YodaMan will deliberately compact its prompt to fit.
 
-The single highest-impact setting is **not** the model — it is the context
-window Ollama serves it:
+### Setting it
+
+From the Dashboard: **Settings → Ollama context**. Accepted values are 8192,
+16384, 32768, 65536, and 131072; YodaMan writes the setting, restarts Ollama,
+and rolls back if the restart fails.
+
+Or by hand:
 
 ```bash
 export OLLAMA_CONTEXT_LENGTH=32768
 ```
 
-When this is unset, Ollama picks a window based on available VRAM, often 4096
-tokens, **no matter how large a context the model itself supports**. YodaMan
-detects this and deliberately compacts its prompt to fit, which costs answer
-quality — a large model served through a small window performs like a small one.
+Then check the Health panel, which reports the window actually being served —
+not the one you asked for. Those differ more often than you would expect.
 
-YodaMan scales what it sends to match the window it detects: a larger window
-means a larger prompt and more of each file kept verbatim, up to roughly
-thirteen times the prompt it sends at the default. It never sizes the prompt
-against the model's *declared* maximum, only the window actually being served,
-because overflowing the served window silently drops the system prompt from the
-front — and with it the tool instructions.
+### The trade-off
 
-Set it from the Dashboard (Settings → Ollama context) or with the variable
-above, then check the Health panel to confirm what is actually being served.
+**Context costs VRAM**, and it is charged whether or not a given request uses
+it. Raising the window on a GPU that cannot hold it makes Ollama either refuse
+to load the model or spill into system memory, where everything slows to a
+crawl. If that happens, step down one value; a 22B model at 32768 will
+comfortably beat a 32B model that is swapping.
+
+Rough guidance: 32768 is comfortable on 24GB for a 14B–22B model. Below 16GB,
+stay at 8192–16384 and prefer the smaller model.
+
+### Why YodaMan will not just read the model's maximum
+
+Your model may declare it supports 262,144 tokens while Ollama is serving it
+4096. YodaMan sizes its prompt against the window **actually being served**,
+never the declared maximum — because overflowing the served window is silent.
+llama-server runs with `--context-shift`, which drops from the *front*, so the
+first thing lost is the system prompt carrying the tool instructions. The model
+then answers with citations and never calls the tool, and nothing on screen
+explains why.
+
+That is why the setting is worth getting right rather than guessing at.
 
 ## Key Technologies
 
