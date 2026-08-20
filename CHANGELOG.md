@@ -2,6 +2,83 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.5.1] - 2026-08-20
+
+### Fixed — 9B was the floor, but the code treated it as the ceiling
+
+YodaMan is built to run on a 9B model and to get better when given a larger one.
+It did not. The agent compacted hard for small context windows, and every other
+case fell through to a flat 9,000-character prompt budget, so a 32B model served
+at 131,072 tokens sent exactly the same prompt as a 9B served at 8,192 — about
+2% of the window, with the rest unused. Running a bigger model bought nothing.
+
+The budget now scales with the window Ollama is actually serving:
+
+| Served window | Before | After |
+|---|---|---|
+| unset / 4096 | 9,000 chars | 9,000 chars |
+| 32,768 | 9,000 chars | 40,140 chars |
+| 131,072 | 9,000 chars | 120,000 chars |
+
+Per-tool-result clipping scales with it too, so a large window keeps a whole file
+verbatim instead of cutting it at 6,000 characters mid-function.
+
+Two deliberate conservatisms. Only the **configured** window is trusted, never
+the model's declared maximum: Ollama serves what `OLLAMA_CONTEXT_LENGTH` says or
+picks by VRAM when unset, and sizing a prompt against the declared figure is how
+prompts overflowed in 0.4.6 — llama-server drops from the *front*, silently
+removing the tool instructions. And every floor is the value used before, so no
+configuration gets a smaller budget than it had.
+
+Also fixed: `detectOllamaContext` probed a hardcoded `qwen3.5:9b` and cached one
+answer for every model, so anyone running something larger was told their model's
+capability was 9B's. It now probes the configured model and caches per model.
+
+### Fixed — ranking silently fell back with no way to tell
+
+`GraphRanker.buildIndex` discarded every error, so a graph that existed but could
+not be parsed was indistinguishable from a workspace with no graph. Search
+dropped to semantic-only ordering while `/api/search` went on advertising all
+four weights. A graph that fails to load now logs at severity high with its size;
+a workspace with no graph stays quiet. Control flow is unchanged.
+
+### Fixed — gates that tested the wrong build
+
+The journey and approval gates adopted whatever was already listening on port
+3090. With the desktop app open, they measured *that* build instead of the
+working tree and reported it as though they had tested your changes. They now run
+on their own port from the working tree and state which runtime produced the
+result.
+
+The ranking gate also derived its search term from the highest-degree file in the
+graph without checking ctx had indexed it. Graphify walks vendored trees ctx
+excludes, so the term came from `third_party` and node_modules code that search
+legitimately never returns — the gate was measuring index overlap, not the
+ranking blend. It now tries several graph-connected terms and fails only when
+none rank. Verified by mutation: with the blend forced off it exits 1 on all
+eight candidates; restored, it exits 0.
+
+`DesktopRenderSmoke` escalated to SIGKILL after 5s while inheriting Jest's 5s
+default hook timeout, so the escalation fired exactly as the hook was abandoned.
+A runtime slow to exit under load failed the suite after every test in it had
+passed.
+
+### Changed
+
+- The README now pairs model size with the context window to set, and documents
+  the VRAM trade-off: context is charged whether or not a request uses it, and a
+  22B model at 32,768 beats a 32B model that is swapping. Its figures are tested
+  against the code that produces them rather than trusted.
+- `GraphifyService` and `ToolBox` now read the shared ignored-paths list, which
+  was still duplicated in both. The Graphify copy mattered beyond speed: scanning
+  `.yodaman-doc-chunks` meant a newer generated chunk read as "the source
+  changed", so the graph could look stale on work nothing did to the source.
+- Removed the six design plans under `docs/superpowers`. The project is past its
+  planning phase, and their exemption from the documentation accuracy checks went
+  with them — every remaining document is now held to the standard.
+- Corrected the OpenSpec version in the api.md sample response, which read 0.5.0
+  while OpenSpec is 1.5.0 and collided with YodaMan's own version number.
+
 ## [0.5.0] - 2026-08-19
 
 ### Fixed — a file-descriptor leak that silently disabled every tool

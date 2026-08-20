@@ -49,6 +49,8 @@ for (const existing of fs.readdirSync(downloadsDir)) {
     }
 }
 
+const copied = [];
+
 for (const artifact of artifacts) {
     const source = artifact.absoluteDir
         ? path.join(artifact.absoluteDir, artifact.name)
@@ -69,6 +71,46 @@ for (const artifact of artifacts) {
     }
 
     fs.copyFileSync(source, destination);
+    copied.push(artifact.name);
     const sizeMb = (fs.statSync(destination).size / 1024 / 1024).toFixed(1);
     console.log(`Copied ${artifact.name} to website/downloads (${sizeMb} MB)`);
+}
+
+/**
+ * Point the download buttons at what was just copied.
+ *
+ * The files were synced but index.html was hand-edited, so every release the
+ * site kept advertising the previous version's filenames — links that 404 the
+ * moment the old artifacts are cleaned up. Copying a file and leaving the link
+ * behind is not a sync.
+ *
+ * Rewrites only hrefs under downloads/ whose filename differs from the copied
+ * artifact by version alone, so an unrelated link is never touched.
+ */
+const indexPath = path.join(rootDir, 'website', 'index.html');
+if (copied.length && fs.existsSync(indexPath)) {
+    let html = fs.readFileSync(indexPath, 'utf8');
+    let rewrites = 0;
+
+    for (const name of copied) {
+        // Split the artifact name into the part before the version and the part
+        // after, then match any version between them.
+        const match = /^(.*?)(\d+\.\d+\.\d+)(.*)$/.exec(name);
+        if (!match) continue;
+        const [, prefix, , suffix] = match;
+        const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(
+            `downloads/${escape(prefix)}\\d+\\.\\d+\\.\\d+${escape(suffix)}`,
+            'g'
+        );
+        html = html.replace(pattern, (found) => {
+            if (found !== `downloads/${name}`) rewrites += 1;
+            return `downloads/${name}`;
+        });
+    }
+
+    if (rewrites) {
+        fs.writeFileSync(indexPath, html, 'utf8');
+        console.log(`Updated ${rewrites} download link(s) in website/index.html`);
+    }
 }
