@@ -103,7 +103,11 @@ maybeDescribe('desktop renders the dashboard', () => {
         clearTimeout(timer);
         server.stdout.destroy();
         server.stderr.destroy();
-    });
+        // Longer than the SIGKILL fallback above. With Jest's default 5s hook
+        // timeout the escalation could never actually run: it fired at the same
+        // instant the hook was abandoned, so a runtime slow to exit under load
+        // failed the whole suite after every test in it had already passed.
+    }, 30000);
 
     test('the runtime serves the built frontend', () => {
         expect(serverUp).toBe(true);

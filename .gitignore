@@ -9,6 +9,7 @@ release/
 coverage/
 config.json
 reasonix.toml
+.reasonix/
 audit-log.json
 task-history.json
 audit-log.jsonl

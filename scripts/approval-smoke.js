@@ -21,7 +21,19 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const RUNTIME_URL = process.env.YODAMAN_SMOKE_URL || 'http://127.0.0.1:3090';
+// A dedicated port, NOT the 3090 the desktop app uses.
+//
+// These gates used to adopt whatever was already listening on 3090. If the
+// YodaMan desktop app was open — or a packaged build had been left running —
+// the gate silently measured THAT build instead of the working tree, and
+// reported the result as if it had tested your changes. It cost a full
+// misdiagnosis: a ranking failure was chased through the source for an hour
+// while every probe was answering from a nine-hour-old packaged app.
+//
+// Set YODAMAN_SMOKE_URL to deliberately point at an existing runtime.
+const SMOKE_PORT = Number(process.env.YODAMAN_SMOKE_PORT) || 3097;
+const ADOPT_EXISTING = Boolean(process.env.YODAMAN_SMOKE_URL);
+const RUNTIME_URL = process.env.YODAMAN_SMOKE_URL || `http://127.0.0.1:${SMOKE_PORT}`;
 const TASK_TIMEOUT_MS = Number(process.env.YODAMAN_SMOKE_TASK_TIMEOUT || 180000);
 const log = (msg) => process.stdout.write(`${msg}\n`);
 
@@ -204,9 +216,21 @@ async function main() {
     }
 
     let child = null;
+    // Always say which runtime produced the result. A gate that measured a
+    // different build than the one you changed must never look like a gate that
+    // measured yours.
+    if (await reachable(`${RUNTIME_URL}/api/health`, 2000)) {
+        log(ADOPT_EXISTING
+            ? `Using the runtime you pointed at: ${RUNTIME_URL}`
+            : `WARNING: reusing a runtime already on ${RUNTIME_URL} that this gate did not start.`);
+    }
+
     if (!await reachable(`${RUNTIME_URL}/api/health`, 2000)) {
-        log(`Starting a runtime at ${RUNTIME_URL}...`);
-        child = spawn(process.execPath, [path.resolve(__dirname, '..', 'server.js')], { stdio: 'ignore' });
+        log(`Starting a runtime from this working tree at ${RUNTIME_URL}...`);
+        child = spawn(process.execPath, [path.resolve(__dirname, '..', 'server.js')], {
+            stdio: 'ignore',
+            env: { ...process.env, YODAMAN_PORT: String(SMOKE_PORT) }
+        });
         if (!await waitForRuntime(45000)) {
             child.kill('SIGKILL');
             throw new Error('Runtime did not become healthy in time.');

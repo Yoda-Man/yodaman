@@ -21,6 +21,7 @@
  *   buildSpecIndex(projectPath)                           → spec coverage lookup
  */
 
+const fs = require('fs');
 const path = require('path');
 const graphifyService = require('./GraphifyService');
 const specDrift = require('../stardust/SpecDrift');
@@ -57,11 +58,33 @@ function buildIndex(projectPath) {
     let graph;
     try {
         graph = graphifyService.readGraph(projectPath);
-    } catch (_err) {
-        // No graph, or an unreadable one, means ranking simply cannot contribute.
-        // The caller checks for null and falls back to semantic order, and
-        // searchRouter already warns when a graph exists but matched nothing —
-        // which is the case actually worth someone's attention.
+    } catch (err) {
+        // Two very different situations were being treated as one. A workspace
+        // with no graph is ordinary and stays quiet. A graph that EXISTS but
+        // could not be read is a silent product failure: ranking drops to
+        // semantic-only while /api/search still advertises all four weights, so
+        // the answer degrades and nothing says why.
+        //
+        // Seen for real: a 435MB graph.json failed to parse under the memory
+        // pressure of a full release run and passed in isolation minutes later.
+        // The failure was invisible because this catch discarded it, which made
+        // the one gate that noticed impossible to diagnose.
+        try {
+            const file = graphifyService.graphPath(projectPath);
+            if (fs.existsSync(file)) {
+                logger.error('graph_ranking_unavailable', err, {
+                    severity: 'high',
+                    projectPath,
+                    graphBytes: fs.statSync(file).size,
+                    userAction: 'search',
+                    hint: 'Search fell back to semantic-only ordering. A very large graph '
+                        + 'can fail to parse under memory pressure; rebuild it or raise '
+                        + '--max-old-space-size for the runtime.'
+                });
+            }
+        } catch (_probeErr) {
+            // Classifying the failure must never replace it with a new one.
+        }
         return null;
     }
 

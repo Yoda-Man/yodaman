@@ -10,6 +10,7 @@ const logger = require('../infrastructure/Logger');
 const defaultCodingSkill = require('./DefaultCodingSkill');
 const queueService = require('./QueueService');
 const ConversationBuffer = require('./ConversationBuffer');
+const { promptBudgetFor } = require('./promptBudget');
 const stardustBrief = require('./StardustBrief');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
 
@@ -376,9 +377,11 @@ Rules:
         // throws away context the model could have used — so ask, and only
         // compact when it is warranted.
         let smallContext = true;
+        let effectiveContext = null;
         try {
             const ctxWindow = await dependencyChecker.detectOllamaContext();
             smallContext = ctxWindow.small;
+            effectiveContext = ctxWindow.effective;
             if (!smallContext && compact) {
                 logger.info('agent_compact_relaxed', {
                     taskId,
@@ -391,11 +394,21 @@ Rules:
         }
 
         const trim = compact && smallContext;
-        const promptChars = trim ? COMPACT_PROMPT_CHARS : undefined;
+
+        // 9B is the floor YodaMan supports, not the ceiling. Where the window is
+        // genuinely larger, the budget grows with it instead of falling through
+        // to the flat figure that fitted a small model — otherwise a 32B model
+        // served at 131,072 tokens gets the same prompt as a 9B served at 8,192.
+        // Trimming still wins when it applies: a small window is a hard limit,
+        // not a preference.
+        const budget = promptBudgetFor(effectiveContext);
+        const promptChars = trim ? COMPACT_PROMPT_CHARS : budget.maxPromptChars;
+        const entryChars = trim ? undefined : budget.maxEntryChars;
         const topK = trim ? COMPACT_TOP_K : undefined;
 
         const conversation = new ConversationBuffer({
             ...(promptChars ? { maxPromptChars: promptChars } : {}),
+            ...(entryChars ? { maxEntryChars: entryChars } : {}),
             system: (trim ? this.getCompactSystemPrompt() : this.getSystemPrompt()) + workspaceContext + uploadedFileContext,
             brief,
             task,

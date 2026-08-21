@@ -2,7 +2,7 @@
 
 YodaMan is local-first workspace intelligence for developers. **Context Expert** (semantic search), **Graphify** (structure), and **OpenSpec** (architectural intent) form a single pillar: every search, every agent turn, and every plan draws on all three at once — none is optional, none runs alone.
 
-![Version](https://img.shields.io/badge/Version-0.5.0-gold) ![License](https://img.shields.io/badge/License-MIT-green)
+![Version](https://img.shields.io/badge/Version-0.5.1-gold) ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## The three-tool pillar
 
@@ -76,13 +76,73 @@ yodaman doctor --graph
 
 The same dependency checks run at startup, appear in the Dashboard health panel and `GET /api/health`, and appear on the desktop startup diagnostics screen where missing components offer a one-click install.
 
+## Choosing a model
+
+**9B parameters is the floor, not the target.** YodaMan runs on a 9B model so it
+works on modest hardware, and gets genuinely better — not merely faster — when
+you give it more.
+
+**If you run a bigger model, raise the context window to match.** These are one
+decision, not two. Ollama serves whatever `OLLAMA_CONTEXT_LENGTH` says; when it
+is unset it picks by available VRAM, often **4096 tokens, no matter how large a
+context the model itself supports**. A 32B model served through a 4096-token
+window behaves like a 9B one, and you paid for the 32B.
+
+| Model | Set `OLLAMA_CONTEXT_LENGTH` | YodaMan then sends | What you get |
+|---|---|---|---|
+| `qwen3.5:9b` *(minimum)* | `8192` | ~10,000 chars | Works. Tool-calling is occasionally unreliable — the agent sometimes answers with citations instead of running the tool. |
+| `qwen2.5:14b` | `16384` | ~20,000 chars | Reliable tool-calling. The point where the agent stops needing retries. |
+| `codestral:22b` | `32768` | ~40,000 chars | Holds context across multi-step tasks. **Recommended.** |
+| 32B-class, `deepseek-coder-v2` | `65536`–`131072` | ~80,000–120,000 chars | Whole files kept verbatim rather than clipped mid-function. |
+
+Leaving the window unset is not neutral — it is the small-window path, and
+YodaMan will deliberately compact its prompt to fit.
+
+### Setting it
+
+From the Dashboard: **Settings → Ollama context**. Accepted values are 8192,
+16384, 32768, 65536, and 131072; YodaMan writes the setting, restarts Ollama,
+and rolls back if the restart fails.
+
+Or by hand:
+
+```bash
+export OLLAMA_CONTEXT_LENGTH=32768
+```
+
+Then check the Health panel, which reports the window actually being served —
+not the one you asked for. Those differ more often than you would expect.
+
+### The trade-off
+
+**Context costs VRAM**, and it is charged whether or not a given request uses
+it. Raising the window on a GPU that cannot hold it makes Ollama either refuse
+to load the model or spill into system memory, where everything slows to a
+crawl. If that happens, step down one value; a 22B model at 32768 will
+comfortably beat a 32B model that is swapping.
+
+Rough guidance: 32768 is comfortable on 24GB for a 14B–22B model. Below 16GB,
+stay at 8192–16384 and prefer the smaller model.
+
+### Why YodaMan will not just read the model's maximum
+
+Your model may declare it supports 262,144 tokens while Ollama is serving it
+4096. YodaMan sizes its prompt against the window **actually being served**,
+never the declared maximum — because overflowing the served window is silent.
+llama-server runs with `--context-shift`, which drops from the *front*, so the
+first thing lost is the system prompt carrying the tool instructions. The model
+then answers with citations and never calls the tool, and nothing on screen
+explains why.
+
+That is why the setting is worth getting right rather than guessing at.
+
 ## Key Technologies
 
 | Layer | Technology |
 |-------|-----------|
 | Runtime | Node.js/Express |
 | Frontend | React 18 + Vite + Tailwind CSS |
-| AI/LLM | Ollama (qwen3.5:9b) |
+| AI/LLM | Ollama (qwen3.5:9b minimum — see [Choosing a model](#choosing-a-model)) |
 | Embeddings | HuggingFace (BAAI/bge-large-en-v1.5) |
 | Knowledge Graph | Graphify |
 | Code Indexing | Context Expert (ctx) |
