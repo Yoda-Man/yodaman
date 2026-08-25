@@ -18,7 +18,7 @@
       "**/*"
     ],
     "ios": {
-      "bundleIdentifier": "africa.criticalpath.yodaman.mobile",
+      "bundleIdentifier": "com.yodaman.mobile",
       "supportsTablet": true,
       "backgroundColor": "#020617",
       "infoPlist": {
