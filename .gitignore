@@ -73,3 +73,7 @@ yodaman.db-shm
 graphify-out/
 yodaman-0.2.2.tgz
 .yodaman-approval-smoke/
+
+# Expo prebuild output — regenerated from app.json, never hand-edited.
+apps/mobile/ios/
+apps/mobile/android/

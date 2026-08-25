@@ -2,7 +2,7 @@
   "expo": {
     "name": "YodaMan",
     "slug": "yodaman-mobile",
-    "version": "0.1.9",
+    "version": "0.5.2",
     "orientation": "portrait",
     "scheme": "yodaman",
     "userInterfaceStyle": "dark",
@@ -27,7 +27,8 @@
           "NSAllowsLocalNetworking": true
         },
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.yodaman.mobile",
@@ -40,7 +41,8 @@
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE"
       ],
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
