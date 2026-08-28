@@ -4,7 +4,8 @@
   "description": "YodaMan \u2014 local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
-    "yodaman": "bin/yodaman.js"
+    "yodaman": "bin/yodaman.js",
+    "yodaman-mcp": "bin/yodaman-mcp.mjs"
   },
   "files": [
     "bin",
@@ -53,6 +54,7 @@
     "test:coverage": "jest --coverage --coverageReporters=text-summary"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "chokidar": "^4.0.3",
     "cors": "^2.8.5",
     "express": "^5.2.1",

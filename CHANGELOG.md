@@ -2,6 +2,46 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [Unreleased]
+
+### Added — YodaMan as an MCP server
+
+Cursor, Claude Code and Zed have strong models and no idea what is in your
+private codebase. YodaMan has a local index of exactly that. `yodaman-mcp`
+offers it to them over stdio, without the code leaving the machine.
+
+Five read-only tools: `yodaman_projects`, `yodaman_search` (the four-signal
+blend), `yodaman_graph_query`, `yodaman_impact`, and `yodaman_spec_drift` —
+the last being the one a model reading the repository cannot work out on its
+own, because it needs the specs and the graph together.
+
+Two decisions the tests enforce rather than leave to judgement:
+
+**Read-only, permanently.** The approval gate protects writes made by YodaMan's
+own agent. A client on the far side of this boundary does not run that gate and
+cannot be made to, so a write tool here would hand out a key to a door we
+deliberately lock. The suite fails if a tool with a mutating name appears, if
+the server issues a PUT/PATCH/DELETE, or if it imports a write path. Verified
+by mutation: adding a write tool fails three tests.
+
+**It proxies the runtime rather than re-implementing it.** Ranking lives behind
+an HTTP route; a second copy here would drift from the first, which is exactly
+what cost a descriptor leak when one ignore list became four. Verified against
+the HTTP API on the same query: same result count, same ordering, same weights,
+same graphRanked.
+
+Set up with `claude mcp add yodaman -- yodaman-mcp`, or the equivalent in any
+MCP client. Documented in `docs/guides/mcp.md`.
+
+Not built, deliberately: the MCP *client* side. The proposal that prompted this
+argued for consuming external RAG and memory servers, but semantic search, the
+knowledge graph and spec coverage are ctx, Graphify and OpenSpec — consuming
+someone else's would duplicate the product. Tool definitions also already cost
+1,893 characters against the 5,000-character compact prompt budget small models
+get, so every added server is charged to the users least able to afford it.
+Memory is the one capability genuinely missing, and it can be added narrowly
+when it is wanted.
+
 ## [0.5.3] - 2026-08-27
 
 ### Fixed — the approval gate did not cover the edit path the product recommended

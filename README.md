@@ -21,6 +21,7 @@ Every answer in YodaMan blends three mandatory tools. No silos, no optional feat
 - **Keep code private**: Designed around local project indexing and local model workflows through Context Expert and Ollama. No code leaves your machine.
 - **Understand the whole workspace**: Search and ask across indexed repositories instead of juggling isolated editor tabs.
 - **See relationships, not fragments**: Graphify builds mandatory knowledge graphs that connect code, docs, diagrams, and architectural concepts.
+- **Lend your codebase to other agents**: A local MCP server exposes YodaMan's search, graph, impact and spec-drift to Cursor, Claude Code and Zed over stdio — read-only, no egress. See [MCP](docs/guides/mcp.md).
 - **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and an approval gate on every action that changes anything — see [Approvals](docs/guides/approvals.md).
 - **Work where you already are**: Web UI, desktop app, CLI, VS Code extension, and mobile companion all talk to the same runtime.
 - **Extend the assistant**: Add JavaScript plugins for custom tools. Ships with 5 plugins: CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, and Graphify.
