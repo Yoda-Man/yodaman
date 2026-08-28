@@ -2,7 +2,7 @@
 
 YodaMan is local-first workspace intelligence for developers. **Context Expert** (semantic search), **Graphify** (structure), and **OpenSpec** (architectural intent) form a single pillar: every search, every agent turn, and every plan draws on all three at once — none is optional, none runs alone.
 
-![Version](https://img.shields.io/badge/Version-0.5.2-gold) ![License](https://img.shields.io/badge/License-MIT-green)
+![Version](https://img.shields.io/badge/Version-0.5.3-gold) ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## The three-tool pillar
 
@@ -21,7 +21,7 @@ Every answer in YodaMan blends three mandatory tools. No silos, no optional feat
 - **Keep code private**: Designed around local project indexing and local model workflows through Context Expert and Ollama. No code leaves your machine.
 - **Understand the whole workspace**: Search and ask across indexed repositories instead of juggling isolated editor tabs.
 - **See relationships, not fragments**: Graphify builds mandatory knowledge graphs that connect code, docs, diagrams, and architectural concepts.
-- **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and approval gates for file changes.
+- **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and an approval gate on every action that changes anything — see [Approvals](docs/guides/approvals.md).
 - **Work where you already are**: Web UI, desktop app, CLI, VS Code extension, and mobile companion all talk to the same runtime.
 - **Extend the assistant**: Add JavaScript plugins for custom tools. Ships with 5 plugins: CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, and Graphify.
 - **Drive specs with the agent**: The agent can propose, validate, and archive OpenSpec changes through `specPropose`, `specValidate`, and `specArchive` tools — following a structured Propose → Apply → Archive workflow.

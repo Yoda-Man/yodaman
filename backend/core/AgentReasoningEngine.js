@@ -11,6 +11,7 @@ const defaultCodingSkill = require('./DefaultCodingSkill');
 const queueService = require('./QueueService');
 const ConversationBuffer = require('./ConversationBuffer');
 const { promptBudgetFor } = require('./promptBudget');
+const { requiresApproval } = require('../../shared/toolCapabilities');
 const stardustBrief = require('./StardustBrief');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
 
@@ -40,6 +41,43 @@ function safeToolName(rawToolCall) {
 // beats a richer prompt that gets truncated from the front.
 const COMPACT_PROMPT_CHARS = 5000;
 const COMPACT_TOP_K = 3;
+
+/**
+ * What the file will contain if this edit is approved.
+ *
+ * The reviewer is asked to consent to a result, not to a parameter list.
+ * applyPatch supplies oldText/newText rather than whole content, so without
+ * this the diff panel had nothing to show for the tool that does most editing.
+ * Mirrors ToolBox.applyPatch exactly — single unique occurrence, replaced once —
+ * so the preview is what will actually be written, not an approximation.
+ *
+ * Returns null when the result cannot be predicted; the caller then falls back
+ * to showing the raw arguments rather than inventing a diff.
+ */
+function proposedContent(toolCall, oldContent) {
+    const params = toolCall.parameters || {};
+
+    switch (toolCall.name) {
+    case 'writeFile':
+        return params.content;
+
+    case 'applyPatch': {
+        const { oldText, newText } = params;
+        if (typeof oldContent !== 'string' || typeof oldText !== 'string' || typeof newText !== 'string') {
+            return null;
+        }
+        // A patch that does not match uniquely fails in ToolBox anyway, so
+        // showing a speculative diff for it would be a lie.
+        if (oldContent.split(oldText).length - 1 !== 1) return null;
+        return oldContent.replace(oldText, newText);
+    }
+
+    default:
+        // Not a file edit, so there is no "after" to show. The caller falls
+        // back to displaying the arguments.
+        return null;
+    }
+}
 
 class AgentReasoningEngine {
     constructor() {
@@ -543,16 +581,31 @@ Rules:
                     }
                     
                     // --- DIFF APPROVAL (The "Trust Gap") ---
-                    if (toolCall.name === 'writeFile') {
-                        const oldContent = await toolBox.getFileContent(toolCall.parameters.filePath);
-                        const newContent = toolCall.parameters.content;
+                    //
+                    // Gated on capability, not on a tool's name. This used to read
+                    // `toolCall.name === 'writeFile'`, so applyPatch — which also
+                    // writes to disk — ran unchallenged, and writeFile's own
+                    // description told the model to prefer it for exactly that
+                    // reason. Asking the agent to edit a file without naming a tool
+                    // changed the file on disk with no approval event at all.
+                    const toolDescriptor = toolBox.plugins && typeof toolBox.plugins.get === 'function'
+                        ? toolBox.plugins.get(toolCall.name)
+                        : null;
+
+                    if (requiresApproval(toolCall.name, toolDescriptor || {})) {
+                        // Both editing tools name a file; anything else may not.
+                        const filePath = toolCall.parameters && toolCall.parameters.filePath;
+                        const oldContent = filePath ? await toolBox.getFileContent(filePath) : null;
+                        const newContent = filePath
+                            ? proposedContent(toolCall, oldContent)
+                            : null;
 
                         // A line diff says what changed; it never says what it costs.
                         // Attach the graph-derived blast radius so the reviewer is
                         // making a risk decision, not just reading a diff.
-                        const impact = metadata.projectId
-                            ? impactAnalyzer.analyzeFile(metadata.projectId, toolCall.parameters.filePath)
-                            : { available: false, reason: 'no workspace selected' };
+                        const impact = metadata.projectId && filePath
+                            ? impactAnalyzer.analyzeFile(metadata.projectId, filePath)
+                            : { available: false, reason: filePath ? 'no workspace selected' : 'not a file edit' };
 
                         // Goldust: add OpenSpec spec awareness to the impact.
                         // Which specs describe this file, and would the change cause drift?
@@ -563,7 +616,7 @@ Rules:
                                 const mentionedIn = [];
                                 for (const spec of specs) {
                                     const refs = specDrift.extractReferences(spec.text);
-                                    if (refs.some(r => toolCall.parameters.filePath.includes(r) || r.includes(toolCall.parameters.filePath))) {
+                                    if (filePath && refs.some(r => filePath.includes(r) || r.includes(filePath))) {
                                         mentionedIn.push(spec.id);
                                     }
                                 }
@@ -573,7 +626,8 @@ Rules:
 
                         logger.info('approval_impact_assessed', {
                             taskId,
-                            filePath: toolCall.parameters.filePath,
+                            tool: toolCall.name,
+                            filePath: filePath || null,
                             available: impact.available,
                             impactedCount: impact.impactedCount ?? null,
                             testCount: impact.testCount ?? null,
@@ -582,11 +636,16 @@ Rules:
                         });
 
                         const pendingApproval = {
-                            tool: 'writeFile',
+                            tool: toolCall.name,
                             params: {
-                                filePath: toolCall.parameters.filePath,
+                                filePath: filePath || null,
                                 oldContent,
-                                newContent
+                                newContent,
+                                // Tools that touch no file still have to show what
+                                // they intend to do, or consent means nothing.
+                                arguments: filePath ? undefined : toolBox.sanitizeParameters
+                                    ? toolBox.sanitizeParameters(toolCall.parameters)
+                                    : toolCall.parameters
                             },
                             impact,
                             specImpact
@@ -599,7 +658,7 @@ Rules:
 
                         const approvalEvent = {
                             type: 'awaiting_approval',
-                            tool: 'writeFile',
+                            tool: toolCall.name,
                             taskId,
                             params: pendingApproval.params,
                             impact,

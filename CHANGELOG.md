@@ -2,6 +2,117 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.5.3] - 2026-08-27
+
+### Fixed — the approval gate did not cover the edit path the product recommended
+
+**This is a security fix.** YodaMan's headline promise is that nothing is
+written without your say-so. It was not true.
+
+The gate fired on a single hardcoded name:
+
+    if (toolCall.name === 'writeFile')
+
+`applyPatch` also writes to disk and had no approval branch anywhere. Worse,
+`writeFile`'s own description — which the model reads on every task — said:
+
+> "Overwrites a file with new content. Requires human approval, so prefer
+> applyPatch for edits to existing files."
+
+The product steered the agent onto the one edit path that skipped consent.
+
+Measured, not inferred. Asked to edit a file without naming a tool, the agent
+chose `applyPatch` and changed `original contents` to `REPLACED` on disk, with
+no `awaiting_approval` event anywhere in the stream. Every test passed
+throughout, because the only approval test said "Use the writeFile tool" — it
+exercised the one path that happened to be gated.
+
+The decision is now inverted and lives in one place, `shared/toolCapabilities.js`:
+read-only tools are named explicitly, and **everything else requires approval**.
+A tool added tomorrow is gated until someone deliberately declares it safe.
+
+- `writeFile`, `applyPatch`, `executeCommand`, `specPropose`, `specArchive` all
+  pause. So does any plugin declaring a mutating permission; the bundled
+  analysis plugins declare only `read`/`search` and still run unprompted.
+- Permissions match exactly, never as substrings — an earlier capability label
+  matched `audit:write` on "write" and mislabelled a read-only plugin.
+- `applyPatch` now shows a real diff. It supplies `oldText`/`newText` rather
+  than whole content, so the patch is applied in memory and the result shown —
+  the same single unique replacement `ToolBox.applyPatch` performs. You approve
+  a result, not a parameter list.
+
+Re-verified after the fix: the same prompt, the same workspace, the model again
+chose `applyPatch` — and it paused. The file was untouched.
+
+### Fixed — the gate that missed it
+
+`npm run test:approval` now drives the agent twice: once naming the tool, once
+letting the model choose. The second shape is the one that would have caught
+this.
+
+Its three outcomes are now distinct, because conflating them is how a gate
+lies:
+
+- **held** — proposed, paused, file untouched. A pass.
+- **violated** — a file changed without consent. Hard failure, never retried.
+- **inconclusive** — nothing proposed, nothing written. No hole proven. Fails on
+  the named shape, where the model was told exactly what to do; reported but not
+  failed on the unnamed shape, where a small model declines the vaguer
+  instruction a fair fraction of the time.
+
+Verified by mutation: with the gate forced off, the suite fails and names the
+violation.
+
+### Changed — Holocron VR 0.5.1 → 0.5.3
+
+The constellation showed dependencies as its brightest stars. Graphify walks
+vendored trees, so on one real workspace the highest-centrality nodes — the
+largest objects in the view — were `third_party` tests and node_modules.
+
+Holocron now drops vendored and generated directories before layout. Filtering
+at render time needs no reindex and invalidates no existing graph. Matching is
+per path segment, so `src/buildTools/` is kept: hiding the user's own code is
+the worse failure of the two.
+
+`third_party` joins the shared ignore list, in the runtime and in Holocron. The
+two lists are a deliberate copy, because Holocron ships as a standalone plugin
+and cannot require across the package boundary — so a test fails the moment they
+drift. Four copies of that list diverging is what caused the 0.5.1 descriptor
+leak.
+
+### Fixed — search re-parsed the entire knowledge graph on every query
+
+`rerank()` runs on every search and called `buildIndex()`, which `JSON.parse`s
+the whole graph. Nothing cached it. On a workspace whose `graph.json` is 435MB
+that meant re-reading and re-parsing 435MB per query: a single search took over
+four minutes and returned nothing before the client gave up. Ranking is meant to
+make search better, not unusable on exactly the large codebases it helps most.
+
+The index is now cached per project and invalidated by the graph file's mtime —
+a stat is microseconds, and the next search after Graphify rewrites the graph
+rebuilds. No staleness window, no timer. Measured on that workspace: 247s -> 46s,
+with the remainder being ctx's own semantic search rather than graph parsing.
+
+### Fixed — the test suite failed on scheduling luck
+
+Jest defaulted to one worker per core. Several suites spawn `ctx`, `graphify`,
+and `openspec` subprocesses, so nine workers each spawning children starved each
+other: suites that run in 2 seconds alone took **460 seconds** in a full run and
+timed out. Capping workers at 50% took the full suite from a 460-second timeout
+to **5.9 seconds**. A gate that fails on scheduling luck is a gate that lies.
+
+Two gates were also made resilient rather than brittle. The ranking check tries
+several graph-connected terms, and one slow search used to abort the whole run —
+it now reports the slow terms and continues. The approval gate treats an agent
+run that never finished as inconclusive rather than crashing, and still checks
+the file: a timeout is never an excuse for an unapproved write.
+
+### Added — documentation
+
+`docs/guides/approvals.md` documents what stops and what does not, what the
+diff and blast radius show, what is deliberately ungated and why, and how to
+verify the claim yourself rather than trusting it.
+
 ## [0.5.2] - 2026-08-20
 
 ### Fixed — Graph Studio drew nothing

@@ -52,6 +52,7 @@ const IGNORED_DIRECTORIES = [
     '.cache',
     // Vendored dependency trees
     'vendor',
+    'third_party',
     'bower_components',
     'Pods',
     '.gradle',

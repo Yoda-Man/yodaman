@@ -1,6 +1,6 @@
 # YodaMan Architecture Overview
 
-This document describes the architecture of YodaMan v0.5.2, a local-first workspace intelligence platform for developers.
+This document describes the architecture of YodaMan v0.5.3, a local-first workspace intelligence platform for developers.
 
 > **Before deleting any file listed here:** a significant part of this system is
 > wired up at runtime rather than through imports — plugins are `require()`d from

@@ -231,7 +231,7 @@ class ToolBox {
         return [
             ['readFile', { filePath: file }, 'Returns the content of a file.'],
             ['writeFile', { filePath: file, content: { type: 'string', required: true, note: 'the complete new file content' } },
-                'Overwrites a file with new content. Requires human approval, so prefer applyPatch for edits to existing files.'],
+                'Overwrites a file with new content. Pauses for human approval, as every edit does.'],
             ['applyPatch', {
                 filePath: file,
                 oldText: { type: 'string', required: true, note: 'exact existing text, including indentation' },
