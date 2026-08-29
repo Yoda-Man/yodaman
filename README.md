@@ -21,7 +21,7 @@ Every answer in YodaMan blends three mandatory tools. No silos, no optional feat
 - **Keep code private**: Designed around local project indexing and local model workflows through Context Expert and Ollama. No code leaves your machine.
 - **Understand the whole workspace**: Search and ask across indexed repositories instead of juggling isolated editor tabs.
 - **See relationships, not fragments**: Graphify builds mandatory knowledge graphs that connect code, docs, diagrams, and architectural concepts.
-- **Lend your codebase to other agents**: A local MCP server exposes YodaMan's search, graph, impact and spec-drift to Cursor, Claude Code and Zed over stdio — read-only, no egress. See [MCP](docs/guides/mcp.md).
+- **Lend your codebase to other agents**: Cursor, Claude Code and Zed can query your private code through YodaMan's MCP server — read-only, no egress. See [why](#why-we-added-mcp).
 - **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and an approval gate on every action that changes anything — see [Approvals](docs/guides/approvals.md).
 - **Work where you already are**: Web UI, desktop app, CLI, VS Code extension, and mobile companion all talk to the same runtime.
 - **Extend the assistant**: Add JavaScript plugins for custom tools. Ships with 5 plugins: CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, and Graphify.
@@ -29,6 +29,50 @@ Every answer in YodaMan blends three mandatory tools. No silos, no optional feat
 - **See every tool's view of a file**: The Compose tab cross-references any file across OpenSpec (specs), Graphify (structure), and Context Expert (relevance) in three columns.
 - **Understand search rankings**: The Trace tab shows why each result ranked where it did — semantic × 0.50 + proximity × 0.20 + centrality × 0.15 + specCoverage × 0.15 per result.
 - **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
+
+## Why we added MCP
+
+Adopting an industry protocol is usually where a local-first tool starts making
+compromises. This one does not, and the reason is worth stating plainly.
+
+**MCP is a protocol, not a destination.** It is a socket. It can be plugged into
+a remote service that ships your code somewhere, or into a process on your own
+machine that ships nothing. YodaMan's server runs over stdio: nothing listens on
+a port, there are no API keys, and there is no account. The protocol is
+standard; where the data goes is our decision, and it goes nowhere.
+
+**We are a server, not a client — deliberately.** The obvious move was the other
+one: consume other people's MCP servers for memory, retrieval, and search. We
+declined, because semantic search, the dependency graph, and spec coverage *are*
+Context Expert, Graphify, and OpenSpec. Wiring in a third-party equivalent would
+have traded the thing that makes YodaMan different for a generic version of
+itself. A protocol is worth adopting; a replacement for your own differentiator
+is not.
+
+**The asymmetry is what makes it useful.** Cursor, Claude Code and Zed run
+models far stronger than anything most people can run locally — and they know
+nothing about your private codebase. YodaMan knows exactly that, on your
+machine: which modules are load-bearing, what a change would reach, which specs
+describe a file and which files no spec describes. Serving that to them joins
+their reasoning to our knowledge, without the code leaving the machine.
+
+**It is also the honest answer to a real limitation.** A model you run at home is
+weaker than a frontier model, and pretending otherwise would be dishonest. So
+rather than competing on model quality, YodaMan makes the strong model better on
+*your* code. You do not have to choose between a capable assistant and keeping
+your source private.
+
+**Every tool is read-only, permanently.** YodaMan's approval gate stops each
+write for a diff and its blast radius — but it lives in YodaMan's own agent
+loop. A client on the far side of stdio never enters that loop and cannot be
+made to. Offering a write tool there would hand out a key to a door we
+deliberately lock, so the test suite fails if a tool with a mutating name
+appears, if the server issues a `PUT`/`PATCH`/`DELETE`, or if it imports a write
+path. If you want an agent to change files through YodaMan, use YodaMan's agent,
+where consent is enforced.
+
+Setup for every client is in [MCP](docs/guides/mcp.md), and in the app under
+**Settings → Connect other agents**.
 
 ## Sub-Projects
 
