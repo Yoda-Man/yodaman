@@ -22,7 +22,12 @@ export default function WelcomeModal() {
     const steps = [
         {
             title: "Welcome to YodaMan",
-            desc: "The professional command center for your Context Expert engine. Let's get you set up in 30 seconds.",
+            // Was: "The professional command center for your Context Expert
+            // engine." That sold someone else's product and said nothing about
+            // what this one does. Lead with the finding no other tool produces
+            // — which modules carry the codebase and what nothing describes —
+            // and with the promise that makes it possible to say at all.
+            desc: "Your codebase, understood on your own machine. YodaMan maps how your code fits together, then shows you which modules carry it \u2014 and which of those nothing describes. Your code never leaves this computer.",
             icon: <Sparkles className="text-amber-400" size={32} />,
             color: "bg-amber-500/10"
         },
