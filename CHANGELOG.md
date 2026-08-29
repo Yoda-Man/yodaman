@@ -2,7 +2,42 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
-## [Unreleased]
+## [0.5.4] - 2026-08-28
+
+### Changed — the coverage signal now reaches users who have written no specs
+
+YodaMan's most distinctive output was invisible to every new user. Drift
+detection returned `available: false` when a workspace had no OpenSpec specs, so
+the people who had set nothing up — which is everyone on first use — saw
+nothing at all. The thing that makes this different from grep-plus-a-model was
+gated behind the setup step least likely to be done first.
+
+"No specs" is not "cannot tell". It is the strongest possible answer to the
+coverage question: nothing here is documented. The undocumented half of the
+report needs only the knowledge graph — it ranks load-bearing modules and
+subtracts the ones specs cite, and with no specs that subtraction removes
+nothing. Only a missing graph is genuinely unanswerable.
+
+On a real spec-less workspace, first index now reads:
+
+    4 load-bearing modules in this workspace, and nothing describes them.
+    Run `openspec init .` to start tracking intent against code.
+    💡 server/entities.py is depended on by 3 files but no spec describes it
+    💡 shared/messages.py is depended on by 3 files but no spec describes it
+
+Three surfaces changed:
+
+- **Drift** reports coverage without specs, and separates `covered` from
+  `inSync`. Claiming specs and code agree when there are no specs would be a lie
+  of omission, so `inSync` stays false until something is actually documented.
+- **The Stardust Brief** names the undocumented hubs whether or not specs exist,
+  and says to check them before adding anything they might already do. Its own
+  comment called those hubs "where a second implementation gets added by
+  accident" — which is precisely the mistake made in Holocron two days earlier.
+- **Readiness** turns "ready, nothing to do" into the finding. That was the
+  moment the product finally had something to say about a codebase and said
+  nothing. Coverage is computed only for a single named workspace, never the
+  polled list: it costs ~160ms on a large graph, and the list stays at 2ms.
 
 ### Added — YodaMan as an MCP server
 
@@ -1152,7 +1187,11 @@ Context Expert, Graphify and OpenSpec were each wired to their own tab and nothi
 - **Task Detail Inspection**: Added `yodaman.viewTaskDetails` command in VS Code extension to print step-by-step logs and tool activities.
 - **Integration Tests**: Added `tests/interfaces/RestController.test.js` to verify DELETE endpoint functionality, and expanded release smoke checks for Database.js integration.
 
-## [Unreleased]
+## [Unversioned] - 2026-05-18
+
+_Shipped between 0.1.6 and 0.1.7 but never assigned a version. Left in place
+because the record is real; relabelled because "Unreleased" was not — every
+item below is in the product today._
 
 ### Added
 - Shared YodaMan API/SSE client, protocol constants, and TypeScript declaration files under `shared/`.

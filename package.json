@@ -1,6 +1,6 @@
 {
   "name": "yodaman",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "YodaMan \u2014 local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
