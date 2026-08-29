@@ -118,15 +118,18 @@ function extractReferences(text) {
  */
 function detectDrift(projectRoot, { minDependents = 2, facts = null, specs: preRead = null } = {}) {
     const specs = preRead || readSpecs(projectRoot);
-    if (specs.length === 0) {
-        return {
-            available: false,
-            reason: findOpenSpecRoot(projectRoot)
-                ? 'OpenSpec is initialized but no specs have been written yet'
-                : 'OpenSpec is not initialized in this workspace — run: openspec init .'
-        };
-    }
 
+    // A workspace with no specs used to return available:false, which meant the
+    // single most distinctive signal YodaMan has was invisible to every new
+    // user — precisely the people who have not written specs yet.
+    //
+    // But "no specs" is not "cannot tell". It is the strongest possible answer
+    // to the coverage question: nothing here is documented. The undocumented
+    // half of this report needs only the graph, because it ranks load-bearing
+    // modules and subtracts the ones specs cite — and with no specs, that
+    // subtraction removes nothing. So compute it, and say plainly what it means.
+    //
+    // Only a missing graph is genuinely unanswerable.
     const graph = facts || graphFacts.load(projectRoot);
     if (!graph) {
         return { available: false, reason: 'no knowledge graph has been built for this workspace yet' };
@@ -169,6 +172,11 @@ function detectDrift(projectRoot, { minDependents = 2, facts = null, specs: preR
 
     const report = {
         available: true,
+        // Distinguishes "measured against specs" from "measured against
+        // nothing, because there are none" — the same numbers mean different
+        // things, and a caller that cannot tell them apart will mislead.
+        covered: specs.length > 0,
+        openSpecInitialized: Boolean(findOpenSpecRoot(projectRoot)),
         specCount: specs.length,
         graphFileCount: graph.files.size,
         documentedFiles: citedFiles.size,
@@ -176,7 +184,10 @@ function detectDrift(projectRoot, { minDependents = 2, facts = null, specs: preR
         staleCount: staleReferences.length,
         undocumented: undocumented.slice(0, 20),
         undocumentedCount: undocumented.length,
-        inSync: staleReferences.length === 0 && undocumented.length === 0
+        // With no specs, "in sync" would be true only for a workspace whose
+        // graph has no load-bearing modules at all. Saying specs and code agree
+        // when there are no specs is a lie of omission.
+        inSync: specs.length > 0 && staleReferences.length === 0 && undocumented.length === 0
     };
 
     logger.info('spec_drift_checked', {
@@ -200,6 +211,20 @@ function formatDrift(report) {
     }
 
     const lines = [];
+
+    // Lead with the finding, not with the setup step. A new user learns what
+    // their codebase looks like first, and how to act on it second.
+    if (!report.covered) {
+        lines.push(
+            `${report.undocumentedCount} load-bearing module${report.undocumentedCount === 1 ? '' : 's'} `
+            + `in this workspace, and nothing describes ${report.undocumentedCount === 1 ? 'it' : 'them'}.`
+        );
+        if (report.undocumentedCount > 0) {
+            lines.push(report.openSpecInitialized
+                ? 'Write a spec for the modules below to start tracking intent against code.'
+                : 'Run `openspec init .` to start tracking intent against code.');
+        }
+    }
     for (const stale of report.staleReferences.slice(0, 10)) {
         lines.push(`⚠️ Spec "${stale.spec}" references ${stale.reference}, which is not in the graph — renamed or deleted`);
     }

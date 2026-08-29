@@ -1,6 +1,7 @@
 const graphifyService = require('../../backend/infrastructure/GraphifyService');
 const queueService = require('../../backend/core/QueueService');
 const readiness = require('../../backend/infrastructure/WorkspaceReadiness');
+const specDrift = require('../../backend/stardust/SpecDrift');
 
 const PROJECT = '/workspace/demo';
 
@@ -102,6 +103,79 @@ describe('WorkspaceReadiness', () => {
 
         test('no workspaces reports unindexed rather than falsely ready', () => {
             expect(readiness.forWorkspaces([]).overall).toBe('unindexed');
+        });
+    });
+
+    describe('coverage — the finding a new user gets on first index', () => {
+        const originalDetect = specDrift.detectDrift;
+        afterEach(() => { specDrift.detectDrift = originalDetect; });
+
+        const setDrift = (report) => { specDrift.detectDrift = jest.fn(() => report); };
+
+        test('turns "ready, nothing to do" into the coverage finding', () => {
+            // The moment that matters. Indexing has finished, so there is no
+            // setup step left to name — and readiness used to say nothing at
+            // exactly the point the product finally had something to say.
+            setDrift({
+                available: true, covered: false, specCount: 0,
+                staleCount: 0, undocumentedCount: 4,
+                undocumented: [
+                    { file: 'server/entities.py', dependents: 3 },
+                    { file: 'shared/messages.py', dependents: 3 }
+                ]
+            });
+
+            const report = readiness.forWorkspace(PROJECT, { withCoverage: true });
+
+            expect(report.state).toBe('ready');
+            expect(report.action).toMatch(/load-bearing module\(s\) carry this codebase/);
+            expect(report.coverage.hubs).toHaveLength(2);
+            expect(report.coverage.covered).toBe(false);
+        });
+
+        test('does not compute coverage for the polled list', () => {
+            // ~160ms per workspace on a large graph, and the dashboard polls
+            // the list. One at a time is the budget this fits in.
+            setDrift({ available: true, covered: false, undocumentedCount: 4, undocumented: [] });
+
+            const list = readiness.forWorkspaces([PROJECT, '/workspace/other']);
+
+            expect(specDrift.detectDrift).not.toHaveBeenCalled();
+            expect(list.workspaces.every((w) => w.coverage === null)).toBe(true);
+        });
+
+        test('does not measure a workspace with no graph yet', () => {
+            // Nothing to measure against, and the setup hint is the right thing
+            // to show at that point.
+            setGraph({ graphExists: false, stale: false });
+            setDrift({ available: true, covered: false, undocumentedCount: 9, undocumented: [] });
+
+            const report = readiness.forWorkspace(PROJECT, { withCoverage: true });
+
+            expect(specDrift.detectDrift).not.toHaveBeenCalled();
+            expect(report.coverage).toBeNull();
+            expect(report.action).toMatch(/Sync Repository/);
+        });
+
+        test('never lets a drift failure break readiness', () => {
+            specDrift.detectDrift = jest.fn(() => { throw new Error('graph unreadable'); });
+
+            const report = readiness.forWorkspace(PROJECT, { withCoverage: true });
+
+            expect(report.state).toBe('ready');
+            expect(report.coverage).toBeNull();
+        });
+
+        test('reports drift normally once specs exist', () => {
+            setDrift({
+                available: true, covered: true, specCount: 3,
+                staleCount: 1, undocumentedCount: 2, undocumented: []
+            });
+
+            const report = readiness.forWorkspace(PROJECT, { withCoverage: true });
+
+            expect(report.action).toMatch(/1 stale spec reference/);
+            expect(report.coverage.covered).toBe(true);
         });
     });
 });

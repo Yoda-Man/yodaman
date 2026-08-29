@@ -180,22 +180,39 @@ async function build(projectRoot, task) {
         specs = specDrift.readSpecs(projectRoot);
     } catch (_) { /* treated as no specs */ }
 
+    // Drift runs whether or not specs exist. A workspace with none is not a
+    // workspace we know nothing about — it is one where NOTHING is documented,
+    // which is the strongest coverage answer there is. Telling a new user only
+    // "no specs written" withholds the finding and leaves them a chore.
+    //
+    // Hand over the specs already read above rather than making detectDrift
+    // walk openspec/ a second time for the same answer.
+    const drift = specDrift.detectDrift(projectRoot, { facts: graph, specs });
+
+    // Undocumented hubs are where a second implementation gets added by
+    // accident — someone adds a capability the hub already provides, because
+    // nothing described it. That is the part of drift worth naming explicitly,
+    // and it is available with zero specs.
+    const hubs = drift?.undocumented?.length > 0
+        ? `Undocumented hubs — check these before adding anything they might already do: `
+          + `${drift.undocumented.slice(0, 5).map(entry => `${entry.file} (${entry.dependents} dependents)`).join(', ')}.`
+        : '';
+
     if (specs.length === 0) {
-        sections.push('OpenSpec: no specs written for this workspace. Nothing constrains this change, and nothing records the intent behind existing code.');
+        sections.push([
+            'OpenSpec: no specs written for this workspace. Nothing constrains this change, and nothing records the intent behind existing code.',
+            drift?.available
+                ? `Coverage: ${drift.undocumentedCount} load-bearing module(s) carry this codebase and none of them are described.`
+                : '',
+            hubs
+        ].filter(Boolean).join('\n'));
     } else {
-        // Hand over the specs already read above rather than making detectDrift
-        // walk openspec/ a second time for the same answer.
-        const drift = specDrift.detectDrift(projectRoot, { facts: graph, specs });
         sections.push([
             `OpenSpec: ${specs.length} spec${specs.length === 1 ? '' : 's'} (${specs.map(spec => spec.id).slice(0, 8).join(', ')}).`,
             drift?.available
                 ? `Drift: ${drift.staleCount} stale reference(s), ${drift.undocumentedCount} load-bearing module(s) no spec describes.`
                 : '',
-            // Undocumented hubs are where a second implementation gets added by
-            // accident, so they are the part of drift worth naming explicitly.
-            drift?.undocumented?.length > 0
-                ? `Undocumented hubs: ${drift.undocumented.slice(0, 5).map(entry => `${entry.file} (${entry.dependents} dependents)`).join(', ')}.`
-                : '',
+            hubs
         ].filter(Boolean).join('\n'));
     }
 

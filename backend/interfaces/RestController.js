@@ -1326,7 +1326,9 @@ router.get('/readiness', (req, res) => {
     try {
         const projectId = req.query.projectId;
         if (projectId) {
-            return res.json(workspaceReadiness.forWorkspace(projectId));
+            // A single named workspace is the dashboard's selected one, so it
+            // is worth the ~160ms the coverage finding costs.
+            return res.json(workspaceReadiness.forWorkspace(projectId, { withCoverage: true }));
         }
         return res.json(workspaceReadiness.forWorkspaces(config.watchedDirectories || []));
     } catch (err) {

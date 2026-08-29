@@ -121,7 +121,24 @@ describe('StardustBrief', () => {
         ]);
 
         const { text } = await stardustBrief.build(PROJECT, 'add a feature');
-        expect(text).toMatch(/Undocumented hubs: backend\/infrastructure\/ToolBox\.js \(3 dependents\)/);
+        expect(text).toMatch(/Undocumented hubs[^\n]*backend\/infrastructure\/ToolBox\.js \(3 dependents\)/);
+    });
+
+    test('gives a brand-new user the coverage finding, not a setup chore', async () => {
+        // The first-use case, and the one that matters most. A workspace with
+        // no specs used to get one sentence — "no specs written" — and nothing
+        // else. That withheld the product's most distinctive output from
+        // exactly the people who had set nothing up, and left them a chore
+        // instead of a finding.
+        specDrift.readSpecs = jest.fn(() => []);
+
+        const { text } = await stardustBrief.build(PROJECT, 'add a feature');
+
+        // Still says specs are absent — that is true and worth knowing.
+        expect(text).toMatch(/no specs written/);
+        // But leads to the measurement, and names the modules by hand.
+        expect(text).toMatch(/load-bearing module\(s\) carry this codebase/);
+        expect(text).toMatch(/Undocumented hubs[^\n]*backend\/infrastructure\/ToolBox\.js \(3 dependents\)/);
     });
 
     test('reads the specs once, not once per consumer', async () => {

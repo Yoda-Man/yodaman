@@ -141,22 +141,39 @@ describe('SpecDrift', () => {
     });
 
     describe('graceful degradation', () => {
-        test('explains that OpenSpec is not initialized', () => {
+        test('still reports coverage when OpenSpec is not initialized', () => {
+            // The signal a NEW user sees. "No specs" is not "cannot tell" — it
+            // is the strongest answer to the coverage question, and returning
+            // available:false hid the product's most distinctive output from
+            // exactly the people who had not set anything up yet.
             const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-noospec-'));
             workspaces.push(bare);
-            const report = specDrift.detectDrift(bare, { facts: fakeFacts(['server.js']) });
+            const report = specDrift.detectDrift(bare, {
+                facts: fakeFacts(['server.js'], { 'server.js': ['a.js', 'b.js'] })
+            });
 
-            expect(report.available).toBe(false);
-            expect(report.reason).toMatch(/not initialized/);
-            expect(report.reason).toContain('openspec init');
+            expect(report.available).toBe(true);
+            expect(report.covered).toBe(false);
+            expect(report.openSpecInitialized).toBe(false);
+            expect(report.undocumentedCount).toBeGreaterThan(0);
+            // Never "in sync": there are no specs to be in sync with.
+            expect(report.inSync).toBe(false);
+            // Leads with the finding, and names the setup step second.
+            expect(specDrift.formatDrift(report)).toMatch(/load-bearing module/);
+            expect(specDrift.formatDrift(report)).toContain('openspec init');
         });
 
-        test('explains that OpenSpec has no specs yet', () => {
+        test('tells an initialized workspace to write specs, not to init again', () => {
             const root = workspace({});
-            const report = specDrift.detectDrift(root, { facts: fakeFacts(['server.js']) });
+            const report = specDrift.detectDrift(root, {
+                facts: fakeFacts(['server.js'], { 'server.js': ['a.js', 'b.js'] })
+            });
 
-            expect(report.available).toBe(false);
-            expect(report.reason).toMatch(/no specs have been written/);
+            expect(report.available).toBe(true);
+            expect(report.covered).toBe(false);
+            expect(report.openSpecInitialized).toBe(true);
+            expect(specDrift.formatDrift(report)).toMatch(/Write a spec/);
+            expect(specDrift.formatDrift(report)).not.toContain('openspec init');
         });
 
         test('explains a missing graph without throwing', () => {
