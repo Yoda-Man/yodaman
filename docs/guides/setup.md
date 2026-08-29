@@ -2,17 +2,29 @@
 
 ## Prerequisites
 
-- **Node.js**: v18.0.0 or higher.
-- **Context Expert (ctx)**: The intelligence engine must be installed globally.
-  ```bash
-  npm install -g @contextexpert/cli
-  ```
-- **Graphify**: The required knowledge graph engine must be installed and reachable as `graphify`.
-  ```bash
-  python3 -m pip install graphifyy
-  graphify --help
-  ```
-- **Ollama**: Required for local AI model execution and Graphify full semantic extraction.
+Only Node.js is needed to start. Everything else unlocks a capability, and the
+runtime starts without any of them — a missing tool disables its features and
+says so, rather than stopping the process.
+
+**Start here, and you get something in about five seconds:**
+
+| Install | Unlocks | Cost |
+| --- | --- | --- |
+| **Node.js** v18+ | The runtime itself | — |
+| **Graphify** — `python3 -m pip install graphifyy` | The knowledge graph, impact analysis, and the coverage finding: which load-bearing modules carry your codebase and what nothing describes | Small. Graph builds take **0–5 seconds** on a typical repo. |
+
+That pair is enough to see the thing YodaMan does that other tools do not. It
+needs no model download and no AI service.
+
+**Then, when you want more:**
+
+| Install | Unlocks | Cost |
+| --- | --- | --- |
+| **Context Expert** — `npm install -g @contextexpert/cli` | Semantic code search, and the retrieval behind agent answers | Small |
+| **Ollama** + a model | Chat and agent tasks, and Graphify's optional full semantic extraction | **Several GB** for the model. See [Choosing a model](../../README.md#choosing-a-model). |
+
+Ollama is genuinely optional for the graph: extraction defaults to a local
+no-LLM path, and only `YODAMAN_GRAPHIFY_FULL_EXTRACT=true` reaches for a model.
 
 ## Installation
 

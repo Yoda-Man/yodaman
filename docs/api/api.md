@@ -357,7 +357,10 @@ Disables a plugin without removing its file. Default plugins are protected and r
 
 ## Graphify
 
-Graphify is a required knowledge graph layer in YodaMan 0.5.4. The runtime fails startup when the `graphify` CLI cannot be found. Graphify endpoints require a registered workspace path.
+Graphify builds the knowledge graph. The runtime **starts without it** — every
+dependency check is wrapped, and a missing tool disables its features rather
+than stopping the process. Graphify endpoints then return an error naming what
+is missing. Graphify endpoints require a registered workspace path.
 
 ### `GET /graphify/status`
 Returns graph availability, artifact health, stale status, and the last persisted build summary. Large graphs can return `build.state: "partial"` when `graph.json` and the report exist but full HTML artifacts were skipped.
