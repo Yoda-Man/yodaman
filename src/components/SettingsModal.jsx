@@ -2,6 +2,34 @@ import { useState } from 'react'
 import { X, FolderPlus, Trash2, ShieldCheck, Info, Globe, HardDrive, Pencil, Save, FolderOpen, Clipboard } from 'lucide-react'
 import { api } from '../api/api'
 
+/**
+ * How each client registers an MCP server.
+ *
+ * MCP is a protocol, so any client that speaks it works — these are the ones
+ * people actually use, and the only difference between them is where the
+ * config lives. `yodaman-mcp` ships with the npm package, so nothing extra is
+ * installed.
+ */
+const MCP_CLIENTS = [
+    {
+        name: 'Claude Code',
+        snippet: 'claude mcp add yodaman -- yodaman-mcp'
+    },
+    {
+        name: 'Cursor  ·  ~/.cursor/mcp.json',
+        snippet: '{\n  "mcpServers": {\n    "yodaman": { "command": "yodaman-mcp" }\n  }\n}'
+    },
+    {
+        name: 'Zed  ·  settings.json',
+        snippet: '{\n  "context_servers": {\n    "yodaman": { "command": { "path": "yodaman-mcp", "args": [] } }\n  }\n}'
+    },
+    {
+        name: 'Windsurf, Cline, Continue, and other clients',
+        snippet: '{\n  "mcpServers": {\n    "yodaman": { "command": "yodaman-mcp" }\n  }\n}',
+        note: 'Most clients use this shape. Point them at the yodaman-mcp binary; no arguments are needed.'
+    }
+]
+
 export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
     const [newDir, setNewDir] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -9,6 +37,19 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
     const [draftDir, setDraftDir] = useState('')
     const [savingDir, setSavingDir] = useState(null)
     const canBrowseFolders = Boolean(window.yodamanDesktop?.pickWorkspaceFolder)
+    const [copiedClient, setCopiedClient] = useState(null)
+
+    /** Clipboard, with the label reverting so it never looks stuck. */
+    const copyMcp = async (name, snippet) => {
+        try {
+            await navigator.clipboard.writeText(snippet)
+            setCopiedClient(name)
+            setTimeout(() => setCopiedClient(null), 1500)
+        } catch (_err) {
+            // A denied clipboard is not worth an error dialog; the snippet is
+            // on screen and selectable either way.
+        }
+    }
 
     const addDir = async () => {
         if (!newDir.trim() || isSubmitting) return
@@ -242,6 +283,52 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
                             </label>
                         </div>
                     </details>
+                    {/* ── Connect other agents (MCP) ──────────────────────────
+                        The MCP server shipped with no way to discover it: no
+                        mention anywhere in the UI, so a user would never know it
+                        existed. Every client below speaks the same protocol, so
+                        the only thing that differs is where the config lives. */}
+                    <details className="mt-4 rounded-2xl border border-white/5 bg-white/[0.02]">
+                        <summary className="cursor-pointer select-none px-5 py-4 text-sm font-semibold text-slate-200">
+                            Connect other agents
+                            <span className="ml-2 text-[11px] font-normal text-slate-500">
+                                Cursor, Claude Code, Zed and anything else that speaks MCP
+                            </span>
+                        </summary>
+                        <div className="px-5 pb-5 space-y-4">
+                            <p className="text-[11px] text-slate-400 leading-relaxed">
+                                Give another AI tool read-only access to this workspace&apos;s
+                                search, knowledge graph, impact analysis and spec drift.
+                                It runs over stdio on this machine — nothing listens on a
+                                port, and your code is never sent anywhere.
+                            </p>
+
+                            {MCP_CLIENTS.map((client) => (
+                                <div key={client.name}>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-[11px] font-bold text-slate-300">{client.name}</span>
+                                        <button
+                                            onClick={() => copyMcp(client.name, client.snippet)}
+                                            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-wider"
+                                        >
+                                            {copiedClient === client.name ? 'Copied' : 'Copy'}
+                                        </button>
+                                    </div>
+                                    <pre className="text-[10px] text-slate-400 bg-black/30 rounded-lg p-3 overflow-x-auto whitespace-pre">{client.snippet}</pre>
+                                    {client.note && (
+                                        <p className="text-[10px] text-slate-500 mt-1">{client.note}</p>
+                                    )}
+                                </div>
+                            ))}
+
+                            <p className="text-[10px] text-slate-500 leading-relaxed">
+                                YodaMan must be running — the server proxies this runtime.
+                                Every tool is read-only: writes stay behind the approval
+                                gate, which another client cannot run.
+                            </p>
+                        </div>
+                    </details>
+
                 </div>
                 <div className="p-6 bg-white/[0.02] border-t border-white/5 flex justify-between items-center px-8">
                     <a 

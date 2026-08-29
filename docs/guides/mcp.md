@@ -28,29 +28,69 @@ The server ships with the package, so no separate install:
 npm install -g yodaman
 ```
 
+MCP is a protocol, so **any client that speaks it works**. The only thing that
+differs is where the configuration lives. `yodaman-mcp` ships with the package,
+so there is nothing extra to install.
+
 ### Claude Code
 
 ```bash
 claude mcp add yodaman -- yodaman-mcp
 ```
 
-### Cursor, Zed, and other clients
-
-Add to the client's MCP configuration:
+### Cursor — `~/.cursor/mcp.json` (or `.cursor/mcp.json` per project)
 
 ```json
 {
   "mcpServers": {
-    "yodaman": {
-      "command": "yodaman-mcp"
-    }
+    "yodaman": { "command": "yodaman-mcp" }
   }
 }
 ```
 
-**YodaMan itself must be running** — open the desktop app, or start the runtime.
-The MCP server is a thin proxy; if the runtime is not up it says so and names
-the fix rather than answering from a lesser copy of itself.
+### Zed — `settings.json`
+
+```json
+{
+  "context_servers": {
+    "yodaman": { "command": { "path": "yodaman-mcp", "args": [] } }
+  }
+}
+```
+
+### VS Code (GitHub Copilot) — `.vscode/mcp.json`
+
+```json
+{
+  "servers": {
+    "yodaman": { "type": "stdio", "command": "yodaman-mcp" }
+  }
+}
+```
+
+### Windsurf, Cline, Continue, and most other clients
+
+```json
+{
+  "mcpServers": {
+    "yodaman": { "command": "yodaman-mcp" }
+  }
+}
+```
+
+### Anything else
+
+If a client accepts a stdio MCP server, point it at the `yodaman-mcp`
+executable with no arguments. If `yodaman-mcp` is not on the client's `PATH` —
+which happens when the client launches outside your shell — give the absolute
+path instead:
+
+```bash
+which yodaman-mcp    # use this path in the client's config
+```
+
+The same panel is in the app: **Settings → Connect other agents**, with a copy
+button per client.
 
 ### Configuration
 

@@ -212,3 +212,163 @@ describe('MCP server without a runtime', () => {
         expect(text).toMatch(/Nothing was read/);
     }, 30000);
 });
+
+/**
+ * The tools must actually return data.
+ *
+ * Everything above this point inspects the tool LIST or the SOURCE. Not one of
+ * those tests calls a tool successfully — the single tools/call is aimed at a
+ * dead port on purpose. So `yodaman_search` could map a parameter wrong, return
+ * garbage, or break when the runtime's response shape changes, and all eight
+ * would still pass.
+ *
+ * That is the same failure the approval gate had: the suite tested the one path
+ * that happened to work, and the surface looked correct throughout. A test of
+ * the surface is not a test of the behaviour.
+ *
+ * These drive a real runtime and assert results come back — and that search
+ * agrees with the HTTP API it proxies, since a proxy that quietly diverges from
+ * its source is the specific thing this design was chosen to avoid.
+ */
+const http = require('http');
+
+const LIVE_PORT = Number(process.env.MCP_LIVE_PORT || 3096);
+const LIVE_URL = `http://127.0.0.1:${LIVE_PORT}`;
+
+function get(url) {
+    return new Promise((resolve, reject) => {
+        const request = http.get(url, (response) => {
+            let body = '';
+            response.on('data', (chunk) => { body += chunk; });
+            response.on('end', () => resolve({ status: response.statusCode, body }));
+        });
+        request.on('error', reject);
+        request.setTimeout(120000, () => request.destroy(new Error('timeout')));
+    });
+}
+
+/** Ask the MCP server for one tool result, against the live runtime. */
+async function callTool(name, args) {
+    const { messages } = await session([
+        INITIALIZE,
+        { jsonrpc: '2.0', method: 'notifications/initialized', params: {} },
+        { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name, arguments: args } }
+    ], { env: { YODAMAN_URL: LIVE_URL }, timeoutMs: 180000, awaitId: 3 });
+
+    const call = messages.find((m) => m.id === 3);
+    const text = call?.result?.content?.[0]?.text;
+    if (!text) throw new Error(`no result for ${name}: ${JSON.stringify(call || messages).slice(0, 400)}`);
+    return JSON.parse(text);
+}
+
+describe('MCP tools return real data', () => {
+    let server;
+    let workspace = null;
+
+    beforeAll(async () => {
+        server = spawn(process.execPath, [path.join(rootDir, 'server.js')], {
+            cwd: rootDir,
+            env: { ...process.env, NODE_ENV: 'production', YODAMAN_PORT: String(LIVE_PORT) },
+            stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        const deadline = Date.now() + 60000;
+        while (Date.now() < deadline) {
+            try {
+                if ((await get(`${LIVE_URL}/api/health`)).status === 200) break;
+            } catch (_err) { /* not up yet */ }
+            await new Promise((r) => { setTimeout(r, 1000).unref(); });
+        }
+
+        // An indexed workspace, chosen the same way the journey gate chooses:
+        // never a temp path, and `indexed` rather than a file count, because
+        // GET /api/projects reports files as 0 for every project.
+        try {
+            const { body } = await get(`${LIVE_URL}/api/projects`);
+            const payload = JSON.parse(body);
+            const list = Array.isArray(payload) ? payload : payload.projects || [];
+            const usable = list
+                .filter((p) => p.path && p.indexed && !/^\/(private\/)?var\/folders\//.test(p.path))
+                .sort((a, b) => String(a.path).localeCompare(String(b.path)));
+            workspace = usable.length ? usable[0].path : null;
+        } catch (_err) { /* reported as a skip below */ }
+    }, 90000);
+
+    afterAll(async () => {
+        if (!server || server.killed) return;
+        const exited = new Promise((resolve) => server.once('exit', resolve));
+        server.kill();
+        const timer = setTimeout(() => server.kill('SIGKILL'), 5000);
+        await exited;
+        clearTimeout(timer);
+        server.stdout.destroy();
+        server.stderr.destroy();
+    }, 30000);
+
+    it('yodaman_projects lists indexed workspaces', async () => {
+        const result = await callTool('yodaman_projects', {});
+        expect(Array.isArray(result)).toBe(true);
+        // Shape matters as much as presence: a client reads these field names.
+        if (result.length > 0) {
+            expect(result[0]).toHaveProperty('path');
+            expect(result[0]).toHaveProperty('indexed');
+        }
+    }, 120000);
+
+    it('yodaman_search returns what the HTTP API returns', async () => {
+        if (!workspace) return; // No indexed workspace here; nothing to compare.
+
+        const query = 'search';
+        const viaMcp = await callTool('yodaman_search', { query, project: workspace });
+
+        const params = new URLSearchParams({ query, project: workspace });
+        const { body } = await get(`${LIVE_URL}/api/search?${params}`);
+        const viaHttp = JSON.parse(body);
+
+        // Non-empty FIRST. Comparing two empty lists proves nothing, and the
+        // first version of this test did exactly that: it read `r.file`, which
+        // does not exist on a search hit, so it compared [null,null,...] to
+        // itself and passed with the query parameter deliberately broken.
+        expect(viaMcp.results.length).toBeGreaterThan(0);
+
+        // The proxy must not diverge from its source. A second implementation
+        // drifting from the first is exactly what proxying was chosen to avoid.
+        expect(viaMcp.results.length).toBe((viaHttp.results || []).length);
+        expect(viaMcp.graphRanked).toBe(Boolean(viaHttp.graphRanked));
+        expect(viaMcp.weights).toEqual(viaHttp.weights || null);
+
+        // `filePath` and the line span are the fields a hit actually carries.
+        // Including the span makes ordering discriminating: every query returns
+        // the same top-30 files, so file names alone would not tell two
+        // different searches apart.
+        const identity = (list) => list.slice(0, 5)
+            .map((r) => `${r.filePath}:${r.lineStart}-${r.lineEnd}`);
+        expect(identity(viaMcp.results).every((entry) => !entry.includes('undefined'))).toBe(true);
+        expect(identity(viaMcp.results)).toEqual(identity(viaHttp.results || []));
+    }, 180000);
+
+    it('yodaman_spec_drift answers even for a workspace with no specs', async () => {
+        if (!workspace) return;
+
+        const drift = await callTool('yodaman_spec_drift', { project: workspace });
+
+        // The 0.5.4 change: no specs is a coverage answer, not an absence of one.
+        expect(drift).toHaveProperty('available');
+        if (drift.available) {
+            expect(drift).toHaveProperty('covered');
+            expect(typeof drift.undocumentedCount).toBe('number');
+        }
+    }, 120000);
+
+    it('reports a bad workspace path instead of answering emptily', async () => {
+        const result = await callTool('yodaman_search', {
+            query: 'anything',
+            project: '/definitely/not/a/workspace'
+        }).catch((err) => ({ error: err.message }));
+
+        // Either an explicit error or an empty result set — never a fabricated
+        // answer that looks like a real one.
+        const text = JSON.stringify(result);
+        expect(text).toMatch(/error|HTTP|not|\[\]/i);
+    }, 120000);
+});

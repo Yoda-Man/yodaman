@@ -2,6 +2,67 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.5.5] - 2026-08-29
+
+### Fixed — the MCP tests never called a tool
+
+Eight tests covered the MCP server and not one of them called a tool
+successfully. Seven inspected the tool LIST or the SOURCE; the single
+`tools/call` was aimed at a dead port on purpose, to check the error message.
+So `yodaman_search` could map a parameter wrong, return nothing useful, or break
+when the runtime's response shape changed, and the suite would stay green.
+
+The same failure as the approval gate: the surface looked correct, and the one
+test that ran exercised the one path that happened to work.
+
+Adds live tests that drive a real runtime — `yodaman_projects`,
+`yodaman_search`, `yodaman_spec_drift`, and a bad workspace path — and assert
+search agrees with the HTTP API it proxies: same count, same weights, same
+`graphRanked`, same top-five hits by file and line span.
+
+Two flaws surfaced while writing them, both in work that had looked verified:
+
+- The first version compared `r.file`, which is not a field a search hit
+  carries. It compared `[null, null, …]` to itself and passed with the query
+  parameter deliberately broken. The real field is `filePath`. **The manual
+  check run when the server was built had the same bug**, so "same top-5 order:
+  true" had meant nothing.
+- Comparing counts is not discriminating: every query returns the same top-30
+  files, so ordering had to include the line span to tell two searches apart.
+
+Now verified by mutation: breaking the query parameter fails the suite.
+
+### Added — Settings → Connect other agents
+
+The MCP server shipped with no way to discover it. Nothing in the UI mentioned
+it existed, so it was reachable only by reading the docs.
+
+Settings now carries a panel with copy-ready configuration for Claude Code,
+Cursor, Zed, VS Code (Copilot), and the shape most other clients use — plus what
+to do when the binary is not on the client's PATH. `docs/guides/mcp.md` covers
+the same ground for anything that speaks the protocol.
+
+### Changed — onboarding says what YodaMan does
+
+- The welcome modal opened with "The professional command center for your
+  Context Expert engine" — selling someone else's product in the first sentence
+  a new user reads. It now leads with the finding no other tool produces, and
+  with the promise that makes it possible: the code never leaves the machine.
+- Prerequisites are stated as what each tool unlocks, split into "start here"
+  (Node + Graphify, graph builds in 0–5s, no model download) and "then, when you
+  want more" (ctx for search, Ollama for chat, several GB).
+- The health panel names what each dependency unlocks. Seven tool names read as
+  seven walls; naming the capability makes a missing one "this feature is off".
+- The empty workspace state said "No projects indexed yet" — an absence that
+  promised nothing. It now says what happens when you point at a folder.
+
+### Fixed — documentation claimed a startup failure that does not happen
+
+`api.md` and `configuration.md` both said the runtime "fails startup when the
+graphify CLI cannot be found". It does not: every dependency check is wrapped,
+and the only exits are clean shutdown, port-in-use, and an uncaught exception.
+That false claim was repeated as fact in planning before the code was read.
+
 ## [0.5.4] - 2026-08-28
 
 ### Changed — the coverage signal now reaches users who have written no specs
