@@ -137,4 +137,26 @@ Tune frontend request timeouts:
 VITE_YODAMAN_FETCH_TIMEOUT_MS=45000 npm run dev
 ```
 
+## Two settings worth getting right
+
+**The context window Ollama serves.** This is the highest-impact setting, and
+its default is usually wrong for this workload — unset, Ollama picks by VRAM and
+often serves 4,096 tokens no matter what the model supports. YodaMan scales what
+it sends to match, so a large model through a small window performs like a small
+one. See [Choosing a model](../../README.md#choosing-a-model).
+
+```bash
+export OLLAMA_CONTEXT_LENGTH=32768
+```
+
+**Lending the index to other agents.** If you use Cursor, Claude Code or Zed
+alongside YodaMan, point them at the MCP server so they can search your private
+code without it leaving the machine:
+
+```bash
+claude mcp add yodaman -- yodaman-mcp
+```
+
+See [MCP](mcp.md).
+
 See `docs/guides/configuration.md` for the full configuration schema and runtime variable reference.

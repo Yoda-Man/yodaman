@@ -86,7 +86,13 @@ Yoda-Agent loads a default coding skill for implementation work. It emphasizes e
 
 ### Supervised agent work
 
-Agent tasks stream task starts, tool calls, approval requests, cancellations, final answers, and errors. File writes are human controlled: clients show proposed changes and require approval or rejection before the agent continues.
+Agent tasks stream task starts, tool calls, approval requests, cancellations, final answers, and errors.
+
+**Every action that changes something pauses for your decision** — not only whole-file writes. Editing a file, patching a range, running a command, and creating or archiving an OpenSpec change all stop and wait. Reading, searching, and querying the graph run freely, because they cannot change anything and prompting for them would only train you to click through.
+
+For a file edit you see the file as it *will be*, not the raw arguments, alongside the blast radius from the knowledge graph: what depends on it, which tests cover it, and which specs describe it. A diff says what changed; it never says what it costs.
+
+A tool nobody has classified is treated as dangerous until someone says otherwise. See [Approvals](docs/guides/approvals.md) for the full model and how to verify it yourself.
 
 ### Persistence and audit
 
@@ -169,7 +175,37 @@ The mobile companion can pair with the desktop runtime using `yodaman://pair` li
 
 Use your desktop LAN address when pairing from a phone, for example `http://192.168.1.20:3090`.
 
-## 7. Runtime API highlights
+## 7. Other agents (MCP)
+
+YodaMan can lend its index to Cursor, Claude Code, Zed, and anything else that
+speaks MCP. Those tools have strong models and no knowledge of your private
+codebase; YodaMan has exactly that, locally.
+
+```bash
+claude mcp add yodaman -- yodaman-mcp
+```
+
+Or, for any MCP client:
+
+```json
+{ "mcpServers": { "yodaman": { "command": "yodaman-mcp" } } }
+```
+
+Five tools become available: `yodaman_projects`, `yodaman_search` (the
+four-signal blend), `yodaman_graph_query`, `yodaman_impact`, and
+`yodaman_spec_drift`. Reach for spec drift first — it is the thing a model
+reading your repository cannot work out on its own, because it needs the specs
+and the graph together.
+
+**All five are read-only, permanently.** The approval gate protects writes made
+by YodaMan's own agent; another client does not run that gate and cannot be made
+to. If you want an agent to change files through YodaMan, use YodaMan's agent.
+
+The runtime must be running — the MCP server is a thin proxy over `127.0.0.1`.
+Nothing listens on a port and nothing leaves the machine. Full details in
+[MCP](docs/guides/mcp.md).
+
+## 8. Runtime API highlights
 
 - `GET /api/projects`: List indexed and watched projects.
 - `POST /api/projects`: Add a workspace path.
@@ -198,7 +234,7 @@ Use your desktop LAN address when pairing from a phone, for example `http://192.
 - `GET /api/audit`, `DELETE /api/audit`: Inspect or clear audit logs.
 - `POST /api/pairing`: Create mobile pairing links.
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 - **Something is missing but you are not sure what**: Run `yodaman doctor` for a full dependency report with per-tool install commands.
 - **Context Expert not found**: Install `@contextexpert/cli` and confirm `ctx --version` works.
@@ -212,7 +248,7 @@ Use your desktop LAN address when pairing from a phone, for example `http://192.
 - **OpenSpec not found**: Install `@fission-ai/openspec@latest` and confirm `openspec --version` works, or click "Install Now" in the Stardust tab or the desktop startup diagnostics screen. `yodaman doctor` and the Dashboard health panel both report OpenSpec status.
 - **Crash screen**: Use `Copy Error` to copy the exact message and recent runtime logs.
 
-## 9. Verification and builds
+## 10. Verification and builds
 
 Before publishing a release:
 
@@ -225,7 +261,7 @@ npm run lint
 npm run package
 ```
 
-## 10. Project Stardust — OpenSpec Integration
+## 11. Project Stardust — OpenSpec Integration
 
 YodaMan 0.5.3 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow. The tab has eight views:
 

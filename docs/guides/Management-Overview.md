@@ -8,8 +8,10 @@ YodaMan is a local-first workspace intelligence platform for software developers
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **Semantic Code Search** | Search indexed code and documentation using natural language | ✅ Stable |
+| **Semantic Code Search** | Natural-language search ranked by four signals: similarity, proximity, graph centrality, and spec coverage | ✅ Stable |
+| **Approval Gate** | Every action that changes anything pauses for a decision, with a diff and its graph-derived blast radius | ✅ Stable (0.5.3) |
 | **Agent Tasks** | Autonomous AI agent for multi-step coding work | ✅ Stable |
+| **MCP Server** | Exposes search, graph, impact and spec drift to Cursor, Claude Code and Zed over stdio — read-only, no egress | ✅ Stable |
 | **Graphify Knowledge Graphs** | Mandatory graph construction from project structure | ✅ Stable |
 | **Plugin System** | Extend the agent with JavaScript plugins | ✅ Stable (0.5.3) |
 | **Pre-Installed Plugins** | CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, Holocron VR, Graphify | ✅ Stable (0.5.3) |
@@ -18,7 +20,7 @@ YodaMan is a local-first workspace intelligence platform for software developers
 | **Centralized Settings** | All developer settings managed from UI | ✅ Stable (0.5.3) |
 | **Desktop App** | Electron shell with managed runtime | ✅ Stable |
 | **VS Code Extension** | Editor-native agent access | ✅ Stable |
-| **Mobile Companion** | React Native app for monitoring | ⚠️ Beta |
+| **Mobile Companion** | React Native app for monitoring and approvals | ⚠️ Beta |
 | **Website + Downloads** | Public site with platform builds | ✅ Stable |
 
 ## Current Status (0.5.3)
@@ -27,7 +29,7 @@ YodaMan is a local-first workspace intelligence platform for software developers
 - **License**: MIT
 - **Runtime**: Node.js 18+ / Express
 - **Frontend**: React 18 + Vite + Tailwind CSS
-- **AI Backend**: Ollama (qwen3.5:9b) + HuggingFace embeddings
+- **AI Backend**: Ollama (qwen3.5:9b minimum; larger models supported and recommended) + HuggingFace embeddings
 - **Build Targets**: macOS (arm64), Windows (x64), Linux (x64)
 - **Test Coverage**: 30+ test suites, ~106 passing tests
 - **5 pre-installed plugins** (graphify, Lightsaber, CodeTrooper, Droid-Sweep, Grand Inquisitor)

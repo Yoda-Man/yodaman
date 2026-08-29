@@ -2,6 +2,11 @@
 
 All API endpoints are prefixed with `/api`.
 
+Other agents can reach the read paths without HTTP: `yodaman-mcp` exposes
+search, graph queries, impact and spec drift over MCP's stdio transport,
+proxying the routes below. See [MCP](../guides/mcp.md). Writes are deliberately
+absent from that surface — they are available here, behind the approval gate.
+
 ## Project Management
 
 ### `GET /projects`
