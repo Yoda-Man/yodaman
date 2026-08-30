@@ -5,6 +5,17 @@ const os = require('os');
 const path = require('path');
 
 /**
+ * These routes shell out to graphify and openspec, so a test here is bounded by
+ * subprocess start-up, not by the code under test. Jest's 5s default was never
+ * chosen for that: the suite passes alone and fails under coverage
+ * instrumentation, which is a property of the harness rather than the product.
+ *
+ * Set explicitly so the reason is visible, instead of the whole chain failing on
+ * a number nobody picked.
+ */
+jest.setTimeout(30000);
+
+/**
  * stardustRoutes is 614 lines and had no tests, which matters most for one
  * reason: the H-1 path-traversal fix from the August audit lives in here.
  * `proposeChange` builds a directory path from a caller-supplied name, so a name
