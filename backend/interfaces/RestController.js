@@ -23,6 +23,7 @@ const dependencyChecker = require('../infrastructure/DependencyChecker');
 const ollamaConfig = require('../infrastructure/OllamaConfig');
 const dependencyDoctor = require('../infrastructure/DependencyDoctor');
 const workspaceReadiness = require('../infrastructure/WorkspaceReadiness');
+const mcpClients = require('../infrastructure/McpClients');
 
 const multer = require('multer');
 
@@ -203,6 +204,10 @@ function requirePluginUploadsEnabled(req, res, next) {
 // guard any website could call PUT /settings, enable allowAgentCommands, and
 // reach shell execution. See backend/infrastructure/OriginPolicy.js.
 router.use(originPolicy.crossSiteGuard);
+
+// Records which MCP client a request came from, when one says so. Identity
+// only — see McpClients for what this deliberately does not keep.
+router.use(mcpClients.middleware);
 
 // SECOND GATE — pairing token for non-local callers.
 //
@@ -1192,6 +1197,21 @@ router.post('/ollama/context', async (req, res) => {
 });
 
 /** Re-run the dependency doctor on demand and return its report. */
+/**
+ * Agents that have read this workspace through MCP.
+ *
+ * Reports "last seen", never "connected": each client spawns its own stdio
+ * process, so there is no connection to observe — only requests that arrived.
+ */
+router.get('/mcp/clients', (req, res) => {
+    try {
+        return res.json({ clients: mcpClients.list() });
+    } catch (err) {
+        logger.error('mcp_clients_failed', err, { requestId: req.id });
+        return jsonError(res, 500, err.message, 'mcp_clients_failed');
+    }
+});
+
 router.get('/diagnostics/run', async (req, res) => {
     try {
         const report = await dependencyDoctor.runDependencyDoctor();

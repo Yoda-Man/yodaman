@@ -32,6 +32,29 @@ Two flaws surfaced while writing them, both in work that had looked verified:
 
 Now verified by mutation: breaking the query parameter fails the suite.
 
+### Added — see which agents have read your workspace
+
+**Settings → Connect other agents** now lists every MCP client that has queried
+YodaMan this session, with request counts and when each was last heard from.
+The name comes from the client's own `initialize` handshake, passed through by
+`yodaman-mcp` as a header the runtime records.
+
+Before this the runtime could not distinguish an agent's query from the web
+UI's own fetch — every proxied call carried nothing but `Content-Type` — so
+"is Cursor actually connected?" was unanswerable, which is the single most
+common question after setting it up.
+
+Two decisions the tests enforce:
+
+- **"Last seen", not "connected".** Each client spawns its own stdio process,
+  so there is no connection to observe. A green dot would be wrong much of the
+  time.
+- **Names and counts only.** No queries, arguments, or file paths. What an agent
+  asked about your codebase is a record of what you were working on, and
+  storing it would be surveillance wearing a transparency badge. Verified by
+  mutation: adding a `lastQuery` field fails the suite, as does removing the
+  bound that stops a spoofed header growing the list without limit.
+
 ### Added — Settings → Connect other agents
 
 The MCP server shipped with no way to discover it. Nothing in the UI mentioned

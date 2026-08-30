@@ -92,6 +92,35 @@ which yodaman-mcp    # use this path in the client's config
 The same panel is in the app: **Settings → Connect other agents**, with a copy
 button per client.
 
+## Seeing which agents have read your workspace
+
+**Settings → Connect other agents** lists every client that has queried YodaMan
+this session, with how many requests it made and when it was last heard from.
+
+```
+claude-code/2.1     3 requests · last seen just now
+cursor/0.42         1 request  · last seen 4 min ago
+```
+
+The name comes from the client itself: MCP's `initialize` handshake carries
+`clientInfo`, and `yodaman-mcp` passes that on. It is a statement the client
+makes, not a guess.
+
+**"Last seen", not "connected".** Each client spawns its own stdio process —
+some hold it open, some spawn per request, and a crashed client leaves nothing
+behind. There is no connection to observe, only requests that have arrived. A
+green "connected" dot would be wrong much of the time, so the panel reports the
+fact it actually has.
+
+**Names and counts only.** No queries, no arguments, no file paths. A record of
+what an agent asked about your codebase is a record of what *you* were working
+on, and that would be surveillance of your own work wearing a transparency
+badge. The list is in memory and clears when YodaMan restarts; it is a live
+view, not an audit log.
+
+This is the natural extension of the promise the rest of the product makes. Not
+only does your code never leave the machine — you can see exactly who read it.
+
 ### Configuration
 
 | Variable | Default | Purpose |

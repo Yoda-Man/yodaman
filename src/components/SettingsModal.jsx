@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, FolderPlus, Trash2, ShieldCheck, Info, Globe, HardDrive, Pencil, Save, FolderOpen, Clipboard } from 'lucide-react'
 import { api } from '../api/api'
 
@@ -30,6 +30,21 @@ const MCP_CLIENTS = [
     }
 ]
 
+/**
+ * "2 minutes ago", not a timestamp.
+ *
+ * Says "last seen" rather than "connected" on purpose: each client spawns its
+ * own stdio process, so there is no connection to observe — only requests that
+ * have arrived. A green "connected" dot would be wrong half the time.
+ */
+function relativeTime(iso) {
+    const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
+    if (seconds < 60) return 'just now'
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`
+    return `${Math.floor(seconds / 86400)} d ago`
+}
+
 export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
     const [newDir, setNewDir] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -38,6 +53,28 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
     const [savingDir, setSavingDir] = useState(null)
     const canBrowseFolders = Boolean(window.yodamanDesktop?.pickWorkspaceFolder)
     const [copiedClient, setCopiedClient] = useState(null)
+    const [seenClients, setSeenClients] = useState([])
+
+    // Which agents have actually read this workspace. Polled only while
+    // Settings is open — this is a live view, not something worth a background
+    // timer for the life of the app.
+    useEffect(() => {
+        let cancelled = false
+        const load = async () => {
+            try {
+                const res = await fetch('/api/mcp/clients')
+                if (!res.ok) return
+                const data = await res.json()
+                if (!cancelled) setSeenClients(data.clients || [])
+            } catch (_err) {
+                // A missing list is not worth surfacing; the panel simply shows
+                // nothing has connected yet.
+            }
+        }
+        load()
+        const timer = setInterval(load, 5000)
+        return () => { cancelled = true; clearInterval(timer) }
+    }, [])
 
     /** Clipboard, with the label reverting so it never looks stuck. */
     const copyMcp = async (name, snippet) => {
@@ -302,6 +339,37 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
                                 It runs over stdio on this machine — nothing listens on a
                                 port, and your code is never sent anywhere.
                             </p>
+
+                            {/* Closes the loop: you copy a snippet, restart the
+                                client, come back, and see whether it worked. */}
+                            <div className="rounded-xl border border-white/5 bg-black/20 p-3">
+                                <div className="text-[11px] font-bold text-slate-300 mb-2">
+                                    Agents that have read this workspace
+                                </div>
+                                {seenClients.length === 0 ? (
+                                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                                        None yet. Add the configuration below to a client and
+                                        restart it — it will appear here the first time it asks
+                                        YodaMan something.
+                                    </p>
+                                ) : (
+                                    <ul className="space-y-1.5">
+                                        {seenClients.map((client) => (
+                                            <li key={client.label} className="flex items-center justify-between text-[11px]">
+                                                <span className="text-slate-200 font-medium">{client.label}</span>
+                                                <span className="text-slate-500">
+                                                    {client.calls} {client.calls === 1 ? 'request' : 'requests'}
+                                                    {' · last seen '}{relativeTime(client.lastSeen)}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                                <p className="text-[10px] text-slate-600 mt-2 leading-relaxed">
+                                    Names and counts only — never what they asked. Cleared when
+                                    YodaMan restarts.
+                                </p>
+                            </div>
 
                             {MCP_CLIENTS.map((client) => (
                                 <div key={client.name}>

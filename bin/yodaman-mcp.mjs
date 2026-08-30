@@ -48,12 +48,43 @@ const note = (message) => process.stderr.write(`[yodaman-mcp] ${message}\n`);
  * act on. An MCP client surfaces this text directly to the model and often to
  * the user, so it names the fix rather than the failure.
  */
+/**
+ * Who this server is answering for, learned during the MCP handshake.
+ *
+ * Every request the proxy makes is an ordinary HTTP call to 127.0.0.1, so
+ * without this the runtime cannot tell an agent's query from the web UI's own
+ * fetch — and "which agents have read my codebase" is a question a local-first
+ * tool should be able to answer.
+ *
+ * The client states its own name in `initialize`; this is that value, not a
+ * guess. Null until the handshake completes, and null forever for a client that
+ * declines to identify itself.
+ */
+function clientLabel() {
+    try {
+        const info = server.server.getClientVersion();
+        if (!info?.name) return null;
+        return info.version ? `${info.name}/${info.version}` : info.name;
+    } catch (_err) {
+        // Before the handshake, or an SDK that does not expose it. Not knowing
+        // is a fine answer; inventing one is not.
+        return null;
+    }
+}
+
 async function call(pathname, { method = 'GET', body } = {}) {
+    const label = clientLabel();
     let response;
     try {
         response = await fetch(`${RUNTIME}${pathname}`, {
             method,
-            headers: body ? { 'Content-Type': 'application/json' } : undefined,
+            headers: {
+                ...(body ? { 'Content-Type': 'application/json' } : {}),
+                // Identity only. Never the query, never the results — the point
+                // is to show WHO looked, not to build a record of what they
+                // asked, which would be surveillance of the user's own work.
+                ...(label ? { 'X-YodaMan-MCP-Client': label } : {})
+            },
             body: body ? JSON.stringify(body) : undefined,
             signal: AbortSignal.timeout(TIMEOUT_MS)
         });
