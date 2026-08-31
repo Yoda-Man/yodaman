@@ -55,6 +55,14 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
     const [copiedClient, setCopiedClient] = useState(null)
     const [seenClients, setSeenClients] = useState([])
 
+    // Escape closes it. A dialog that traps you until you find the button is
+    // the kind of thing people notice only when it is missing.
+    useEffect(() => {
+        const onKey = (event) => { if (event.key === 'Escape') onClose?.() }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [onClose])
+
     // Which agents have actually read this workspace. Polled only while
     // Settings is open — this is a live view, not something worth a background
     // timer for the life of the app.
@@ -158,9 +166,22 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
     }
 
     return (
-        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md flex items-center justify-center z-[100] p-6 animate-in fade-in duration-300">
-            <div className="bg-slate-900/90 border border-white/10 rounded-[32px] shadow-[0_0_100px_rgba(0,0,0,0.5)] max-w-xl w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
-                <div className="px-8 py-6 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+        <div
+            className="fixed inset-0 bg-slate-950/40 backdrop-blur-md flex items-center justify-center z-[100] p-6 animate-in fade-in duration-300"
+            onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.() }}
+            role="presentation"
+        >
+            {/* max-h is what makes the rest work: without it the dialog grows past
+                the viewport and `overflow-hidden` simply clips the bottom, with
+                nothing to scroll. Expanding a long section made the footer —
+                and the dismiss button — unreachable. */}
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Settings"
+                onMouseDown={(event) => event.stopPropagation()}
+                className="bg-slate-900/90 border border-white/10 rounded-[32px] shadow-[0_0_100px_rgba(0,0,0,0.5)] max-w-xl w-full max-h-[88vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+                <div className="shrink-0 px-8 py-6 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
                     <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
                             <ShieldCheck size={20} className="text-indigo-400" />
@@ -177,7 +198,12 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
                     </button>
                 </div>
 
-                <div className="p-8 space-y-8">
+                {/* The single scroll region. min-h-0 is required: a flex child
+                    defaults to min-height:auto and refuses to shrink, so the
+                    body would push the footer off-screen instead of scrolling.
+                    overscroll-contain stops the page behind from scrolling once
+                    this hits its end. */}
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar p-8 space-y-8">
                     <div>
                         <label className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-[0.25em] mb-4">
                             <HardDrive size={12} />
@@ -220,12 +246,16 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
                         </div>
                     </div>
 
-                    <div className="flex-1 flex flex-col min-h-0">
+                    <div>
                         <label className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-[0.25em] mb-4">
                             <Globe size={12} />
                             Tracked Locations ({watchedDirs.length})
                         </label>
-                        <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                        {/* Deliberately not its own scroll area. Nested
+                            scrollbars mean the wheel does something different
+                            depending on where the pointer sits, and the inner
+                            one swallows the gesture. */}
+                        <div className="space-y-3">
                             {watchedDirs.length === 0 && (
                                 <div className="text-center py-12 bg-slate-950/30 rounded-[24px] border border-dashed border-white/5">
                                     <p className="text-sm text-slate-600 font-medium">No active indices found.</p>
@@ -296,9 +326,8 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
                             ))}
                         </div>
                     </div>
-                </div>
 
-                <div className="px-8 pb-4">
+                <div className="pb-2">
                     <details className="group">
                         <summary className="text-[10px] font-black uppercase tracking-widest text-slate-500 cursor-pointer hover:text-slate-300 select-none">⚙️ Developer Settings</summary>
                         <div className="mt-4 space-y-4 text-sm" id="dev-settings">
@@ -382,7 +411,11 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
                                             {copiedClient === client.name ? 'Copied' : 'Copy'}
                                         </button>
                                     </div>
-                                    <pre className="text-[10px] text-slate-400 bg-black/30 rounded-lg p-3 overflow-x-auto whitespace-pre">{client.snippet}</pre>
+                                    {/* Wrap rather than scroll. These snippets are short, and three
+                                        horizontal scrollbars stacked in one dialog is worse than a
+                                        wrapped line — especially when the whole point is to copy
+                                        the text, not to read it in one line. */}
+                                    <pre className="text-[10px] text-slate-400 bg-black/30 rounded-lg p-3 whitespace-pre-wrap break-words leading-relaxed">{client.snippet}</pre>
                                     {client.note && (
                                         <p className="text-[10px] text-slate-500 mt-1">{client.note}</p>
                                     )}
@@ -398,7 +431,8 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
                     </details>
 
                 </div>
-                <div className="p-6 bg-white/[0.02] border-t border-white/5 flex justify-between items-center px-8">
+                </div>
+                <div className="shrink-0 p-6 bg-white/[0.02] border-t border-white/5 flex justify-between items-center px-8">
                     <a 
                         href="/manual.html" 
                         target="_blank" 
