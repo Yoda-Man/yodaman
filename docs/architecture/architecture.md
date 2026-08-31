@@ -1,6 +1,6 @@
 # YodaMan Architecture Overview
 
-This document describes the architecture of YodaMan v0.5.1, a local-first workspace intelligence platform for developers.
+This document describes the architecture of YodaMan v0.5.5, a local-first workspace intelligence platform for developers.
 
 > **Before deleting any file listed here:** a significant part of this system is
 > wired up at runtime rather than through imports — plugins are `require()`d from
@@ -364,6 +364,35 @@ The Stardust layer integrates YodaMan with OpenSpec, an external spec-driven cha
 | **docPreprocessor** | `docPreprocessor.js` | Documentation preprocessing for ctx indexing. Scans configured project directories for documentation files (Markdown, reST, AsciiDoc, plain text), splits them into heading-based chunks, and writes each chunk to a `.yodaman-doc-chunks` directory with YAML front-matter metadata. Also extracts JSDoc comment blocks from JavaScript/TypeScript sources. Updates ctx configuration to watch the generated chunk directories. |
 | **queryClassifier** | `queryClassifier.js` | Heuristic query classifier. Determines whether a user query is about code or documentation using keyword presence (function, class, import, etc. for code; readme, guide, tutorial, etc. for doc), file-type patterns, and punctuation heuristics. Returns `'code'` or `'doc'`. Falls back to word-count heuristic when signals are ambiguous: ≤4 words → code, otherwise doc. |
 
+## MCP Server (`bin/yodaman-mcp.mjs`)
+
+A second entry point that exposes the runtime's read paths to any MCP client
+over stdio.
+
+```
+Cursor / Claude Code / Zed
+  → stdio (newline-delimited JSON-RPC)
+    → bin/yodaman-mcp.mjs
+      → HTTP to 127.0.0.1:3090
+        → the same routes the web UI uses
+```
+
+Five read-only tools: `yodaman_projects`, `yodaman_search`, `yodaman_graph_query`,
+`yodaman_impact`, `yodaman_spec_drift`.
+
+Two structural decisions:
+
+- **It proxies rather than re-implements.** Ranking blends four signals behind an
+  Express route. A second implementation inside the MCP process would drift from
+  the first — the same failure mode as one ignore list becoming four.
+- **Read-only is a boundary, not a default.** The approval gate lives in the
+  agent loop, inside the runtime. A client on the far side of stdio never enters
+  that loop, so no tool here can write. `tests/interfaces/McpServer.test.js`
+  fails on a mutating tool name, on `PUT`/`PATCH`/`DELETE`, or on importing a
+  write path.
+
+It is ESM (`.mjs`) because the MCP SDK is ESM-only while the runtime is CommonJS.
+
 ## Plugin Architecture
 
 ```
@@ -401,10 +430,13 @@ User → POST /api/agent/task { task: "Refactor App.jsx" }
     3. Assembles system prompt + tools + graph context + user task
     4. Reasoning loop (max 10 iterations):
        a. Send conversation to Context Expert (ctx ask)
-       b. Parse response for <tool_call> XML blocks
-       c. Execute tool via ToolBox.callTool()
-       d. If writeFile: run ImpactAnalyzer for blast radius
-       e. If writeFile: pause for human approval (SSE event)
+       b. Parse response for TOOL_CALL {...} lines
+          (the older <tool_call> form is still accepted)
+       c. Classify via shared/toolCapabilities.requiresApproval()
+       d. If it changes anything: run ImpactAnalyzer for blast radius,
+          compute the file as it WILL be, and pause for approval
+          (SSE awaiting_approval). Read-only tools skip this.
+       e. Execute tool via ToolBox.callTool()
        f. Append result to conversation
     5. Stream final_answer via SSE
 ```

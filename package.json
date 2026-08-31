@@ -1,10 +1,11 @@
 {
   "name": "yodaman",
-  "version": "0.5.1",
-  "description": "YodaMan — local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
+  "version": "0.5.5",
+  "description": "YodaMan \u2014 local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
-    "yodaman": "bin/yodaman.js"
+    "yodaman": "bin/yodaman.js",
+    "yodaman-mcp": "bin/yodaman-mcp.mjs"
   },
   "files": [
     "bin",
@@ -33,7 +34,7 @@
     "desktop:pack": "npm run build && electron-builder --config electron-builder.json --dir",
     "desktop:dist": "npm run build && npm run test:render && electron-builder --config electron-builder.json && npm run test:packaged && npm run website:downloads",
     "desktop:dist:all": "npm run build && npm run test:render && electron-builder --config electron-builder.json --mac --arm64 && npm run test:packaged && electron-builder --config electron-builder.json --win --linux --x64 && npm run website:downloads",
-    "test:render": "jest tests/electron/DesktopRenderSmoke.test.js",
+    "test:render": "jest tests/electron/DesktopRenderSmoke.test.js tests/electron/GraphRenderSmoke.test.js",
     "website:downloads": "node scripts/sync-website-downloads.js",
     "preview": "vite preview",
     "lint": "eslint .",
@@ -53,6 +54,7 @@
     "test:coverage": "jest --coverage --coverageReporters=text-summary"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "chokidar": "^4.0.3",
     "cors": "^2.8.5",
     "express": "^5.2.1",
@@ -84,7 +86,7 @@
     "react-dom": "^18.2.0",
     "tailwindcss": "^3.3.5",
     "three": "^0.128.0",
-    "vis-network": "^10.1.1",
+    "vis-network": "^10.1.2",
     "vite": "^8.0.13"
   },
   "overrides": {
@@ -114,6 +116,7 @@
     "node": ">=20.0.0"
   },
   "jest": {
+    "maxWorkers": "50%",
     "transform": {
       "^.+\\.jsx?$": "<rootDir>/tests/helpers/sucraseTransform.js"
     },

@@ -15,14 +15,23 @@ import { useState } from 'react'
 import useHealthCheck from '../hooks/useHealthCheck'
 import HealthIndicator from './HealthIndicator'
 
+/**
+ * What each dependency is FOR, not just its name.
+ *
+ * A list of seven tool names reads as seven walls. Naming what each unlocks
+ * turns a missing one into "this feature is off" rather than "the product is
+ * broken" — and it makes visible that Graphify alone is enough for the coverage
+ * finding, which needs no model download. The runtime starts without any of
+ * these; a missing tool disables its features and says so.
+ */
 const CHECK_LABELS = {
-    node:     { label: 'Node.js',      icon: '⬡' },
-    runtime:  { label: 'Runtime',      icon: '⚙' },
-    graphify: { label: 'Graphify',     icon: '◈' },
-    ollama:   { label: 'Ollama',       icon: '◇' },
-    ctx:      { label: 'Context Expert', icon: '⊡' },
-    openspec: { label: 'OpenSpec',     icon: '⚡' },
-    config:   { label: 'Config',       icon: '⚐' },
+    node:     { label: 'Node.js',        icon: '⬡', unlocks: 'The runtime itself' },
+    runtime:  { label: 'Runtime',        icon: '⚙', unlocks: 'Serving the API and UI' },
+    graphify: { label: 'Graphify',       icon: '◈', unlocks: 'Knowledge graph, impact analysis, and the coverage finding' },
+    ollama:   { label: 'Ollama',         icon: '◇', unlocks: 'Chat and agent tasks' },
+    ctx:      { label: 'Context Expert', icon: '⊡', unlocks: 'Semantic code search' },
+    openspec: { label: 'OpenSpec',       icon: '⚡', unlocks: 'Spec tracking — drift still reports coverage without it' },
+    config:   { label: 'Config',         icon: '⚐', unlocks: 'Which workspaces are watched' },
 }
 
 export default function HealthDashboard({ compact = false }) {
@@ -145,6 +154,11 @@ export default function HealthDashboard({ compact = false }) {
                                     <td className="px-3 py-2 text-slate-300">
                                         <span className="mr-2">{meta.icon}</span>
                                         {meta.label}
+                                        {!compact && meta.unlocks && (
+                                            <div className="text-[11px] text-slate-500 leading-tight mt-0.5 ml-5">
+                                                {meta.unlocks}
+                                            </div>
+                                        )}
                                     </td>
                                     <td className={`px-3 py-2 font-semibold ${statusClass}`}>{statusIcon}</td>
                                     {!compact && (

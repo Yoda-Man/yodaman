@@ -36,6 +36,8 @@ Use absolute paths. The API validates submitted paths and normalizes them before
 | `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | `qwen3:5b` | Local Ollama model passed to Graphify when full extraction is enabled. |
 | `VITE_YODAMAN_API_BASE` | `/api` | Frontend API base path. Use this when the UI talks through a proxy or alternate host. |
 | `VITE_YODAMAN_FETCH_TIMEOUT_MS` | `30000` | Browser fetch timeout in milliseconds. |
+| `YODAMAN_URL` | `http://127.0.0.1:$YODAMAN_PORT` | Where the `yodaman-mcp` server looks for the runtime. Set it only if the runtime is not on the default port. |
+| `YODAMAN_MCP_TIMEOUT` | `120000` | Milliseconds before an MCP tool call gives up. Semantic search on a very large workspace can take tens of seconds. |
 
 ### Ollama's context window — set this
 
@@ -77,7 +79,8 @@ rather than errors.
 
 - Pairing tokens are temporary in-memory credentials for mobile and LAN clients.
 - Local requests are allowed when pairing enforcement is enabled so the desktop/web UI can continue to operate.
-- Graphify is mandatory. The runtime fails startup when the Graphify CLI cannot be found.
+- Graphify unlocks the graph, impact analysis, and the coverage finding. The
+  runtime starts without it; those features report what is missing instead.
 - Graphify is local-only in YodaMan. Cloud model provider keys are stripped from Graphify subprocesses, and full extraction forces `--backend ollama`.
 - Plugin permissions are visible through `GET /api/policy`; review them before enabling third-party plugins.
 

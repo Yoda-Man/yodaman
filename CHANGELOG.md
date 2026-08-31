@@ -2,6 +2,325 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.5.5] - 2026-08-29
+
+### Fixed — the MCP tests never called a tool
+
+Eight tests covered the MCP server and not one of them called a tool
+successfully. Seven inspected the tool LIST or the SOURCE; the single
+`tools/call` was aimed at a dead port on purpose, to check the error message.
+So `yodaman_search` could map a parameter wrong, return nothing useful, or break
+when the runtime's response shape changed, and the suite would stay green.
+
+The same failure as the approval gate: the surface looked correct, and the one
+test that ran exercised the one path that happened to work.
+
+Adds live tests that drive a real runtime — `yodaman_projects`,
+`yodaman_search`, `yodaman_spec_drift`, and a bad workspace path — and assert
+search agrees with the HTTP API it proxies: same count, same weights, same
+`graphRanked`, same top-five hits by file and line span.
+
+Two flaws surfaced while writing them, both in work that had looked verified:
+
+- The first version compared `r.file`, which is not a field a search hit
+  carries. It compared `[null, null, …]` to itself and passed with the query
+  parameter deliberately broken. The real field is `filePath`. **The manual
+  check run when the server was built had the same bug**, so "same top-5 order:
+  true" had meant nothing.
+- Comparing counts is not discriminating: every query returns the same top-30
+  files, so ordering had to include the line span to tell two searches apart.
+
+Now verified by mutation: breaking the query parameter fails the suite.
+
+### Added — see which agents have read your workspace
+
+**Settings → Connect other agents** now lists every MCP client that has queried
+YodaMan this session, with request counts and when each was last heard from.
+The name comes from the client's own `initialize` handshake, passed through by
+`yodaman-mcp` as a header the runtime records.
+
+Before this the runtime could not distinguish an agent's query from the web
+UI's own fetch — every proxied call carried nothing but `Content-Type` — so
+"is Cursor actually connected?" was unanswerable, which is the single most
+common question after setting it up.
+
+Two decisions the tests enforce:
+
+- **"Last seen", not "connected".** Each client spawns its own stdio process,
+  so there is no connection to observe. A green dot would be wrong much of the
+  time.
+- **Names and counts only.** No queries, arguments, or file paths. What an agent
+  asked about your codebase is a record of what you were working on, and
+  storing it would be surveillance wearing a transparency badge. Verified by
+  mutation: adding a `lastQuery` field fails the suite, as does removing the
+  bound that stops a spoofed header growing the list without limit.
+
+### Added — Settings → Connect other agents
+
+The MCP server shipped with no way to discover it. Nothing in the UI mentioned
+it existed, so it was reachable only by reading the docs.
+
+Settings now carries a panel with copy-ready configuration for Claude Code,
+Cursor, Zed, VS Code (Copilot), and the shape most other clients use — plus what
+to do when the binary is not on the client's PATH. `docs/guides/mcp.md` covers
+the same ground for anything that speaks the protocol.
+
+### Changed — onboarding says what YodaMan does
+
+- The welcome modal opened with "The professional command center for your
+  Context Expert engine" — selling someone else's product in the first sentence
+  a new user reads. It now leads with the finding no other tool produces, and
+  with the promise that makes it possible: the code never leaves the machine.
+- Prerequisites are stated as what each tool unlocks, split into "start here"
+  (Node + Graphify, graph builds in 0–5s, no model download) and "then, when you
+  want more" (ctx for search, Ollama for chat, several GB).
+- The health panel names what each dependency unlocks. Seven tool names read as
+  seven walls; naming the capability makes a missing one "this feature is off".
+- The empty workspace state said "No projects indexed yet" — an absence that
+  promised nothing. It now says what happens when you point at a folder.
+
+### Fixed — documentation claimed a startup failure that does not happen
+
+`api.md` and `configuration.md` both said the runtime "fails startup when the
+graphify CLI cannot be found". It does not: every dependency check is wrapped,
+and the only exits are clean shutdown, port-in-use, and an uncaught exception.
+That false claim was repeated as fact in planning before the code was read.
+
+## [0.5.4] - 2026-08-28
+
+### Changed — the coverage signal now reaches users who have written no specs
+
+YodaMan's most distinctive output was invisible to every new user. Drift
+detection returned `available: false` when a workspace had no OpenSpec specs, so
+the people who had set nothing up — which is everyone on first use — saw
+nothing at all. The thing that makes this different from grep-plus-a-model was
+gated behind the setup step least likely to be done first.
+
+"No specs" is not "cannot tell". It is the strongest possible answer to the
+coverage question: nothing here is documented. The undocumented half of the
+report needs only the knowledge graph — it ranks load-bearing modules and
+subtracts the ones specs cite, and with no specs that subtraction removes
+nothing. Only a missing graph is genuinely unanswerable.
+
+On a real spec-less workspace, first index now reads:
+
+    4 load-bearing modules in this workspace, and nothing describes them.
+    Run `openspec init .` to start tracking intent against code.
+    💡 server/entities.py is depended on by 3 files but no spec describes it
+    💡 shared/messages.py is depended on by 3 files but no spec describes it
+
+Three surfaces changed:
+
+- **Drift** reports coverage without specs, and separates `covered` from
+  `inSync`. Claiming specs and code agree when there are no specs would be a lie
+  of omission, so `inSync` stays false until something is actually documented.
+- **The Stardust Brief** names the undocumented hubs whether or not specs exist,
+  and says to check them before adding anything they might already do. Its own
+  comment called those hubs "where a second implementation gets added by
+  accident" — which is precisely the mistake made in Holocron two days earlier.
+- **Readiness** turns "ready, nothing to do" into the finding. That was the
+  moment the product finally had something to say about a codebase and said
+  nothing. Coverage is computed only for a single named workspace, never the
+  polled list: it costs ~160ms on a large graph, and the list stays at 2ms.
+
+### Added — YodaMan as an MCP server
+
+Cursor, Claude Code and Zed have strong models and no idea what is in your
+private codebase. YodaMan has a local index of exactly that. `yodaman-mcp`
+offers it to them over stdio, without the code leaving the machine.
+
+Five read-only tools: `yodaman_projects`, `yodaman_search` (the four-signal
+blend), `yodaman_graph_query`, `yodaman_impact`, and `yodaman_spec_drift` —
+the last being the one a model reading the repository cannot work out on its
+own, because it needs the specs and the graph together.
+
+Two decisions the tests enforce rather than leave to judgement:
+
+**Read-only, permanently.** The approval gate protects writes made by YodaMan's
+own agent. A client on the far side of this boundary does not run that gate and
+cannot be made to, so a write tool here would hand out a key to a door we
+deliberately lock. The suite fails if a tool with a mutating name appears, if
+the server issues a PUT/PATCH/DELETE, or if it imports a write path. Verified
+by mutation: adding a write tool fails three tests.
+
+**It proxies the runtime rather than re-implementing it.** Ranking lives behind
+an HTTP route; a second copy here would drift from the first, which is exactly
+what cost a descriptor leak when one ignore list became four. Verified against
+the HTTP API on the same query: same result count, same ordering, same weights,
+same graphRanked.
+
+Set up with `claude mcp add yodaman -- yodaman-mcp`, or the equivalent in any
+MCP client. Documented in `docs/guides/mcp.md`.
+
+Not built, deliberately: the MCP *client* side. The proposal that prompted this
+argued for consuming external RAG and memory servers, but semantic search, the
+knowledge graph and spec coverage are ctx, Graphify and OpenSpec — consuming
+someone else's would duplicate the product. Tool definitions also already cost
+1,893 characters against the 5,000-character compact prompt budget small models
+get, so every added server is charged to the users least able to afford it.
+Memory is the one capability genuinely missing, and it can be added narrowly
+when it is wanted.
+
+## [0.5.3] - 2026-08-27
+
+### Fixed — the approval gate did not cover the edit path the product recommended
+
+**This is a security fix.** YodaMan's headline promise is that nothing is
+written without your say-so. It was not true.
+
+The gate fired on a single hardcoded name:
+
+    if (toolCall.name === 'writeFile')
+
+`applyPatch` also writes to disk and had no approval branch anywhere. Worse,
+`writeFile`'s own description — which the model reads on every task — said:
+
+> "Overwrites a file with new content. Requires human approval, so prefer
+> applyPatch for edits to existing files."
+
+The product steered the agent onto the one edit path that skipped consent.
+
+Measured, not inferred. Asked to edit a file without naming a tool, the agent
+chose `applyPatch` and changed `original contents` to `REPLACED` on disk, with
+no `awaiting_approval` event anywhere in the stream. Every test passed
+throughout, because the only approval test said "Use the writeFile tool" — it
+exercised the one path that happened to be gated.
+
+The decision is now inverted and lives in one place, `shared/toolCapabilities.js`:
+read-only tools are named explicitly, and **everything else requires approval**.
+A tool added tomorrow is gated until someone deliberately declares it safe.
+
+- `writeFile`, `applyPatch`, `executeCommand`, `specPropose`, `specArchive` all
+  pause. So does any plugin declaring a mutating permission; the bundled
+  analysis plugins declare only `read`/`search` and still run unprompted.
+- Permissions match exactly, never as substrings — an earlier capability label
+  matched `audit:write` on "write" and mislabelled a read-only plugin.
+- `applyPatch` now shows a real diff. It supplies `oldText`/`newText` rather
+  than whole content, so the patch is applied in memory and the result shown —
+  the same single unique replacement `ToolBox.applyPatch` performs. You approve
+  a result, not a parameter list.
+
+Re-verified after the fix: the same prompt, the same workspace, the model again
+chose `applyPatch` — and it paused. The file was untouched.
+
+### Fixed — the gate that missed it
+
+`npm run test:approval` now drives the agent twice: once naming the tool, once
+letting the model choose. The second shape is the one that would have caught
+this.
+
+Its three outcomes are now distinct, because conflating them is how a gate
+lies:
+
+- **held** — proposed, paused, file untouched. A pass.
+- **violated** — a file changed without consent. Hard failure, never retried.
+- **inconclusive** — nothing proposed, nothing written. No hole proven. Fails on
+  the named shape, where the model was told exactly what to do; reported but not
+  failed on the unnamed shape, where a small model declines the vaguer
+  instruction a fair fraction of the time.
+
+Verified by mutation: with the gate forced off, the suite fails and names the
+violation.
+
+### Changed — Holocron VR 0.5.1 → 0.5.3
+
+The constellation showed dependencies as its brightest stars. Graphify walks
+vendored trees, so on one real workspace the highest-centrality nodes — the
+largest objects in the view — were `third_party` tests and node_modules.
+
+Holocron now drops vendored and generated directories before layout. Filtering
+at render time needs no reindex and invalidates no existing graph. Matching is
+per path segment, so `src/buildTools/` is kept: hiding the user's own code is
+the worse failure of the two.
+
+`third_party` joins the shared ignore list, in the runtime and in Holocron. The
+two lists are a deliberate copy, because Holocron ships as a standalone plugin
+and cannot require across the package boundary — so a test fails the moment they
+drift. Four copies of that list diverging is what caused the 0.5.1 descriptor
+leak.
+
+### Fixed — search re-parsed the entire knowledge graph on every query
+
+`rerank()` runs on every search and called `buildIndex()`, which `JSON.parse`s
+the whole graph. Nothing cached it. On a workspace whose `graph.json` is 435MB
+that meant re-reading and re-parsing 435MB per query: a single search took over
+four minutes and returned nothing before the client gave up. Ranking is meant to
+make search better, not unusable on exactly the large codebases it helps most.
+
+The index is now cached per project and invalidated by the graph file's mtime —
+a stat is microseconds, and the next search after Graphify rewrites the graph
+rebuilds. No staleness window, no timer. Measured on that workspace: 247s -> 46s,
+with the remainder being ctx's own semantic search rather than graph parsing.
+
+### Fixed — the test suite failed on scheduling luck
+
+Jest defaulted to one worker per core. Several suites spawn `ctx`, `graphify`,
+and `openspec` subprocesses, so nine workers each spawning children starved each
+other: suites that run in 2 seconds alone took **460 seconds** in a full run and
+timed out. Capping workers at 50% took the full suite from a 460-second timeout
+to **5.9 seconds**. A gate that fails on scheduling luck is a gate that lies.
+
+Two gates were also made resilient rather than brittle. The ranking check tries
+several graph-connected terms, and one slow search used to abort the whole run —
+it now reports the slow terms and continues. The approval gate treats an agent
+run that never finished as inconclusive rather than crashing, and still checks
+the file: a timeout is never an excuse for an unapproved write.
+
+### Added — documentation
+
+`docs/guides/approvals.md` documents what stops and what does not, what the
+diff and blast radius show, what is deliberately ungated and why, and how to
+verify the claim yourself rather than trusting it.
+
+## [0.5.2] - 2026-08-20
+
+### Fixed — Graph Studio drew nothing
+
+Reported from a running 0.5.1 desktop app: the Graph tab showed an empty canvas
+while the panel beside it read "Graph ready — 2804 nodes / 3151 links" and
+listed every top node correctly. The data was never the problem. Nothing could
+draw it.
+
+Graphify emits its rendering library as a CDN tag carrying a subresource-
+integrity hash:
+
+    <script src="https://unpkg.com/vis-network@9.1.6/..."
+            integrity="sha384-Ux6phic9PEHJ38..." crossorigin="anonymous">
+
+YodaMan rewrites that `src` to a vendored copy so the app works offline and no
+part of your codebase is described to a CDN on page load. It left the
+`integrity` attribute in place — and the vendored copy is a different build,
+because vis-network was upgraded from 9.x to 10.1.1 to clear a vulnerability.
+The hashes could not match by construction. The browser did exactly as
+instructed and blocked the script, `vis` was never defined, and the canvas
+stayed empty.
+
+Two correct changes combined into a broken one. The localiser now drops
+`integrity` and `crossorigin` when it repoints a script at a same-origin file we
+ship and audit ourselves: SRI defends against a CDN serving something other than
+what was asked for, and a hash that can never match is not security, it is an
+outage.
+
+### Added — a gate that fails when the graph cannot be drawn
+
+Everything already in the pipeline passed while this shipped. The endpoint
+returned 200 with 2.1MB of correct HTML, and no test asked whether a browser
+could run it.
+
+`tests/electron/GraphRenderSmoke.test.js` drives a real Electron window, passes
+a realistic Graphify fixture through the REAL localiser, and asserts the library
+executed and produced a canvas. Verified by mutation: with the stale hash
+restored it fails and reports the browser's own reason — "The resource has been
+blocked" and "vis is not defined" — rather than a bare assertion failure.
+
+It runs in `npm test`, and `npm run test:render` now covers it too, so a build
+cannot be packaged without it.
+
+### Changed
+
+- vis-network 10.1.1 -> 10.1.2, verified by the new render gate rather than
+  assumed. Vendored copy audits clean.
+
 ## [0.5.1] - 2026-08-20
 
 ### Fixed — 9B was the floor, but the code treated it as the ceiling
@@ -952,7 +1271,11 @@ Context Expert, Graphify and OpenSpec were each wired to their own tab and nothi
 - **Task Detail Inspection**: Added `yodaman.viewTaskDetails` command in VS Code extension to print step-by-step logs and tool activities.
 - **Integration Tests**: Added `tests/interfaces/RestController.test.js` to verify DELETE endpoint functionality, and expanded release smoke checks for Database.js integration.
 
-## [Unreleased]
+## [Unversioned] - 2026-05-18
+
+_Shipped between 0.1.6 and 0.1.7 but never assigned a version. Left in place
+because the record is real; relabelled because "Unreleased" was not — every
+item below is in the product today._
 
 ### Added
 - Shared YodaMan API/SSE client, protocol constants, and TypeScript declaration files under `shared/`.

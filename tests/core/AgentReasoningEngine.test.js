@@ -196,9 +196,15 @@ describe('AgentReasoningEngine', () => {
             });
         toolBox.callTool.mockRejectedValueOnce(failure);
 
-        const result = await agentEngine.executeTask('run tests', 'task-log-1', undefined, {
+        // executeCommand mutates the machine, so it now pauses for consent like
+        // every other mutating tool. Approve it, so this still tests what it was
+        // written to test: that a tool FAILURE is logged with task context.
+        const taskPromise = agentEngine.executeTask('run tests', 'task-log-1', undefined, {
             projectId: '/tmp/project'
         });
+        await waitFor(() => agentEngine.pendingApprovals.has('task-log-1'));
+        agentEngine.signalApproval('task-log-1', true);
+        const result = await taskPromise;
 
         expect(result).toBe('I could not run the command.');
         expect(logger.error).toHaveBeenCalledWith('agent_tool_failed', failure, expect.objectContaining({

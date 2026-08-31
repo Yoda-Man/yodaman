@@ -22,6 +22,7 @@
 const graphifyService = require('./GraphifyService');
 const queueService = require('../core/QueueService');
 const logger = require('./Logger');
+const specDrift = require('../stardust/SpecDrift');
 
 // Ordered worst-to-best so the overall verdict is the weakest layer.
 const SEVERITY = ['unindexed', 'building', 'stale', 'ready'];
@@ -75,7 +76,48 @@ function indexLayer(projectPath) {
  * Compute readiness for one workspace. Never throws — callers are health
  * endpoints and UI strips that must always render something.
  */
-function forWorkspace(projectPath) {
+/**
+ * The coverage finding, for a workspace whose graph is ready.
+ *
+ * Deliberately NOT computed in forWorkspaces(): drift costs ~160ms on a large
+ * graph, and the dashboard polls the list. One workspace at a time is the
+ * budget this fits in.
+ *
+ * The point is what a NEW user sees. Once indexing finishes, readiness used to
+ * say "ready" with no action and nothing else — the moment the product finally
+ * had something to say about their codebase, it said nothing. This turns that
+ * moment into the finding: how much of their code is load-bearing and
+ * undescribed.
+ *
+ * @param {string} projectPath
+ * @param {string} state - Only 'ready' is worth measuring; before that there is
+ *   no graph to measure against.
+ */
+function coverageFor(projectPath, state) {
+    if (state !== 'ready') return null;
+    try {
+        const drift = specDrift.detectDrift(projectPath);
+        if (!drift?.available) return null;
+
+        return {
+            covered: drift.covered,
+            specCount: drift.specCount,
+            undocumentedCount: drift.undocumentedCount,
+            staleCount: drift.staleCount,
+            // The few worth naming. A list of twenty is a report; three is a
+            // place to start.
+            hubs: (drift.undocumented || []).slice(0, 3),
+            headline: drift.covered
+                ? `${drift.staleCount} stale spec reference(s), ${drift.undocumentedCount} module(s) no spec describes`
+                : `${drift.undocumentedCount} load-bearing module(s) carry this codebase, and nothing describes them`
+        };
+    } catch (_err) {
+        // Coverage is an enhancement to readiness, never a reason it fails.
+        return null;
+    }
+}
+
+function forWorkspace(projectPath, { withCoverage = false } = {}) {
     if (!projectPath) {
         return { path: null, state: 'unindexed', layers: {}, reason: 'no workspace selected' };
     }
@@ -96,7 +138,18 @@ function forWorkspace(projectPath) {
         ready: null
     }[state];
 
-    return { path: projectPath, state, trustworthy: state === 'ready', layers, action };
+    const coverage = withCoverage ? coverageFor(projectPath, state) : null;
+
+    return {
+        path: projectPath,
+        state,
+        trustworthy: state === 'ready',
+        layers,
+        // Once the graph is ready there is no setup step left to name, so the
+        // finding takes the slot the setup hint used to occupy.
+        action: action || (coverage ? coverage.headline : null),
+        coverage
+    };
 }
 
 function summarize(report) {
@@ -112,7 +165,8 @@ function summarize(report) {
 
 /** Readiness for many workspaces, plus the weakest state across all of them. */
 function forWorkspaces(projectPaths = []) {
-    const workspaces = projectPaths.map(forWorkspace);
+    // No coverage here on purpose — see coverageFor(). The list is polled.
+    const workspaces = projectPaths.map((p) => forWorkspace(p));
     const overall = workspaces.length ? weakest(workspaces.map(w => w.state)) : 'unindexed';
 
     if (overall !== 'ready') {

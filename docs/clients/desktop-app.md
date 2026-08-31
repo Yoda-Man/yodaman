@@ -60,6 +60,7 @@ The current Electron Builder configuration uses `asar: false` intentionally. The
 - The desktop menu includes `Copy Mobile Pairing Link` to create and copy a `yodaman://pair` link.
 - The desktop menu includes `Add Project Folder`, which opens a native folder picker and registers the selected directory through the runtime.
 - The desktop app polls task state and shows native notifications when a task needs approval or transitions to completed.
+- Approval covers every action that changes something — file writes, patches, commands, and OpenSpec changes — not only whole-file writes. Reads and searches run without prompting. See [Approvals](../guides/approvals.md).
 - The Agent Chat tab includes a **task presets** dropdown with a **📊 Impact Analysis** preset that prompts for affected files, breaking changes, and suggested tests before editing shared code.
 
 Native notifications are local desktop notifications. They do not require mobile push credentials.

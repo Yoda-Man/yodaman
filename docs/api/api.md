@@ -2,6 +2,11 @@
 
 All API endpoints are prefixed with `/api`.
 
+Other agents can reach the read paths without HTTP: `yodaman-mcp` exposes
+search, graph queries, impact and spec drift over MCP's stdio transport,
+proxying the routes below. See [MCP](../guides/mcp.md). Writes are deliberately
+absent from that surface — they are available here, behind the approval gate.
+
 ## Project Management
 
 ### `GET /projects`
@@ -352,7 +357,10 @@ Disables a plugin without removing its file. Default plugins are protected and r
 
 ## Graphify
 
-Graphify is a required knowledge graph layer in YodaMan 0.5.1. The runtime fails startup when the `graphify` CLI cannot be found. Graphify endpoints require a registered workspace path.
+Graphify builds the knowledge graph. The runtime **starts without it** — every
+dependency check is wrapped, and a missing tool disables its features rather
+than stopping the process. Graphify endpoints then return an error naming what
+is missing. Graphify endpoints require a registered workspace path.
 
 ### `GET /graphify/status`
 Returns graph availability, artifact health, stale status, and the last persisted build summary. Large graphs can return `build.state: "partial"` when `graph.json` and the report exist but full HTML artifacts were skipped.

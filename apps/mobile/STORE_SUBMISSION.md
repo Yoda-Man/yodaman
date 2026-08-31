@@ -6,7 +6,7 @@ One Expo codebase ships to both stores. `npm run build:all` builds them together
 
 - App icon, Android adaptive icon, and splash — generated from the desktop app
   icon into `assets/`. The store icon has no alpha channel, which Apple rejects.
-- iOS bundle identifier `africa.criticalpath.yodaman.mobile` and Android package
+- iOS bundle identifier `com.yodaman.mobile` and Android package
   `com.yodaman.mobile`.
 - `NSLocalNetworkUsageDescription` — without it, iOS 14+ silently blocks the LAN
   connection the whole app depends on.

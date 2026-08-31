@@ -15,6 +15,17 @@ const router = require('../../backend/interfaces/RestController');
 
 const { findRouteHandler } = require('../helpers/routeHandler');
 
+/**
+ * These routes shell out to graphify and openspec, so a test here is bounded by
+ * subprocess start-up, not by the code under test. Jest's 5s default was never
+ * chosen for that: the suite passes alone and fails under coverage
+ * instrumentation, which is a property of the harness rather than the product.
+ *
+ * Set explicitly so the reason is visible, instead of the whole chain failing on
+ * a number nobody picked.
+ */
+jest.setTimeout(30000);
+
 function routeHandler(method, routePath) {
     return findRouteHandler(router, method, routePath);
 }

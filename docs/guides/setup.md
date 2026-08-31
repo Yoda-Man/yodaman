@@ -2,17 +2,29 @@
 
 ## Prerequisites
 
-- **Node.js**: v18.0.0 or higher.
-- **Context Expert (ctx)**: The intelligence engine must be installed globally.
-  ```bash
-  npm install -g @contextexpert/cli
-  ```
-- **Graphify**: The required knowledge graph engine must be installed and reachable as `graphify`.
-  ```bash
-  python3 -m pip install graphifyy
-  graphify --help
-  ```
-- **Ollama**: Required for local AI model execution and Graphify full semantic extraction.
+Only Node.js is needed to start. Everything else unlocks a capability, and the
+runtime starts without any of them — a missing tool disables its features and
+says so, rather than stopping the process.
+
+**Start here, and you get something in about five seconds:**
+
+| Install | Unlocks | Cost |
+| --- | --- | --- |
+| **Node.js** v18+ | The runtime itself | — |
+| **Graphify** — `python3 -m pip install graphifyy` | The knowledge graph, impact analysis, and the coverage finding: which load-bearing modules carry your codebase and what nothing describes | Small. Graph builds take **0–5 seconds** on a typical repo. |
+
+That pair is enough to see the thing YodaMan does that other tools do not. It
+needs no model download and no AI service.
+
+**Then, when you want more:**
+
+| Install | Unlocks | Cost |
+| --- | --- | --- |
+| **Context Expert** — `npm install -g @contextexpert/cli` | Semantic code search, and the retrieval behind agent answers | Small |
+| **Ollama** + a model | Chat and agent tasks, and Graphify's optional full semantic extraction | **Several GB** for the model. See [Choosing a model](../../README.md#choosing-a-model). |
+
+Ollama is genuinely optional for the graph: extraction defaults to a local
+no-LLM path, and only `YODAMAN_GRAPHIFY_FULL_EXTRACT=true` reaches for a model.
 
 ## Installation
 
@@ -54,7 +66,7 @@ YodaMan stores local workspace configuration in `config.json` at the root of the
 - **watchedDirectories**: A list of absolute paths that YodaMan will monitor for changes.
 - **removedDirectories**: A local tombstone list for workspaces deleted from YodaMan so they are not re-added from stale index metadata.
 
-YodaMan 0.5.1 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
+YodaMan 0.5.5 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
 
 Check Graphify graph health across configured workspaces:
 
@@ -136,5 +148,27 @@ Tune frontend request timeouts:
 ```bash
 VITE_YODAMAN_FETCH_TIMEOUT_MS=45000 npm run dev
 ```
+
+## Two settings worth getting right
+
+**The context window Ollama serves.** This is the highest-impact setting, and
+its default is usually wrong for this workload — unset, Ollama picks by VRAM and
+often serves 4,096 tokens no matter what the model supports. YodaMan scales what
+it sends to match, so a large model through a small window performs like a small
+one. See [Choosing a model](../../README.md#choosing-a-model).
+
+```bash
+export OLLAMA_CONTEXT_LENGTH=32768
+```
+
+**Lending the index to other agents.** If you use Cursor, Claude Code or Zed
+alongside YodaMan, point them at the MCP server so they can search your private
+code without it leaving the machine:
+
+```bash
+claude mcp add yodaman -- yodaman-mcp
+```
+
+See [MCP](mcp.md).
 
 See `docs/guides/configuration.md` for the full configuration schema and runtime variable reference.

@@ -50,11 +50,47 @@ function resultPath(result) {
     return result?.metadata?.path || result?.path || result?.file || '';
 }
 
+
+/**
+ * Built indexes, keyed by project path and invalidated by the graph's mtime.
+ *
+ * rerank() runs on every search, and buildIndex() JSON.parses the whole graph.
+ * On a workspace whose graph.json is 435MB that meant re-reading and re-parsing
+ * 435MB per query: a single search took over four minutes and returned nothing
+ * before the client gave up. Ranking is supposed to make search better, not
+ * make it unusable on exactly the large codebases it helps most.
+ *
+ * Keyed by mtime rather than a TTL because correctness here is cheap to get
+ * right: a stat() is microseconds, and the moment Graphify rewrites the graph
+ * the next search rebuilds. No staleness window, no timer.
+ */
+const indexCache = new Map();
+
+/** Test seam, and the escape hatch if a graph is ever rewritten in place. */
+function resetIndexCache() {
+    indexCache.clear();
+}
+
 /**
  * Build per-file degree counts and an undirected adjacency map of files.
  * Returns null when no usable graph exists.
  */
 function buildIndex(projectPath) {
+    // A stat is cheap; parsing the graph is not. Skip the parse when the file
+    // on disk has not changed since the index was built.
+    let graphStat = null;
+    try {
+        graphStat = fs.statSync(graphifyService.graphPath(projectPath));
+    } catch (_err) {
+        // No graph, or an unreadable path — fall through to the load below,
+        // which reports the difference between "absent" and "broken".
+    }
+
+    if (graphStat) {
+        const cached = indexCache.get(projectPath);
+        if (cached && cached.mtimeMs === graphStat.mtimeMs) return cached.index;
+    }
+
     let graph;
     try {
         graph = graphifyService.readGraph(projectPath);
@@ -117,7 +153,11 @@ function buildIndex(projectPath) {
     }
 
     const maxDegree = Math.max(1, ...degreeByFile.values());
-    return { degreeByFile, neighbours, maxDegree, fileCount: degreeByFile.size };
+    const index = { degreeByFile, neighbours, maxDegree, fileCount: degreeByFile.size };
+    // Only cache when the mtime is known; without it there is nothing to
+    // invalidate against, and a stale index is worse than a slow one.
+    if (graphStat) indexCache.set(projectPath, { mtimeMs: graphStat.mtimeMs, index });
+    return index;
 }
 
 /** Breadth-first hop distance from `origin` to every reachable file. */
@@ -249,4 +289,4 @@ function rerank(projectPath, results, { activeFile, weights } = {}) {
     }));
 }
 
-module.exports = { rerank, buildIndex, buildSpecIndex, DEFAULT_WEIGHTS, MAX_PROXIMITY_HOPS };
+module.exports = { rerank, buildIndex, buildSpecIndex, resetIndexCache, DEFAULT_WEIGHTS, MAX_PROXIMITY_HOPS };

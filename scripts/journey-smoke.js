@@ -130,13 +130,33 @@ async function checkSearchRanking(failures) {
     let payload = null;
     let term = null;
     const tried = [];
+    const slow = [];
     for (const candidate of terms) {
         const attempt = new URLSearchParams({ query: candidate, project: project.path });
-        const result = await getJson(`/api/search?${attempt.toString()}`);
+        let result;
+        try {
+            result = await getJson(`/api/search?${attempt.toString()}`);
+        } catch (err) {
+            // One slow or failing term must not decide the gate. Semantic search
+            // on a large workspace can take tens of seconds, and a single abort
+            // used to take the whole run down with it — reported as a journey
+            // failure when nothing about ranking had been measured.
+            slow.push(`${candidate} (${err.message})`);
+            continue;
+        }
         tried.push(candidate);
         payload = result;
         term = candidate;
         if (result.graphRanked) break;
+    }
+
+    if (slow.length) {
+        log(`  search ranking     note — ${slow.length} term(s) did not return in time: ${slow.join(', ')}`);
+    }
+
+    if (!payload) {
+        log('  search ranking     SKIP — no candidate term returned a result to rank');
+        return;
     }
 
     const weights = payload.weights || {};

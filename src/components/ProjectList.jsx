@@ -103,7 +103,17 @@ export default function ProjectList({
             <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
                 {projects.length === 0 && (
                     <div className="p-8 text-center bg-slate-800/20 rounded-2xl border border-dashed border-white/5 mx-2">
-                        <p className="text-xs text-slate-500 italic leading-relaxed">No projects indexed yet.</p>
+                        {/* States what happens next, not what is absent. Point at a
+                            folder and the graph builds in seconds — the coverage
+                            finding needs Graphify only, no model download. */}
+                        <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                            Point YodaMan at a folder
+                        </p>
+                        <p className="text-[11px] text-slate-500 leading-relaxed mt-1.5">
+                            It maps the dependencies in seconds, then shows which
+                            modules carry your codebase — and which of them nothing
+                            describes.
+                        </p>
                         <button 
                             onClick={onOpenSettings} 
                             className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 mt-3 flex items-center gap-1 justify-center w-full"
