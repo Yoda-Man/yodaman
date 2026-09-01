@@ -1,0 +1,91 @@
+name: Bug report
+description: Something does not work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        If this is a **security** issue, please do not file it here — see
+        [SECURITY.md](https://github.com/Yoda-Man/yodaman/blob/main/SECURITY.md)
+        for private disclosure.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that shows the problem.
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: YodaMan version
+      description: "`npm list -g yodaman`, or the version shown in the app."
+      placeholder: "0.5.5"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install it?
+      options:
+        - npm (npm install -g yodaman)
+        - macOS .dmg
+        - Linux .AppImage
+        - From source
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15.2 / Ubuntu 24.04 / Windows 11"
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model and context length
+      description: >
+        Which local model, and the context length it is configured with.
+        A surprising share of odd behaviour is a context window too small for
+        the prompt, so this is often the fastest route to a diagnosis.
+      placeholder: "qwen2.5-coder:14b, 32768"
+
+  - type: dropdown
+    id: runtime-running
+    attributes:
+      label: Was the YodaMan runtime running?
+      description: Relevant for anything involving the CLI, the MCP server, or an empty view.
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >
+        Anything relevant from `~/.yodaman/logs`, or the browser console for a
+        UI problem. Please check for paths or code you would rather not share.
+      render: shell
