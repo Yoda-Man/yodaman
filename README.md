@@ -4,6 +4,30 @@ YodaMan is local-first workspace intelligence for developers. **Context Expert**
 
 ![Version](https://img.shields.io/badge/Version-0.5.5-gold) ![License](https://img.shields.io/badge/License-MIT-green)
 
+## Two minutes in
+
+You are about to change `validateSession()`. Before you touch it:
+
+```bash
+npm install -g yodaman
+```
+
+Ask YodaMan what it holds up:
+
+> **32 files import it.** Four are in the auth middleware chain. Two are covered
+> by no test. **And one — your `sessionRefresh` module — is load-bearing in the
+> graph but described by no spec at all.**
+
+That last sentence is the one you cannot get anywhere else. Your editor's search
+finds the string. Your language server finds the references. Neither knows which
+parts of your system nobody has written down — that needs the dependency graph
+and your specs read together, which is what YodaMan does on every query.
+
+It runs against a local model on your machine. No code is uploaded, no account,
+no API key. Other agents — Cursor, Claude Code, Zed — can query the same index
+through [YodaMan's MCP server](docs/guides/mcp.md), read-only.
+
+
 ## The three-tool pillar
 
 Every answer in YodaMan blends three mandatory tools. No silos, no optional features — this is the architecture:
@@ -336,6 +360,28 @@ The agent has four OpenSpec tools: `specPropose`, `specValidate`, `specArchive`,
 - **VS Code extension**: Editor-native access from the command palette
 - **Mobile companion**: React Native app for task monitoring and approvals
 
+## Contributing
+
+Issues are very welcome — bug reports, feature requests, and questions.
+
+Please open an issue before a pull request: YodaMan has a few architectural
+commitments (the MCP server is read-only, nothing leaves the machine, the
+approval gate defaults to deny) that are easier to agree on before code is
+written than after. [CONTRIBUTING.md](CONTRIBUTING.md) sets them out, along with
+the testing standard.
+
+By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Please report vulnerabilities privately rather than in a public issue — see
+[SECURITY.md](SECURITY.md) for the process and what is in scope.
+
+## Upgrading and uninstalling
+
+[UPGRADING.md](UPGRADING.md) covers upgrades between 0.5.x versions (no
+migration is needed) and how to remove YodaMan and everything it generates.
+
 ## License
 
-MIT
+[MIT](LICENSE) — Copyright (c) 2026 Marwa Trust Mutemasango
