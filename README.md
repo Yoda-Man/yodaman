@@ -9,7 +9,8 @@ YodaMan is local-first workspace intelligence for developers. **Context Expert**
 You are about to change `validateSession()`. Before you touch it:
 
 ```bash
-npm install -g yodaman
+brew install Yoda-Man/yodaman/yodaman   # or: npm install -g yodaman
+yodaman setup                           # installs the tools it needs
 ```
 
 Ask YodaMan what it holds up:
@@ -30,6 +31,8 @@ through [YodaMan's MCP server](docs/guides/mcp.md), read-only.
 
 ## What it looks like
 
+![YodaMan walking through the dashboard, knowledge graph, plugins and spec drift](website/assets/screenshots/demo.gif)
+
 **Project Stardust — where intent and code disagree.** `0 stale · 56
 undocumented`: fifty-six modules this codebase depends on that no spec
 describes. That number is the reason the other two tools are mandatory — it
@@ -48,6 +51,34 @@ here: a window too small for the prompt is the single most common cause of poor
 answers, so YodaMan says so and offers to fix it.
 
 ![System dashboard showing storage, model and indexing state](website/assets/screenshots/dashboard.png)
+
+## Install
+
+**Homebrew** (macOS and Linux):
+
+```bash
+brew install Yoda-Man/yodaman/yodaman
+```
+
+**npm** (anywhere Node 20+ runs):
+
+```bash
+npm install -g yodaman
+```
+
+Then let YodaMan install what it depends on:
+
+```bash
+yodaman setup
+```
+
+That installs Context Expert, Graphify and OpenSpec. **Ollama is not installed
+automatically** — it is a system service with its own installer, so `yodaman
+setup` prints the command and leaves the decision to you. `yodaman setup
+--dry-run` shows exactly what would run without running any of it.
+
+Desktop builds (`.dmg`, `.AppImage`) are on the
+[releases page](https://github.com/Yoda-Man/yodaman/releases).
 
 ## The three-tool pillar
 

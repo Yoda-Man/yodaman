@@ -52,7 +52,8 @@
     "test:journeys": "node scripts/journey-smoke.js",
     "test:packaged": "node scripts/packaged-smoke.js",
     "test:coverage": "jest --coverage --coverageReporters=text-summary",
-    "screenshots": "electron scripts/capture-screenshots.js"
+    "screenshots": "electron scripts/capture-screenshots.js",
+    "screenshots:gif": "bash scripts/make-demo-gif.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
