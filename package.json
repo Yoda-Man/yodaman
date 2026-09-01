@@ -1,7 +1,7 @@
 {
   "name": "yodaman",
   "version": "0.5.5",
-  "description": "YodaMan \u2014 local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
+  "description": "YodaMan — local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
     "yodaman": "bin/yodaman.js",
@@ -51,7 +51,8 @@
     "health:check": "node scripts/health-watchdog.js --once",
     "test:journeys": "node scripts/journey-smoke.js",
     "test:packaged": "node scripts/packaged-smoke.js",
-    "test:coverage": "jest --coverage --coverageReporters=text-summary"
+    "test:coverage": "jest --coverage --coverageReporters=text-summary",
+    "screenshots": "electron scripts/capture-screenshots.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

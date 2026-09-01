@@ -16,6 +16,117 @@ const dependencyDoctor = require('../backend/infrastructure/DependencyDoctor');
 
 const args = process.argv.slice(2);
 
+// ─── help / version ────────────────────────────────────────────────────
+// Deliberately before every other require below runs any real work: `yodaman
+// --help` used to fall through this file entirely and BOOT THE RUNTIME, so a
+// user asking what the commands were got a server instead of an answer.
+if (args[0] === 'help' || args[0] === '--help' || args[0] === '-h') {
+    const { version } = require('../package.json');
+    console.log(`
+YodaMan ${version} — local-first workspace intelligence
+
+  yodaman                    Start the runtime (http://localhost:3090)
+  yodaman setup              Install the dependencies YodaMan needs
+  yodaman doctor             Check dependency health
+  yodaman doctor --graph     Check knowledge-graph health
+  yodaman create-plugin <n>  Scaffold a new plugin
+
+Options
+  --help, -h                 Show this
+  --version, -v              Show the version
+
+Setup
+  yodaman setup --dry-run    Show what would be installed, change nothing
+  yodaman setup --yes        Install without prompting
+
+Docs: https://github.com/Yoda-Man/yodaman
+`.trim());
+    process.exit(0);
+}
+
+if (args[0] === '--version' || args[0] === '-v' || args[0] === 'version') {
+    console.log(require('../package.json').version);
+    process.exit(0);
+}
+
+// ─── setup — install the dependencies YodaMan needs ────────────────────
+if (args[0] === 'setup' || args[0] === 'install') {
+    const { execSync } = require('child_process');
+    const dependencyChecker = require('../backend/infrastructure/DependencyChecker');
+    const setupPlanner = require('../backend/infrastructure/SetupPlanner');
+
+    const dryRun = args.includes('--dry-run');
+    const assumeYes = args.includes('--yes') || args.includes('-y');
+
+    (async () => {
+        console.log('Checking what YodaMan needs...\n');
+        const checks = await dependencyChecker.checkAll();
+        const plan = setupPlanner.buildSetupPlan({ checks });
+
+        console.log(setupPlanner.formatSetupPlan(plan));
+
+        if (plan.ok) process.exit(0);
+        if (!plan.automatic.length) {
+            // Manual steps only. Nothing to run, but this is not success —
+            // YodaMan still cannot work until they are done.
+            process.exit(1);
+        }
+        if (dryRun) {
+            console.log('Dry run — nothing was installed.');
+            process.exit(0);
+        }
+
+        if (!assumeYes) {
+            const readline = require('readline');
+            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+            const answer = await new Promise((resolve) => {
+                rl.question(`Run ${plan.automatic.length} command(s)? [y/N] `, (a) => { rl.close(); resolve(a); });
+            });
+            if (!/^y(es)?$/i.test(answer.trim())) {
+                console.log('Nothing was installed.');
+                process.exit(0);
+            }
+            console.log('');
+        }
+
+        const failed = [];
+        for (const step of plan.automatic) {
+            console.log(`→ ${step.command}`);
+            try {
+                execSync(step.command, { stdio: 'inherit' });
+            } catch (err) {
+                // Keep going: one failing package manager should not block the
+                // other two. Every failure is reported at the end.
+                failed.push({ name: step.name, command: step.command });
+                console.error(`  ${step.name} failed — see the output above.`);
+            }
+        }
+
+        // Re-check rather than trusting the exit codes. A package manager can
+        // exit 0 and still leave nothing on PATH, and "it said it worked" is
+        // not evidence that it did.
+        console.log('\nVerifying...');
+        dependencyChecker.resetCtxModelCache?.();
+        const after = await dependencyChecker.checkAll();
+        const stillMissing = Object.keys(after).filter((n) => !after[n].found);
+
+        if (stillMissing.length === 0) {
+            console.log('All dependencies are installed. Run `yodaman` to start.');
+            process.exit(0);
+        }
+
+        console.log(`Still missing: ${stillMissing.join(', ')}`);
+        console.log('Run `yodaman doctor` for detail.');
+        // Ollama being absent is expected here — it is never auto-installed —
+        // so only a failed automatic step is an error.
+        process.exit(failed.length ? 1 : 0);
+    })().catch((err) => {
+        console.error(`Setup failed: ${err.message}`);
+        process.exit(1);
+    });
+    return;
+}
+
 // ─── create-plugin command ─────────────────────────────────────────────
 if (args[0] === 'create-plugin') {
     const pluginName = args[1];

@@ -28,6 +28,27 @@ no API key. Other agents — Cursor, Claude Code, Zed — can query the same ind
 through [YodaMan's MCP server](docs/guides/mcp.md), read-only.
 
 
+## What it looks like
+
+**Project Stardust — where intent and code disagree.** `0 stale · 56
+undocumented`: fifty-six modules this codebase depends on that no spec
+describes. That number is the reason the other two tools are mandatory — it
+takes the dependency graph and the specs together to produce it.
+
+![Project Stardust showing spec drift and coverage](website/assets/screenshots/stardust.png)
+
+**Graph Studio — 4,819 nodes and 6,044 links**, clustered by community, with
+impact analysis and a natural-language query box against the structure itself.
+
+![Graph Studio rendering the knowledge graph](website/assets/screenshots/graph.png)
+
+**The dashboard.** Vector storage, the active local model and its context
+window, and every indexed workspace. The context warning is doing real work
+here: a window too small for the prompt is the single most common cause of poor
+answers, so YodaMan says so and offers to fix it.
+
+![System dashboard showing storage, model and indexing state](website/assets/screenshots/dashboard.png)
+
 ## The three-tool pillar
 
 Every answer in YodaMan blends three mandatory tools. No silos, no optional features — this is the architecture:
