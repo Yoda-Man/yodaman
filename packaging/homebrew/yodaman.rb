@@ -35,12 +35,21 @@ class Yodaman < Formula
   end
 
   test do
-    # This assertion depends on `yodaman --version` exiting rather than starting
-    # the runtime. Until 0.5.6 it did the latter, so this block would have hung
-    # rather than failed — see tests/interfaces/CliCommands.test.js.
-    assert_match version.to_s, shell_output("#{bin}/yodaman --version")
-
-    # And that help is help, not a running server.
-    assert_match "yodaman setup", shell_output("#{bin}/yodaman --help")
+    # NOTE: `yodaman --version` and `--help` only exit (rather than starting the
+    # runtime) from 0.5.6 onward. Asserting on them here while `url` still
+    # points at 0.5.5 makes `brew test` hang on a server that never returns —
+    # a test that cannot pass is worse than one that is narrow.
+    #
+    # After publishing 0.5.6, `node scripts/brew-formula.js` repoints the url,
+    # and these two lines should replace the checks below:
+    #
+    #   assert_match version.to_s, shell_output("#{bin}/yodaman --version")
+    #   assert_match "yodaman setup", shell_output("#{bin}/yodaman --help")
+    #
+    # Until then, verify what can be verified without starting anything: the
+    # executables are installed, and the package is the version claimed.
+    assert_predicate bin/"yodaman", :exist?
+    assert_predicate bin/"yodaman-mcp", :exist?
+    assert_match version.to_s, (libexec/"lib/node_modules/yodaman/package.json").read
   end
 end
