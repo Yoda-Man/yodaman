@@ -34,6 +34,28 @@ npm run dev
 launches the Electron app. `docs/guides/Development-Guide.md` has the detail;
 `docs/guides/setup.md` covers models and dependencies.
 
+## Branches
+
+**Work on `dev`. Never commit or push to `main`.**
+
+`main` is the release line: it is what the website, the tags, and anyone reading
+the repository treat as shipped. `dev` is where work lands and where
+`release:verify` runs. The maintainer merges `dev` into `main` once a release is
+judged stable — that decision is deliberately a person's, not a step in a
+script.
+
+```bash
+git checkout dev
+git pull origin dev
+# ... work ...
+git push origin dev
+```
+
+This applies to **every** repository in the project, including
+[Holocron](https://github.com/Yoda-Man/Holocron). If a repository has no `dev`
+branch, create one from `main` and use it. A missing `dev` is a gap to fill, not
+permission to push to `main`.
+
 ## The bar for a change
 
 ```bash
