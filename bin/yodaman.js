@@ -27,7 +27,7 @@ YodaMan ${version} — local-first workspace intelligence
 
   yodaman                    Start the runtime (http://localhost:3090)
   yodaman setup              Install the dependencies YodaMan needs
-  yodaman doctor             Check dependency health
+  yodaman uninstall          Show what removing YodaMan would delete\n  yodaman doctor             Check dependency health
   yodaman doctor --graph     Check knowledge-graph health
   yodaman create-plugin <n>  Scaffold a new plugin
 
@@ -39,6 +39,10 @@ Setup
   yodaman setup --dry-run    Show what would be installed, change nothing
   yodaman setup --yes        Install without prompting
 
+Uninstall
+  yodaman uninstall          Dry run — lists what would be removed
+  yodaman uninstall --yes    Actually remove it
+
 Docs: https://github.com/Yoda-Man/yodaman
 `.trim());
     process.exit(0);
@@ -47,6 +51,67 @@ Docs: https://github.com/Yoda-Man/yodaman
 if (args[0] === '--version' || args[0] === '-v' || args[0] === 'version') {
     console.log(require('../package.json').version);
     process.exit(0);
+}
+
+// ─── uninstall — show what removing YodaMan would delete ───────────────
+// Dry-run by DEFAULT. Deleting user data is the one operation where a flag
+// people forget is not an acceptable design, so `--yes` is required to remove
+// anything and the printed plan is identical either way.
+if (args[0] === 'uninstall' || args[0] === 'clean') {
+    const fsx = require('fs');
+    const uninstallPlanner = require('../backend/infrastructure/UninstallPlanner');
+
+    const confirmed = args.includes('--yes') || args.includes('-y');
+
+    try {
+        // Workspaces come from the runtime's own config, so this only ever
+        // looks where YodaMan was actually told to work.
+        const cwdConfig = path.join(process.cwd(), 'config.json');
+        const pkgConfig = path.join(__dirname, '..', 'config.json');
+        const configPath = process.env.YODAMAN_CONFIG_PATH
+            || (fsx.existsSync(cwdConfig) ? cwdConfig : pkgConfig);
+
+        let workspaces = [];
+        if (fsx.existsSync(configPath)) {
+            const config = JSON.parse(fsx.readFileSync(configPath, 'utf8'));
+            workspaces = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
+        }
+
+        const plan = uninstallPlanner.buildUninstallPlan({ workspaces });
+        console.log(uninstallPlanner.formatUninstallPlan(plan));
+
+        if (!confirmed) {
+            if (plan.remove.length) {
+                console.log(`\nNothing was deleted. Re-run with --yes to remove the ${plan.remove.length} item(s) above.`);
+            }
+            process.exit(0);
+        }
+
+        let removed = 0;
+        const failed = [];
+        for (const item of plan.remove) {
+            try {
+                fsx.rmSync(item.path, { recursive: true, force: true });
+                console.log(`  removed ${item.path}`);
+                removed += 1;
+            } catch (err) {
+                // Keep going and report: a permission error on one directory
+                // should not leave the rest behind with no explanation.
+                failed.push(`${item.path}: ${err.message}`);
+            }
+        }
+
+        console.log(`\n${removed} removed.`);
+        if (failed.length) {
+            console.error('Could not remove:');
+            failed.forEach((f) => console.error(`  ${f}`));
+            process.exit(1);
+        }
+        process.exit(0);
+    } catch (err) {
+        console.error(`Uninstall planning failed: ${err.message}`);
+        process.exit(1);
+    }
 }
 
 // ─── setup — install the dependencies YodaMan needs ────────────────────

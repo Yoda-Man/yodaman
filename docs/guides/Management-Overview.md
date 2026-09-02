@@ -9,23 +9,23 @@ YodaMan is a local-first workspace intelligence platform for software developers
 | Feature | Description | Status |
 |---------|-------------|--------|
 | **Semantic Code Search** | Natural-language search ranked by four signals: similarity, proximity, graph centrality, and spec coverage | ✅ Stable |
-| **Approval Gate** | Every action that changes anything pauses for a decision, with a diff and its graph-derived blast radius | ✅ Stable (0.5.5) |
+| **Approval Gate** | Every action that changes anything pauses for a decision, with a diff and its graph-derived blast radius | ✅ Stable (0.5.6) |
 | **Agent Tasks** | Autonomous AI agent for multi-step coding work | ✅ Stable |
 | **MCP Server** | Exposes search, graph, impact and spec drift to Cursor, Claude Code and Zed over stdio — read-only, no egress | ✅ Stable |
 | **Graphify Knowledge Graphs** | Mandatory graph construction from project structure | ✅ Stable |
-| **Plugin System** | Extend the agent with JavaScript plugins | ✅ Stable (0.5.5) |
-| **Pre-Installed Plugins** | CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, Holocron VR, Graphify | ✅ Stable (0.5.5) |
-| **Legacy Plugin Support** | Auto-wraps onLoad/onEnable plugins | ✅ Stable (0.5.5) |
-| **Zip Plugin Upload** | Upload plugins as .zip files | ✅ Stable (0.5.5) |
-| **Centralized Settings** | All developer settings managed from UI | ✅ Stable (0.5.5) |
+| **Plugin System** | Extend the agent with JavaScript plugins | ✅ Stable (0.5.6) |
+| **Pre-Installed Plugins** | CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, Holocron VR, Graphify | ✅ Stable (0.5.6) |
+| **Legacy Plugin Support** | Auto-wraps onLoad/onEnable plugins | ✅ Stable (0.5.6) |
+| **Zip Plugin Upload** | Upload plugins as .zip files | ✅ Stable (0.5.6) |
+| **Centralized Settings** | All developer settings managed from UI | ✅ Stable (0.5.6) |
 | **Desktop App** | Electron shell with managed runtime | ✅ Stable |
 | **VS Code Extension** | Editor-native agent access | ✅ Stable |
 | **Mobile Companion** | React Native app for monitoring and approvals | ⚠️ Beta |
 | **Website + Downloads** | Public site with platform builds | ✅ Stable |
 
-## Current Status (0.5.5)
+## Current Status (0.5.6)
 
-- **Version**: 0.5.5
+- **Version**: 0.5.6
 - **License**: MIT
 - **Runtime**: Node.js 18+ / Express
 - **Frontend**: React 18 + Vite + Tailwind CSS
@@ -103,5 +103,5 @@ The YodaMan ecosystem includes:
 
 - **Author**: Marwa Trust Mutemasango
 - **Repository**: github.com/Yoda-Man/yodaman
-- **npm**: `yodaman` (0.5.5)
+- **npm**: `yodaman` (0.5.6)
 - **License**: MIT

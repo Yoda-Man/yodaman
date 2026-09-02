@@ -36,7 +36,7 @@ body:
     attributes:
       label: YodaMan version
       description: "`npm list -g yodaman`, or the version shown in the app."
-      placeholder: "0.5.5"
+      placeholder: "0.5.6"
     validations:
       required: true
 
