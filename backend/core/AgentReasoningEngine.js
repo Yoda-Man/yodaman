@@ -18,6 +18,105 @@ const dependencyChecker = require('../infrastructure/DependencyChecker');
 // Tools whose success invalidates the retrieval index and the knowledge graph.
 const MUTATING_TOOLS = new Set(['writeFile']);
 
+/**
+ * Most tool calls a model may act on in a single turn.
+ *
+ * A bound, not a target. A model that has lost the thread can emit dozens of
+ * calls, and fanning all of them out at once turns one confused turn into a
+ * burst of filesystem work. Five covers every legitimate "read these files
+ * together" case seen in practice.
+ */
+const MAX_PARALLEL_TOOL_CALLS = 5;
+
+/**
+ * Every tool call in a model response, in the order it wrote them.
+ *
+ * THE BUG THIS REPLACES:
+ *
+ *     const toolCallMatch = response.match(/<tool_call>([\s\S]*?)<\/tool_call>/)
+ *
+ * `String.match` without the `g` flag returns the FIRST match only. Everything
+ * after it was discarded with no error and no log line. A model emitting three
+ * reads had two thrown away silently.
+ *
+ * The cost was mostly not lost work — it was wasted iterations. The model saw
+ * one result, re-emitted the rest, and three calls consumed three turns instead
+ * of one. Against `maxIterations = 10` that burns the budget roughly three
+ * times faster than the work requires, and the user sees "I reached the maximum
+ * number of steps without finishing" on a task that needed a dozen file reads.
+ * The logs showed nothing but ordinary `agent_iteration` events.
+ *
+ * Returns `{ calls, malformed }`. Malformed blocks are RETURNED, never dropped:
+ * silence is the defect being fixed here, and a bad block the model is told
+ * about is something it can correct on the next turn.
+ *
+ * @param {string} response
+ * @param {number} limit
+ * @returns {{calls: object[], malformed: string[], total: number}}
+ */
+function extractToolCalls(response, limit = MAX_PARALLEL_TOOL_CALLS) {
+    if (typeof response !== 'string' || !response) {
+        return { calls: [], malformed: [], total: 0 };
+    }
+
+    // Both delimiters, global this time. TOOL_CALL is the wire format; the
+    // angle-bracket form is still parsed because a model may emit it from
+    // habit. See the note at the call site for why the plain-text delimiter
+    // matters to ctx 1.4.0.
+    const raw = [
+        ...response.matchAll(/TOOL_CALL\s*(\{[\s\S]*?\})\s*(?:\n|$)/g),
+        ...response.matchAll(/<tool_call>([\s\S]*?)<\/tool_call>/g)
+    ];
+
+    // A model that emits both forms in one response would otherwise have its
+    // calls ordered by delimiter rather than by what it actually wrote.
+    raw.sort((a, b) => a.index - b.index);
+
+    const calls = [];
+    const malformed = [];
+
+    for (const match of raw) {
+        const text = String(match[1]).trim();
+        if (!text) continue;
+
+        let parsed = null;
+        let reason = null;
+
+        try {
+            parsed = JSON.parse(text);
+        } catch (err) {
+            // Keep the message: the caller reports it to the model and to the
+            // task record, and "Unexpected end of JSON input" is far more
+            // actionable than "a call failed". Small models truncate mid-object
+            // often enough that this is the common path, not the rare one.
+            reason = err.message;
+            const repaired = repairJSON(text);
+            if (repaired) {
+                try {
+                    parsed = JSON.parse(repaired);
+                    reason = null;
+                } catch (repairErr) {
+                    // Repair produced something still unparseable. The ORIGINAL
+                    // error is the useful one — it describes what the model
+                    // actually wrote — so keep it and discard this second one.
+                    reason = err.message;
+                }
+            }
+        }
+
+        if (parsed && typeof parsed.name === 'string') {
+            calls.push({ call: parsed, raw: text });
+        } else {
+            malformed.push({
+                raw: text.slice(0, 200),
+                reason: reason || 'tool call had no "name"'
+            });
+        }
+    }
+
+    return { calls: calls.slice(0, limit), malformed, total: calls.length };
+}
+
 function safeToolName(rawToolCall) {
     try {
         return JSON.parse(rawToolCall).name;
@@ -159,7 +258,9 @@ Rules:
 - Before editing: impactOf(file). No tests covering → say so.
 - Multi-file features: specPropose → specValidate → specArchive.
 - Check specDrift first to avoid re-implementing documented work.
-- Be concise. One tool call per turn.
+- Be concise.
+- You may emit SEVERAL read-only calls in one turn (readFile, listFiles, searchCode, graphify*, specDrift, specValidate) and they run together. Prefer this to asking for files one at a time.
+- Emit only ONE call per turn when it changes anything (writeFile, applyPatch, specPropose, specArchive, executeCommand): each needs separate approval.
 `;
     }
 
@@ -560,8 +661,128 @@ Rules:
             // server" because errors.ts:118 classifies every TypeError as a
             // connection fault. Every agent task needing a tool died there. The
             // plain-text delimiter never triggers native mode, so the loop works.
-            const toolCallMatch = response.match(/TOOL_CALL\s*(\{[\s\S]*?\})\s*(?:\n|$)/)
-                || response.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+            const extracted = extractToolCalls(response);
+            const descriptorFor = (name) => (
+                toolBox.plugins && typeof toolBox.plugins.get === 'function'
+                    ? toolBox.plugins.get(name)
+                    : null
+            );
+
+            // A block the model wrote and we could not parse is reported, never
+            // discarded. Being told about a malformed call is what lets a model
+            // correct it; silence is what made the original bug invisible.
+            // A malformed call is an ERROR the task must surface, not a note to
+            // file away. The first version of this change filtered malformed
+            // blocks out silently; with no valid call left, the loop fell
+            // through to "no tool call" and returned the raw broken text as the
+            // final answer. That is a new silent failure introduced inside the
+            // fix for silent failures, and AgentReasoningEngine.test.js caught
+            // it. The pre-existing contract is: emit an error, record it, and
+            // let the model try again.
+            if (extracted.malformed.length) {
+                const reason = extracted.malformed[0].reason;
+                logger.error('agent_tool_call_malformed', new Error(reason), {
+                    taskId, iteration, count: extracted.malformed.length,
+                    userAction: 'agent_tool_call', severity: 'high'
+                });
+
+                const event = { type: 'error', taskId, message: reason };
+                this.recordTaskEvent(taskId, event);
+                if (onStep) onStep(event);
+                this.recordTask(taskId, { status: 'error', error: reason });
+                conversation.addNote(`Error: ${reason}`);
+
+                // Only when nothing else survived. If some calls parsed, run
+                // them — one bad block must not discard the good ones.
+                if (!extracted.calls.length) {
+                    if (iteration < this.maxIterations) continue;
+                    finalAnswer = `The model produced an unparseable tool call: ${reason}`;
+                    break;
+                }
+            }
+
+            if (extracted.total > extracted.calls.length) {
+                const deferred = extracted.total - extracted.calls.length;
+                logger.info('agent_tool_calls_capped', { taskId, iteration, deferred });
+                conversation.addNote(
+                    `Only the first ${extracted.calls.length} tool calls were run; `
+                    + `${deferred} were not. Re-request them if you still need them.`
+                );
+            }
+
+            // ─── PARALLEL READ-ONLY BATCH ──────────────────────────────────
+            //
+            // Only when EVERY call in the turn is read-only. Reads cannot
+            // conflict with each other, so running them together is safe by
+            // construction and the approval gate is not involved at all.
+            //
+            // Anything requiring consent falls through to the single-call path
+            // below, unchanged. Approvals must arrive one at a time and in a
+            // predictable order, or a user cannot tell what they are approving
+            // — so a batch containing a write is never parallelised.
+            const allReadOnly = extracted.calls.length > 1
+                && extracted.calls.every(({ call }) => !requiresApproval(call.name, descriptorFor(call.name) || {}));
+
+            if (allReadOnly) {
+                logger.info('agent_parallel_tools', {
+                    taskId, iteration, count: extracted.calls.length,
+                    tools: extracted.calls.map(({ call }) => call.name)
+                });
+
+                for (const { call } of extracted.calls) {
+                    const startEvent = { type: 'tool_start', taskId, tool: call.name, params: call.parameters };
+                    this.recordTaskEvent(taskId, startEvent);
+                    if (onStep) onStep(startEvent);
+                }
+
+                // allSettled, not all: one failing read must not discard the
+                // results of the others — that is the defect being fixed.
+                const settled = await Promise.allSettled(
+                    extracted.calls.map(({ call }) => toolBox.callTool(call.name, call.parameters))
+                );
+
+                // Recorded in CALL order, after every one has settled — never
+                // in completion order. ConversationBuffer.addToolResult
+                // appends, so completion order would reorder the transcript
+                // between runs and show the model a different history for
+                // identical work.
+                settled.forEach((outcome, i) => {
+                    const { call } = extracted.calls[i];
+                    const result = outcome.status === 'fulfilled'
+                        ? outcome.value
+                        : { error: outcome.reason?.message || 'tool failed' };
+
+                    conversation.addToolResult(call.name, result);
+                    const endEvent = { type: 'tool_end', taskId, tool: call.name, result };
+                    this.recordTaskEvent(taskId, endEvent);
+                    if (onStep) onStep(endEvent);
+                });
+
+                continue;
+            }
+            // ───────────────────────────────────────────────────────────────
+
+            // Single-call path, unchanged. `toolCallMatch` keeps its original
+            // shape so the error handler below still reports the tool name.
+            //
+            // Only the first call runs this turn, because the batch contains
+            // something needing approval. The REST MUST BE ANNOUNCED: dropping
+            // them quietly is the original defect wearing different clothes,
+            // and it would be a poor joke to reintroduce it inside its own fix.
+            if (extracted.calls.length > 1) {
+                const deferred = extracted.calls.slice(1).map(({ call }) => call.name);
+                logger.info('agent_tool_calls_deferred', {
+                    taskId, iteration, ran: extracted.calls[0].call.name, deferred
+                });
+                conversation.addNote(
+                    `Only ${extracted.calls[0].call.name} ran this turn: a call that changes something `
+                    + 'needs its own approval, so calls are not batched with it. '
+                    + `Not run: ${deferred.join(', ')}. Re-request them next turn.`
+                );
+            }
+
+            const first = extracted.calls[0];
+            const toolCallMatch = first ? [null, first.raw] : null;
 
             if (toolCallMatch) {
                 try {
@@ -841,3 +1062,10 @@ function repairJSON(raw) {
 }
 
 module.exports = new AgentReasoningEngine();
+
+// Test seams. The engine is a singleton, so the pure helpers are attached here
+// rather than exported separately — the same pattern as McpClients.reset().
+// extractToolCalls is where the dropped-call bug lived, so it is tested
+// directly rather than only through a full agent run.
+module.exports.extractToolCalls = extractToolCalls;
+module.exports.MAX_PARALLEL_TOOL_CALLS = MAX_PARALLEL_TOOL_CALLS;
