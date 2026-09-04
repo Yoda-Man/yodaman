@@ -3,9 +3,8 @@
    a local-first product should not call out to a font CDN on every launch, and
    the packaged desktop app has no network to rely on. */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.cjs";
 
 :root {
   --bg-primary: #020617;
