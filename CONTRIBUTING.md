@@ -21,7 +21,7 @@ can skip that and go straight in.
 
 ## Getting set up
 
-Node 20 or newer.
+Node 22 or newer.
 
 ```bash
 git clone https://github.com/Yoda-Man/yodaman.git

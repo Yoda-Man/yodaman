@@ -60,7 +60,7 @@ answers, so YodaMan says so and offers to fix it.
 brew install Yoda-Man/yodaman/yodaman
 ```
 
-**npm** (anywhere Node 20+ runs):
+**npm** (anywhere Node 22+ runs):
 
 ```bash
 npm install -g yodaman
@@ -160,7 +160,7 @@ Setup for every client is in [MCP](docs/guides/mcp.md), and in the app under
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - Python 3.10+
 - Context Expert CLI: `npm install -g @contextexpert/cli`
 - OpenSpec CLI: `npm install -g @fission-ai/openspec@latest`

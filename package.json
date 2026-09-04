@@ -62,8 +62,6 @@
     "chokidar": "^4.0.3",
     "cors": "^2.8.5",
     "express": "^5.2.1",
-    "fs-extra": "^11.4.0",
-    "glob": "^13.0.6",
     "multer": "^2.1.1",
     "simple-git": "^3.36.0",
     "ws": "^8.21.3"
@@ -121,7 +119,7 @@
   },
   "homepage": "https://github.com/Yoda-Man/yodaman#readme",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "jest": {
     "maxWorkers": "50%",
