@@ -32,6 +32,11 @@ describe('DependencyChecker service registry', () => {
         }
     });
 
+    // 30s, not Jest's 5s default. checkAll() shells out to `which` once per
+    // service (5s timeout each) and probes Ollama over HTTP, so under a full
+    // parallel run it routinely exceeds five seconds. It passed alone and
+    // failed in `release:verify` — the worst kind of flake, because the signal
+    // only appears in the run that gates a release.
     test('checkAll covers openspec', async () => {
         const results = await dependencyChecker.checkAll();
         expect(results).toHaveProperty('openspec');
@@ -39,13 +44,15 @@ describe('DependencyChecker service registry', () => {
             name: 'openspec',
             found: expect.any(Boolean)
         }));
-    });
+    }, 30000);
 
+    // Same reasoning as above: locate() shells out to `which`, so it inherits
+    // the same load sensitivity even though it only checks one name.
     test('locate reports an actionable install hint for an unknown tool', async () => {
         const result = await dependencyChecker.locate('not-a-real-tool');
         expect(result.found).toBe(false);
         expect(result.error).toContain('Unknown dependency');
-    });
+    }, 30000);
 });
 
 describe('Health self-heal coverage', () => {
