@@ -11,8 +11,12 @@
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
-const graphifyDoctor = require('../backend/infrastructure/GraphifyDoctor');
-const dependencyDoctor = require('../backend/infrastructure/DependencyDoctor');
+// The doctors are NOT required here. Loading them pulls in the toolbox, the
+// plugin registry and the logger, all of which write to stdout on init — so
+// `yodaman --version` printed log lines before the version, and its test
+// passed locally (quiet logger) while failing in CI (verbose one). A flag that
+// answers a question about the CLI should not boot the product to answer it.
+// They are required lazily, inside the commands that use them.
 
 const args = process.argv.slice(2);
 
@@ -349,6 +353,7 @@ if (args[0] === 'doctor' && args.includes('--graph')) {
         const cwdConfigPath = path.join(process.cwd(), 'config.json');
         const packageConfigPath = path.join(__dirname, '..', 'config.json');
         const configPath = require('fs').existsSync(cwdConfigPath) ? cwdConfigPath : packageConfigPath;
+        const graphifyDoctor = require('../backend/infrastructure/GraphifyDoctor');
         const report = graphifyDoctor.runGraphDoctor({ configPath });
         console.log(graphifyDoctor.formatGraphDoctorReport(report));
         process.exit(report.activeProjects === 0 ? 1 : 0);
@@ -364,6 +369,7 @@ if (args[0] === 'doctor' && args.includes('--graph')) {
 if (args[0] === 'doctor') {
     const asJson = args.includes('--json');
 
+    const dependencyDoctor = require('../backend/infrastructure/DependencyDoctor');
     dependencyDoctor.runDependencyDoctor()
         .then(report => {
             if (asJson) {

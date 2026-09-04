@@ -156,6 +156,21 @@ describe('yodaman --version', () => {
         expect(result.stdout.trim()).toBe(version);
     }, 40000);
 
+    it('prints the version and NOTHING else', async () => {
+        // The CLI used to require GraphifyDoctor and DependencyDoctor at the
+        // top of the file, which pulls in the toolbox, the plugin registry and
+        // the logger — all of which write to stdout as they initialise. The
+        // version came out preceded by JSON log lines.
+        //
+        // It passed locally, where the logger was quiet, and failed in CI where
+        // it was not. Asserting the exact output is what makes that difference
+        // impossible to miss again: a flag that answers a question about the
+        // CLI must not boot the product to answer it.
+        const result = await runCli(['--version']);
+        expect(result.stdout).toBe(`${version}\n`);
+        expect(result.stdout).not.toMatch(/timestamp|toolbox_plugin_loaded|ctx_binary/);
+    }, 40000);
+
     it('accepts -v as well', async () => {
         const result = await runCli(['-v']);
         expect(result.stdout.trim()).toBe(version);
