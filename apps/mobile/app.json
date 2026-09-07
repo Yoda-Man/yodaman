@@ -9,11 +9,6 @@
     "icon": "./assets/icon.png",
     "primaryColor": "#6366f1",
     "backgroundColor": "#020617",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#020617"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -41,11 +36,30 @@
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE"
       ],
-      "usesCleartextTraffic": true,
       "versionCode": 3
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-splash-screen",
+      "expo-build-properties",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#020617"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
   }
 }
