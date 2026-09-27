@@ -42,6 +42,6 @@ class Yodaman < Formula
     assert_match "yodaman setup", shell_output("#{bin}/yodaman --help")
 
     # Nothing above covers the second executable.
-    assert_predicate bin/"yodaman-mcp", :exist?
+    assert_path_exists bin/"yodaman-mcp"
   end
 end
