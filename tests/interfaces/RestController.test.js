@@ -797,6 +797,62 @@ describe('RestController Integration', () => {
             }));
         });
 
+        test('GET /graphify/build/status never reports an orphaned running build', async () => {
+            // The freeze the user hit: a `running` status left on disk by a
+            // build that died (runtime killed, request abandoned, child process
+            // timed out) was returned verbatim by this endpoint, because it
+            // called readBuildStatus() raw while /graphify/status went through
+            // the reconciliation in summarizeBuildStatus(). Graph Studio polls
+            // THIS one, saw state 'running' with no job behind it, and sat on
+            // "Graph build in progress" until the stale window expired.
+            fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [], links: [] }));
+            graphifyService.writeBuildStatus(workspace, {
+                state: 'running',
+                message: 'Graphify build running',
+                startedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString()
+            });
+            // Age it past any window a real build could occupy. writeBuildStatus
+            // stamps updatedAt with now, so it has to be rewritten by hand —
+            // this is the exact on-disk shape a killed runtime leaves behind.
+            const statusFile = graphifyService.buildStatusPath(workspace);
+            const orphaned = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+            orphaned.updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+            fs.writeFileSync(statusFile, JSON.stringify(orphaned));
+
+            const response = await invoke('get', '/graphify/build/status', {
+                query: { path: workspace }
+            });
+
+            expect(response.statusCode).toBe(200);
+            // No job was ever started in this test, so there is nothing that
+            // could legitimately be running.
+            expect(response.payload.job).toBeNull();
+            expect(response.payload.build.state).not.toBe('running');
+            expect(response.payload.build.staleRunning).toBe(true);
+        });
+
+        test('GET /graphify/build/status and GET /graphify/status agree on the build state', async () => {
+            // The two endpoints reported the same field from different code
+            // paths, and only one of them reconciled. Whatever they do, they
+            // must not contradict each other — a UI reading both cannot show a
+            // coherent state if they disagree.
+            fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [], links: [] }));
+            graphifyService.writeBuildStatus(workspace, {
+                state: 'running',
+                message: 'Graphify build running',
+                startedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString()
+            });
+            const statusFile = graphifyService.buildStatusPath(workspace);
+            const orphaned = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+            orphaned.updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+            fs.writeFileSync(statusFile, JSON.stringify(orphaned));
+
+            const buildStatus = await invoke('get', '/graphify/build/status', { query: { path: workspace } });
+            const graphStatus = await invoke('get', '/graphify/status', { query: { path: workspace } });
+
+            expect(buildStatus.payload.build.state).toBe(graphStatus.payload.build.state);
+        });
+
         test('POST /graphify/build queues a build and exposes job status', async () => {
             const originalBuild = graphifyService.build;
             graphifyService.build = jest.fn(async () => ({ graphPath: path.join(workspace, 'graphify-out', 'graph.json'), output: 'ok' }));

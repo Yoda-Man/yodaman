@@ -22,8 +22,41 @@ const router = express.Router();
  * In-flight and completed Graphify builds, keyed by job id. In memory on
  * purpose: a build that was running when the runtime stopped did not finish,
  * and reporting it as still running after a restart would be a lie.
+ *
+ * The on-disk status file does NOT share that honesty — it keeps whatever was
+ * written last — which is why every read of it below goes through
+ * `reconciledBuildStatus()`.
  */
 const graphifyBuildJobs = new Map();
+
+/** Jobs are kept only so the UI can poll one it started. Insertion-ordered, so
+ *  dropping from the front discards the oldest — an unbounded Map in a desktop
+ *  app that runs for days is a leak, not a cache. */
+const MAX_REMEMBERED_BUILD_JOBS = 50;
+
+function rememberBuildJob(job) {
+    rememberBuildJob(job);
+    while (graphifyBuildJobs.size > MAX_REMEMBERED_BUILD_JOBS) {
+        const oldest = graphifyBuildJobs.keys().next().value;
+        if (oldest === job.id) break;
+        graphifyBuildJobs.delete(oldest);
+    }
+}
+
+/**
+ * The build status as it should be believed, not as it was last written.
+ *
+ * This endpoint family used to return `graphifyService.readBuildStatus()` raw
+ * while `/graphify/status` returned the reconciled version, so the two
+ * contradicted each other. Graph Studio polls the raw one — and a `running`
+ * left behind by a build that died (runtime killed, request abandoned, child
+ * process timed out) pinned it on "Graph build in progress" with nothing
+ * running. Going through the service's own summary keeps both answers the same
+ * and makes an orphaned `running` impossible to serve.
+ */
+function reconciledBuildStatus(dirPath) {
+    return graphifyService.freshness(dirPath, { scanSources: false }).build;
+}
 
 function setGraphifyArtifactHeaders(res) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -122,7 +155,7 @@ router.post('/graphify/build', (req, res) => {
             path: dirPath,
             jobId: job.id,
             job: publicBuildJob(job),
-            build: graphifyService.readBuildStatus(dirPath)
+            build: reconciledBuildStatus(dirPath)
         });
     } catch (err) {
         logger.error('graphify_build_request_failed', err, { requestId: req.id, path: dirPath });
@@ -142,7 +175,7 @@ router.get('/graphify/build/status', (req, res) => {
         res.json({
             path: dirPath,
             job: publicBuildJob(job),
-            build: graphifyService.readBuildStatus(dirPath),
+            build: reconciledBuildStatus(dirPath),
             graph: graphifyService.freshness(dirPath, { scanSources: false })
         });
     } catch (err) {

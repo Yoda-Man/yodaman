@@ -244,6 +244,15 @@ describe('yodaman uninstall', () => {
 });
 
 describe('bare `yodaman` still starts the runtime', () => {
+    // Same honesty as the --help block above: if the developer already has the
+    // runtime (or the desktop app) listening, the port says nothing about what
+    // this test's child process did. Recorded before anything is spawned.
+    let portWasOpenBefore;
+
+    beforeAll(async () => {
+        portWasOpenBefore = await portIsOpen(RUNTIME_PORT);
+    }, 20000);
+
     it('takes the runtime path rather than printing help', async () => {
         // Documented behaviour: user_manual.md tells people to run `yodaman`
         // from Terminal when the runtime is unreachable. An early version of
@@ -263,6 +272,14 @@ describe('bare `yodaman` still starts the runtime', () => {
 
     it('leaves nothing running afterwards', async () => {
         // The fault in the first version of this file, now asserted.
+        if (portWasOpenBefore) {
+            // Something was serving on 3090 before this suite started, so an
+            // open port now cannot be attributed to the child we killed.
+            // Asserting either way here would report the developer's desktop
+            // app as a leak — a red result that names the wrong thing is worse
+            // than no result, because it trains people to ignore this file.
+            return;
+        }
         expect(await portIsOpen(RUNTIME_PORT)).toBe(false);
     }, 20000);
 });

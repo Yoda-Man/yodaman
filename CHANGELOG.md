@@ -2,6 +2,57 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.5.7] - 2026-09-27
+
+### Fixed
+- **Graph Studio no longer freezes on large workspaces.** Opening the view on a
+  big project sat on "Graph build in progress" forever, while no `graphify`
+  process was running at all. Small projects were unaffected, which is why it
+  went unnoticed. Four separate faults combined:
+
+  - **A read triggered a write.** `map()` — the 90-node preview the view loads
+    on open — began with `ensureGraph()`, which rebuilt the entire graph
+    whenever any source file was newer than `graph.json`. On a workspace here
+    with 8,255 files and a 208 MB `graph.json`, asking for 90 nodes ran a full
+    rebuild inside the HTTP request and took **106 seconds**. A build's first
+    act is writing `state: 'running'`, so merely *looking* at a large graph told
+    the UI a build was in progress. `map()` is now read-only.
+  - **A stale graph counted as no graph.** `ensureGraph()` rebuilt whenever the
+    graph was stale, so on an actively-edited project every query, explain, path
+    and impact call was a full rebuild in disguise. It now builds only when
+    there is genuinely no graph, and reports staleness so you can decide when to
+    pay for a rebuild.
+  - **An orphaned `running` status was reported as live.**
+    `GET /api/graphify/build/status` returned the on-disk status verbatim while
+    `GET /api/graphify/status` reconciled it, so the two contradicted each
+    other — and Graph Studio polls the first. A `running` left behind by a build
+    that died pinned the view for the full stale window. Both endpoints now
+    reconcile, and that window is derived from the build timeout (about 11
+    minutes) instead of an unrelated flat 30.
+  - **Polling stopped on the previous build's result.** The poll loop treated
+    the on-disk status as terminal, but at the first poll that is still the
+    *last* build's outcome — the new one has not written `running` yet. A
+    rebuild was declared finished about two seconds after it began and the real
+    build carried on unwatched. The job is now authoritative.
+
+- **A build stopped by the timeout says so.** A killed child leaves `stderr`
+  empty, so the failure surfaced as `Command failed: graphify update ...`, which
+  reads as the tool rejecting your project rather than as YodaMan stopping it.
+  It now names the timeout and points at `YODAMAN_GRAPHIFY_TIMEOUT_MS`.
+
+- **`tests/interfaces/CliCommands.test.js`** no longer fails when the desktop
+  app is running. It asserted nothing was listening on port 3090 without first
+  checking whether something already was — reporting your own app as a leak.
+
+### Notes
+- No migration is needed. No index or graph schema changed; existing graphs and
+  indexes stay valid.
+- If a workspace is still showing a phantom build, it clears itself now; you can
+  also delete `graphify-out/yodaman-build-status.json` to reset it immediately.
+- Workspaces above Graphify's 25,000-node HTML limit still cannot render the
+  Mind Map or Canvas — that limit is Graphify's. Graph Studio now says so and
+  offers Map Preview and Report, instead of showing a spinner.
+
 ## [0.5.6] - 2026-09-02
 
 ### Added

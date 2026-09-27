@@ -11,11 +11,26 @@ const MODES = [
 
 const TERMINAL_BUILD_STATES = new Set(['succeeded', 'partial', 'failed'])
 const POLL_INTERVAL_MS = 2000
-const MAX_BUILD_POLLS = 180
+// The server lets a build run for two graphify timeouts (update, then the
+// cluster-only regeneration) plus slack. Polling has to outlast that, or a large
+// workspace stops being watched while it is still legitimately building — which
+// is precisely how this view got stuck on the spinner with nothing polling it.
+const MAX_BUILD_POLLS = 360
 
+/**
+ * Which of the two reported statuses describes the build we started.
+ *
+ * The job does, whenever we have one. This used to prefer the on-disk `build`
+ * as soon as it held a terminal state — but at the first poll that is still the
+ * PREVIOUS build's result, because the new build has not written `running` yet.
+ * So a rebuild was declared finished about two seconds after it began, polling
+ * stopped, and the real build carried on in the background. On a small workspace
+ * it had genuinely finished and nobody noticed; on a large one the view was left
+ * showing a build in progress that nothing was watching any more.
+ */
 function preferredBuildStatus(job, build) {
-  if (build && TERMINAL_BUILD_STATES.has(build.state)) return build
-  return job || build || null
+  if (job) return job
+  return build || null
 }
 
 function markdownToBlocks(markdown) {
@@ -75,14 +90,21 @@ export default function GraphStudio({ selectedProject }) {
     }
     setLoading(true)
     try {
-      const [nextStatus, nextMap] = await Promise.all([
-        api.getGraphifyStatus(selectedProject.path),
-        api.mapGraphify(selectedProject.path, 90).catch(() => null)
-      ])
+      // Status first, and rendered before the map is asked for. These were a
+      // single Promise.all, so the whole panel waited on the map — which, on a
+      // 208 MB graph, is the slowest thing here and the least important. The
+      // graph state the user is waiting to read should never be held hostage to
+      // the preview.
+      const nextStatus = await api.getGraphifyStatus(selectedProject.path)
       setStatus(nextStatus)
       setBuildStatus(nextStatus?.build || null)
-      setGraphMap(nextMap)
       setReport('')
+      setLoading(false)
+
+      const nextMap = nextStatus?.graphExists
+        ? await api.mapGraphify(selectedProject.path, 90).catch(() => null)
+        : null
+      setGraphMap(nextMap)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -107,9 +129,13 @@ export default function GraphStudio({ selectedProject }) {
         if (buildPollRef.current !== pollId) return
         setBuildStatus(preferredBuildStatus(next.job, next.build))
 
-        if ((next.job && TERMINAL_BUILD_STATES.has(next.job.state)) || (next.build && TERMINAL_BUILD_STATES.has(next.build.state))) {
-          break
-        }
+        // Only the job decides. Reading the disk status here is what ended
+        // polling on the previous build's result; see preferredBuildStatus.
+        if (next.job && TERMINAL_BUILD_STATES.has(next.job.state)) break
+        // No job at all means the runtime forgot it (restart, eviction). There
+        // is nothing left to wait for, so fall through to a fresh load rather
+        // than spinning for another twelve minutes.
+        if (!next.job) break
 
         await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
       }

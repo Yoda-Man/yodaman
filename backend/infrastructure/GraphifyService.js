@@ -9,7 +9,17 @@ const dependencyChecker = require('./DependencyChecker');
 const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 300000);
 const DEFAULT_OLLAMA_MODEL = process.env.YODAMAN_GRAPHIFY_OLLAMA_MODEL || 'qwen3:5b';
 const DEFAULT_VIZ_NODE_LIMIT = process.env.YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT || '25000';
-const STALE_RUNNING_BUILD_MS = Number(process.env.YODAMAN_GRAPHIFY_RUNNING_STALE_MS || 30 * 60 * 1000);
+// How long a `running` status on disk is believed before it is treated as the
+// debris of a runtime that died mid-build.
+//
+// This was a flat 30 minutes, which is not related to anything: it left Graph
+// Studio frozen on "Graph build in progress" for half an hour after a build the
+// user had already abandoned. A build cannot outlive two runGraphify timeouts
+// (`update`, then the `cluster-only` regeneration), so that is the real ceiling
+// — tying it to DEFAULT_TIMEOUT_MS keeps the two in step if either is retuned.
+const STALE_RUNNING_BUILD_MS = Number(
+    process.env.YODAMAN_GRAPHIFY_RUNNING_STALE_MS || (DEFAULT_TIMEOUT_MS * 2 + 60 * 1000)
+);
 const CLOUD_MODEL_KEYS = [
     'OPENAI_API_KEY',
     'ANTHROPIC_API_KEY',
@@ -72,6 +82,23 @@ function runGraphify(args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
             maxBuffer: 1024 * 1024 * 5
         }, (err, stdout, stderr) => {
             if (err) {
+                // A timeout kill leaves stderr empty and err.message reading
+                // "Command failed: graphify update <path> --force" — which looks
+                // like the tool rejected the project rather than that we stopped
+                // it. On a large workspace that is the most likely failure of
+                // all, so it gets named, with the two things that fix it.
+                if (err.killed && err.signal) {
+                    const seconds = Math.round(timeoutMs / 1000);
+                    const error = new Error(
+                        `Graphify was stopped after ${seconds}s (signal ${err.signal}). `
+                        + 'Large workspaces can need longer: raise YODAMAN_GRAPHIFY_TIMEOUT_MS, '
+                        + 'or narrow the workspace to the directories you actually want in the graph.'
+                    );
+                    error.cause = err;
+                    error.code = 'graphify_timeout';
+                    reject(error);
+                    return;
+                }
                 const detail = stderr?.trim() || stdout?.trim() || err.message;
                 const error = new Error(detail);
                 error.cause = err;
@@ -574,6 +601,9 @@ module.exports = {
     graphPath,
     reportPath,
     buildStatusPath,
+    // Exposed so the reconciliation window can be asserted against the build
+    // timeout it is derived from, rather than against a copied literal.
+    staleRunningBuildMs: () => STALE_RUNNING_BUILD_MS,
     artifactPath,
     graphifyEnvironment,
     needsArtifactRegeneration,
@@ -785,8 +815,22 @@ module.exports = {
         return JSON.parse(fs.readFileSync(currentGraphPath, 'utf8'));
     },
 
+    /**
+     * A bounded preview of the graph — the first `limit` nodes and the links
+     * between them.
+     *
+     * READ-ONLY, DELIBERATELY. This began with `await this.ensureGraph(...)`,
+     * which rebuilt the whole graph whenever a source file was newer than
+     * graph.json. Asking for 90 nodes of a 141,869-node workspace therefore ran
+     * a full rebuild inside the request and took 106 seconds — and, because a
+     * build's first act is writing `state: 'running'`, merely LOOKING at a large
+     * graph told the UI a build was in progress. When the request was abandoned
+     * nothing wrote a terminal state over it and Graph Studio sat on the
+     * spinner. Small workspaces hid it: there the same rebuild took 3-6 seconds.
+     *
+     * A read must never write, and never block on a build.
+     */
     async map(projectPath, { limit = 80 } = {}) {
-        await this.ensureGraph(projectPath);
         const graph = this.readGraph(projectPath);
         const nodes = (graph.nodes || []).slice(0, Number(limit || 80)).map(node => ({
             id: node.id,
@@ -825,10 +869,27 @@ module.exports = {
         };
     },
 
+    /**
+     * Guarantee there is a graph to read, building one only if there is none.
+     *
+     * The condition used to be `hasGraph && !stale`, so an existing graph with
+     * one newer source file was rebuilt from scratch — synchronously, inside
+     * whatever HTTP request happened to ask. On an actively-edited workspace
+     * that is true essentially always, which made every query, explain, path and
+     * impact call a full rebuild in disguise.
+     *
+     * Staleness is a fact about the graph, not a reason to block the caller for
+     * minutes. It is returned so the caller can surface it — Graph Studio shows
+     * "Graph stale" and offers Build — and the user decides when to pay for it.
+     */
     async ensureGraph(projectPath) {
         const currentFreshness = this.freshness(projectPath);
-        if (hasGraph(projectPath) && !currentFreshness.stale) {
-            return { graphPath: graphPath(projectPath), built: false, stale: false };
+        if (hasGraph(projectPath)) {
+            return {
+                graphPath: graphPath(projectPath),
+                built: false,
+                stale: Boolean(currentFreshness.stale)
+            };
         }
         const result = await this.build(projectPath);
         return { ...result, built: true, stale: currentFreshness.stale };
