@@ -114,6 +114,10 @@ class StardustWrapper {
             }
 
             proc.on('error', (err) => {
+                // A process that could not start (missing binary, missing
+                // working directory) emits 'error' and then 'close'. Reported
+                // here, once; the 'close' that follows is ignored.
+                if (!settled) logger.error('openspec_spawn_failed', err, { bin, args: spawnArgs });
                 finish({
                     stdout: stdout.trim(),
                     stderr: (stderr + `\n[ERROR] ${err.message}`).trim(),
@@ -123,6 +127,7 @@ class StardustWrapper {
             });
 
             proc.on('close', (code) => {
+                if (settled) return;
                 const trimmedStdout = stdout.trim();
                 const trimmedStderr = stderr.trim();
 

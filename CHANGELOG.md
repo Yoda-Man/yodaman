@@ -2,6 +2,90 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.5.8] - 2026-10-08
+
+### Fixed
+- **A simple search no longer ends in "I reached the maximum number of
+  steps".** Typed into Chat, "find where user login is handled" ran the full
+  ten-step agent loop; on a large workspace each step took two to three
+  minutes, and when the steps ran out everything found was thrown away. Plain
+  searches now go straight to the search pipeline (seconds, not minutes), and
+  an agent task that runs out of steps answers from what it gathered, or lists
+  the files it examined.
+- **Files open in your own editor.** File links were hardcoded `vscode://`
+  URLs, which opened VS Code whatever your default was. The runtime now opens
+  files with your system's default app for that file type, at the right line.
+  Search results gained an **Open** button (the icon that looked like one only
+  expanded the snippet), and show the real file path instead of "Source File".
+- **A moved or deleted workspace says so.** Its old index kept answering, so
+  searches returned files that no longer existed and the agent spent every step
+  failing to read them. Readiness now reports **Folder not found** with what to
+  do, search returns a clear error, and the agent stops before its first step.
+- **Two folders with the same name can both be indexed.** A second workspace
+  named like an indexed one (for example two `yodaman` folders) failed every
+  Sync with `UNIQUE constraint failed: projects.name`, so Context Expert could
+  never index it. Each workspace now gets a unique index name, and an unindexed
+  workspace is never searched as a different project that shares its name.
+- **Search results are listed once.** Unified search asked Context Expert twice
+  and every hit appeared twice.
+- **Search no longer writes into your repositories.** Every search ran a docs
+  preprocessor that wrote chunk files into the workspace (6,903 in one) and
+  rewrote a `config.json` inside it. The chunks were on the index-ignore list,
+  so they were never searched; the "docs search" was the code search again,
+  which is also why every result appeared twice. Each search is now one Context
+  Expert query, and documentation is a filter on its results. Existing
+  `.yodaman-doc-chunks` folders are safe to delete; `yodaman uninstall` lists them.
+- **A deleted workspace is no longer brought back.** Indexing and graph builds
+  created `<workspace>/graphify-out` with `mkdir -p`, recreating a deleted
+  folder as an empty shell that then looked healthy. Both now skip it.
+- **Removing a workspace removes only its own index.** Removal fell back to the
+  folder name, so removing one `yodaman` workspace deleted the index of another.
+- **Generated folders cannot be registered as workspaces**, and a folder must
+  exist to be added. Seven chunk folders registered as workspaces exhausted the
+  runtime's file descriptors, so ctx failed to start with `EBADF`.
+- **Search results have one shape.** When ctx was slow, the text-scan fallback
+  returned hits without `filePath` or line numbers, so clients such as MCP saw
+  a different shape depending on timing.
+- **Security: 8 advisories cleared** in production dependencies (3 critical,
+  1 high, 4 moderate), including `simple-git` 3 to 4, whose CommonJS export
+  changed shape.
+- **The graph build job cap actually works.** 0.5.7 shipped it as dead code (a
+  function that called itself, never called by anything).
+- **OpenSpec failures are reported once.** A process that could not start was
+  logged twice, the second time after the caller had moved on.
+
+### Added
+- **Settings > Open files in.** System default, any detected editor, or a
+  command template for any editor (`idea --line {line} {file}`). Run without a
+  shell; changeable only from this computer. Also `YODAMAN_EDITOR_COMMAND`.
+- **Search reports its pillars.** Every result says whether Context Expert,
+  Graphify and OpenSpec actually contributed, so a degraded search (no graph
+  yet, no specs, a text scan instead of the index) never looks like a full one.
+
+### Changed
+- **One search pipeline.** Context Expert retrieval, Graphify ranking and
+  OpenSpec tagging now live in `backend/core/SearchPipeline.js`, and every
+  search goes through it: Search, Chat, the agent's `searchCode` tool, Trace,
+  docs search, Stardust Compose and the ask fallback. Before, six entry points
+  used five different subsets of the three. An architecture test fails the
+  build if code searches around the pipeline.
+- **Lint fails on warnings.** The dead build-job cap was visible only as a lint
+  warning.
+- **Dead code removed:** `backend/utils/queryClassifier.js`, left behind by the
+  removed code/docs mode toggle, and `backend/utils/docPreprocessor.js`. A new test fails the build when a module is
+  used only by its own tests.
+- **README** rewritten, with a new Stardust Trace screenshot.
+
+### Holocron VR 0.5.8
+- Fixed a buffer overrun in the WASM layout engine that turned unclustered
+  layouts into NaN, fixed its export bindings, and the engine is now executed in
+  CI rather than only compiled. The viewer still lays out in JavaScript; the
+  engine is not yet wired in.
+
+### Notes
+- No migration is needed. A workspace that never indexed because of a name
+  clash will index on its next Sync.
+
 ## [0.5.7] - 2026-09-27
 
 ### Fixed

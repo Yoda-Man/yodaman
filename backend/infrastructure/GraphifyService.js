@@ -653,6 +653,15 @@ module.exports = {
     },
 
     async build(projectPath, { update = false } = {}) {
+        if (!fs.existsSync(projectPath)) {
+            // Building used to begin by writing <workspace>/graphify-out/... with
+            // mkdir -p, which recreated a deleted workspace folder as an empty
+            // shell, and that hid the "folder not found" state from readiness.
+            const err = new Error(`Workspace folder not found: ${projectPath}`);
+            err.code = 'workspace_missing';
+            err.status = 404;
+            throw err;
+        }
         const args = process.env.YODAMAN_GRAPHIFY_FULL_EXTRACT === 'true'
             ? ['extract', projectPath, '--backend', 'ollama', '--model', DEFAULT_OLLAMA_MODEL, '--out', projectPath]
             : ['update', projectPath, '--force'];
@@ -745,6 +754,10 @@ module.exports = {
 
     writeBuildStatus(projectPath, status) {
         const outDir = graphifyOutPath(projectPath);
+        // graphify-out may be created; the workspace itself never is.
+        if (!fs.existsSync(projectPath)) {
+            throw Object.assign(new Error(`Workspace folder not found: ${projectPath}`), { code: 'workspace_missing', status: 404 });
+        }
         fs.mkdirSync(outDir, { recursive: true });
         const nextStatus = {
             state: status.state || 'idle',

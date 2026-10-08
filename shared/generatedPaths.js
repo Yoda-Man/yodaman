@@ -4,9 +4,9 @@
  *
  * WHY THESE ARE NAMED IN ONE PLACE.
  *
- * `.yodaman-doc-chunks` was already written in three files — `docPreprocessor`
- * defines it, `shared/ignoredPaths` excludes it, and `QueueService` comments on
- * it. `graphify-out` is in as many. That is precisely the shape of the drift
+ * `.yodaman-doc-chunks` was already named in three files (the docs
+ * preprocessor, `shared/ignoredPaths`, and a `QueueService` comment), and
+ * `graphify-out` in as many. That is precisely the shape of the drift
  * that split one ignore list into four and leaked file descriptors until the
  * process ran out.
  *
@@ -23,7 +23,11 @@
  * here so that removing it from the protected list requires deleting a test.
  */
 
-/** Document chunks — mirrors OUTPUT_DIR in backend/utils/docPreprocessor.js. */
+/**
+ * Document chunks written by search before 0.5.8. Nothing writes them any
+ * more (they were never indexed; see SearchPipeline.retrieve), but existing
+ * workspaces still hold them, so uninstall keeps cleaning them up.
+ */
 const DOC_CHUNKS_DIR = '.yodaman-doc-chunks';
 
 /** Graphify's graph and AST cache — mirrors backend/infrastructure/GraphifyService.js. */

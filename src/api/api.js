@@ -95,6 +95,27 @@ export const api = {
         return request(url);
     },
 
+    /**
+     * Open a workspace file in the user's own editor, at a line. The runtime
+     * picks the editor (config, else the OS default for that file type); this
+     * replaced hardcoded vscode:// links, which opened VS Code regardless.
+     */
+    async openInEditor(workspace, filePath, line) {
+        return request(`${API_BASE}/editor/open`, jsonOptions('POST', {
+            workspace,
+            path: filePath,
+            ...(line ? { line: Number(line) } : {})
+        }));
+    },
+
+    async getEditorOptions() {
+        return request(`${API_BASE}/editor/options`);
+    },
+
+    async updateSettings(updates) {
+        return request(`${API_BASE}/settings`, jsonOptions('PUT', updates));
+    },
+
     async getPlugins() {
         return request(`${API_BASE}/plugins`);
     },

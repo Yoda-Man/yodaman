@@ -13,7 +13,11 @@ const DEFAULTS = {
   // Installing software is privileged, so POST /api/health/install is opt-in.
   allowSelfHealInstall: false,
   // Extra executables the agent may run, on top of ToolBox's baseline allowlist.
-  allowedCommands: []
+  allowedCommands: [],
+  // How files are opened from search results and chat links. Empty means the
+  // OS default application for the file type; see EditorLauncher for the
+  // other forms (an app bundle, or a command template for any editor).
+  editorCommand: ''
 };
 
 let cache = null;

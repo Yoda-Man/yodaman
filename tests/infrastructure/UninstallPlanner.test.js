@@ -190,12 +190,13 @@ describe('the printed plan', () => {
 describe('generatedPaths has not drifted from the code that writes these', () => {
     const fs = require('fs');
 
-    it('DOC_CHUNKS_DIR still matches docPreprocessor', () => {
-        // Source-matched rather than duplicated: if someone renames the output
-        // directory, uninstall would otherwise quietly stop finding it and
-        // report a clean machine that is not clean.
-        const src = fs.readFileSync(path.join(__dirname, '..', '..', 'backend', 'utils', 'docPreprocessor.js'), 'utf8');
-        expect(src).toContain(`'${DOC_CHUNKS_DIR}'`);
+    it('DOC_CHUNKS_DIR is still cleaned up, though nothing writes it any more', () => {
+        // Search wrote these until 0.5.8. Workspaces that predate the fix
+        // still hold thousands of them, so uninstall must keep finding them,
+        // and the indexer must keep ignoring them.
+        expect(DOC_CHUNKS_DIR).toBe('.yodaman-doc-chunks');
+        const ignored = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'ignoredPaths.js'), 'utf8');
+        expect(ignored).toContain(`'${DOC_CHUNKS_DIR}'`);
     });
 
     it('GRAPH_OUT_DIR still matches GraphifyService', () => {

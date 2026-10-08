@@ -163,7 +163,7 @@ if (args[0] === 'setup' || args[0] === 'install') {
             console.log(`→ ${step.command}`);
             try {
                 execSync(step.command, { stdio: 'inherit' });
-            } catch (err) {
+            } catch (_err) {
                 // Keep going: one failing package manager should not block the
                 // other two. Every failure is reported at the end.
                 failed.push({ name: step.name, command: step.command });

@@ -130,3 +130,31 @@ describe('Documentation accuracy', () => {
         expect(stale).toEqual([]);
     });
 });
+
+describe('README', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const readme = fs.readFileSync(path.join(__dirname, '..', '..', 'README.md'), 'utf8');
+
+    test('uses no em dashes', () => {
+        // House style for the README, requested explicitly. Lines are reported
+        // so a new one is easy to find.
+        const lines = readme.split('\n')
+            .map((text, i) => ({ line: i + 1, text }))
+            .filter(({ text }) => text.includes('—'));
+        expect(lines).toEqual([]);
+    });
+
+    test('every image it shows exists', () => {
+        const images = [...readme.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)]
+            .map((m) => m[1])
+            .filter((src) => !/^https?:/.test(src));
+        expect(images.length).toBeGreaterThan(3);
+        const missing = images.filter((src) => !fs.existsSync(path.join(__dirname, '..', '..', src)));
+        expect(missing).toEqual([]);
+    });
+
+    test('shows Project Stardust', () => {
+        expect(readme).toMatch(/!\[[^\]]*Stardust[^\]]*\]\(website\/assets\/screenshots\/stardust\.png\)/);
+    });
+});

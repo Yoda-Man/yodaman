@@ -27,6 +27,10 @@ const toolBox = require('../../backend/infrastructure/ToolBox');
 const logger = require('../../backend/infrastructure/Logger');
 const agentEngine = require('../../backend/core/AgentReasoningEngine');
 
+// A real folder: the engine refuses a workspace that does not exist.
+const PROJECT = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'yodaman-agent-'));
+afterAll(() => require('fs').rmSync(PROJECT, { recursive: true, force: true }));
+
 const waitFor = async (predicate) => {
     for (let attempt = 0; attempt < 20; attempt++) {
         if (predicate()) return;
@@ -189,7 +193,7 @@ describe('AgentReasoningEngine', () => {
         const failure = new Error('Agent shell commands are disabled');
         contextEngine.ask
             .mockResolvedValueOnce({
-                output: '<tool_call>{"name":"executeCommand","parameters":{"command":"npm test","cwd":"/tmp/project"}}</tool_call>'
+                output: `<tool_call>{"name":"executeCommand","parameters":{"command":"npm test","cwd":"${PROJECT}"}}</tool_call>`
             })
             .mockResolvedValueOnce({
                 output: 'I could not run the command.'
@@ -200,7 +204,7 @@ describe('AgentReasoningEngine', () => {
         // every other mutating tool. Approve it, so this still tests what it was
         // written to test: that a tool FAILURE is logged with task context.
         const taskPromise = agentEngine.executeTask('run tests', 'task-log-1', undefined, {
-            projectId: '/tmp/project'
+            projectId: PROJECT
         });
         await waitFor(() => agentEngine.pendingApprovals.has('task-log-1'));
         agentEngine.signalApproval('task-log-1', true);
@@ -209,13 +213,17 @@ describe('AgentReasoningEngine', () => {
         expect(result).toBe('I could not run the command.');
         expect(logger.error).toHaveBeenCalledWith('agent_tool_failed', failure, expect.objectContaining({
             taskId: 'task-log-1',
-            projectId: '/tmp/project',
+            projectId: PROJECT,
             tool: 'executeCommand',
             userAction: 'agent_tool_call'
         }));
     });
 
-    test('should stop after maxIterations without a final answer', async () => {
+    test('should stop after maxIterations and report what it examined, not discard it', async () => {
+        // This test used to assert the bare "try breaking the task into smaller
+        // parts" message, which locked in the defect: ten steps of reads were
+        // thrown away and the user got nothing to act on. The step limit still
+        // holds (exactly two tool calls); what changed is what comes back.
         agentEngine.maxIterations = 2;
         contextEngine.ask.mockResolvedValue({
             output: '<tool_call>{"name":"readFile","parameters":{"filePath":"README.md"}}</tool_call>'
@@ -224,9 +232,12 @@ describe('AgentReasoningEngine', () => {
 
         const result = await agentEngine.executeTask('Loop forever', 'task-6');
 
-        expect(result).toBe('I reached the maximum number of steps without finishing. Please try breaking the task into smaller parts.');
-        expect(contextEngine.ask).toHaveBeenCalledTimes(2);
         expect(toolBox.callTool).toHaveBeenCalledTimes(2);
+        // Two loop steps plus one tools-forbidden synthesis attempt. The model
+        // kept calling tools, so the synthesis is rejected and the files are listed.
+        expect(contextEngine.ask).toHaveBeenCalledTimes(3);
+        expect(result).not.toBe(agentEngine.MAX_STEPS_FALLBACK);
+        expect(result).toContain('./README.md');
     });
 
     // ── Prompt economics ──
@@ -239,12 +250,12 @@ describe('AgentReasoningEngine', () => {
         contextEngine.ask.mockResolvedValueOnce({ output: 'Done.' });
 
         await agentEngine.executeTask('What does this do?', 'task-scope', undefined, {
-            projectId: '/tmp/project'
+            projectId: PROJECT
         });
 
         expect(contextEngine.ask).toHaveBeenCalledWith(
             expect.any(String),
-            expect.objectContaining({ project: '/tmp/project' })
+            expect.objectContaining({ project: PROJECT })
         );
     });
 
@@ -259,7 +270,10 @@ describe('AgentReasoningEngine', () => {
         await agentEngine.executeTask('Read the big file', 'task-big');
 
         const prompts = contextEngine.ask.mock.calls.map(([prompt]) => prompt);
-        expect(prompts.length).toBe(4);
+        // Four steps, then one tools-forbidden synthesis turn when the budget
+        // runs out. That last prompt carries the whole transcript, so it is the
+        // one most worth holding to the bound below.
+        expect(prompts.length).toBe(5);
         for (const prompt of prompts) {
             // Four unbounded 200KB results would be 800KB — past ARG_MAX, where the
             // spawn stops failing gracefully and starts failing with E2BIG.

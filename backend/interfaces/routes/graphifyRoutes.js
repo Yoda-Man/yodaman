@@ -35,7 +35,7 @@ const graphifyBuildJobs = new Map();
 const MAX_REMEMBERED_BUILD_JOBS = 50;
 
 function rememberBuildJob(job) {
-    rememberBuildJob(job);
+    graphifyBuildJobs.set(job.id, job);
     while (graphifyBuildJobs.size > MAX_REMEMBERED_BUILD_JOBS) {
         const oldest = graphifyBuildJobs.keys().next().value;
         if (oldest === job.id) break;
@@ -106,7 +106,7 @@ function startGraphifyBuildJob(dirPath) {
         message: 'Graphify build queued',
         startedAt: new Date().toISOString()
     };
-    graphifyBuildJobs.set(job.id, job);
+    rememberBuildJob(job);
 
     Promise.resolve().then(async () => {
         const startedAt = new Date();
@@ -298,3 +298,6 @@ router.post('/graphify/tree', async (req, res) => {
 });
 
 module.exports = router;
+// Test seam: the job map is module state, and its bound is the thing to assert.
+module.exports.rememberedBuildJobCount = () => graphifyBuildJobs.size;
+module.exports.MAX_REMEMBERED_BUILD_JOBS = MAX_REMEMBERED_BUILD_JOBS;

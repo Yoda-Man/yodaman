@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const logger = require('../../infrastructure/Logger');
+const { IGNORED_DIRECTORIES } = require('../../../shared/ignoredPaths');
 
 const DEFAULT_CONFIG_PATH = path.join(__dirname, '../../../config.json');
 
@@ -62,6 +63,27 @@ function validateIndexableDirectory(dirPath) {
 }
 
 /**
+ * Asserts a path can be registered as a workspace: it exists, is a directory,
+ * and is not output YodaMan or a toolchain generates (graphify-out,
+ * .yodaman-doc-chunks, node_modules, ...).
+ *
+ * The docs preprocessor once added every workspace's `.yodaman-doc-chunks`
+ * folder to the workspace list. Each one was then watched as a project, and
+ * thousands of chunk files exhausted the runtime's file descriptors until
+ * spawning ctx failed with EBADF. A generated folder is never a workspace.
+ * @throws {Error & {status:number, code:string}}
+ */
+function validateWorkspaceCandidate(dirPath) {
+    validateIndexableDirectory(dirPath);
+    if (IGNORED_DIRECTORIES.includes(path.basename(dirPath))) {
+        const err = new Error(`Not a workspace: ${path.basename(dirPath)} is generated output`);
+        err.status = 400;
+        err.code = 'workspace_generated';
+        throw err;
+    }
+}
+
+/**
  * Resolves a caller-supplied path and asserts it is a registered workspace.
  * Refusing unregistered paths is what stops an endpoint from being pointed at
  * an arbitrary directory on the machine.
@@ -84,5 +106,6 @@ module.exports = {
     getConfigPath,
     readConfig,
     validateIndexableDirectory,
+    validateWorkspaceCandidate,
     resolveRegisteredProjectPath
 };

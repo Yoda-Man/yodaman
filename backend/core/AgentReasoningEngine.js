@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const contextEngine = require('../infrastructure/ContextEngine');
 const { stripCliNoise, hasSubstantiveAnswer } = require('../infrastructure/CliOutput');
 const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
@@ -14,6 +16,7 @@ const { promptBudgetFor } = require('./promptBudget');
 const { requiresApproval } = require('../../shared/toolCapabilities');
 const stardustBrief = require('./StardustBrief');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
+const { hitPath, hitLine, hitPreview, chipPath } = require('../../shared/searchHits');
 
 // Tools whose success invalidates the retrieval index and the knowledge graph.
 const MUTATING_TOOLS = new Set(['writeFile']);
@@ -95,7 +98,7 @@ function extractToolCalls(response, limit = MAX_PARALLEL_TOOL_CALLS) {
                 try {
                     parsed = JSON.parse(repaired);
                     reason = null;
-                } catch (repairErr) {
+                } catch (_repairErr) {
                     // Repair produced something still unparseable. The ORIGINAL
                     // error is the useful one — it describes what the model
                     // actually wrote — so keep it and discard this second one.
@@ -138,6 +141,107 @@ function safeToolName(rawToolCall) {
 // Budgets for a small model, whose context the full prompt plus ctx's retrieved
 // chunks will not fit. Both are deliberately conservative: an answer that fits
 // beats a richer prompt that gets truncated from the front.
+/**
+ * A request that is only a search, phrased the way people type into a search
+ * box: "find where user login is handled", "search for the main entry point",
+ * "where is the config loaded".
+ *
+ * WHY THIS ROUTES DIRECTLY:
+ *
+ * Typed into Chat, a one-line search went through the full reasoning loop. On a
+ * large workspace each step is a `ctx ask` of two to three minutes, the model
+ * spends a step deciding to search, another reading, another searching again,
+ * and the task ended ten steps later on "I reached the maximum number of steps
+ * without finishing" with everything it had found thrown away. Measured on an
+ * 8,255-file workspace: three steps took ten minutes and had not answered yet.
+ * A search does not need a model to decide that it is a search.
+ *
+ * Deliberately narrow, like resolveDirectPluginCall: one line, short, starting
+ * with a search verb, and containing nothing that asks for reasoning or a change.
+ * Anything else takes the full loop. Getting this wrong in the safe direction
+ * costs a slower answer; getting it wrong the other way would return search hits
+ * to someone who asked for an explanation, so the exclusion list is broad.
+ */
+const SEARCH_INTENT = /^(?:please\s+)?(?:search(?:\s+for)?|find|locate|look\s+for|grep\s+for|where\s+(?:is|are|'s|does|do)|show\s+me\s+where)\s+(.+?)[\s?.!]*$/i;
+const NOT_JUST_A_SEARCH = /\b(?:why|how|explain|describe|summari[sz]e|review|compare|fix|change|refactor|rewrite|write|create|add|remove|delete|rename|implement|update|edit|modify|run|install|build|deploy|test|debug|and\s+(?:then|also))\b/i;
+const MAX_DIRECT_SEARCH_CHARS = 160;
+const DIRECT_SEARCH_TOP = 8;
+
+function resolveDirectSearch(task) {
+    const text = String(task || '').trim();
+    if (!text || text.length > MAX_DIRECT_SEARCH_CHARS || /\n/.test(text)) return null;
+    const match = SEARCH_INTENT.exec(text);
+    if (!match) return null;
+    if (NOT_JUST_A_SEARCH.test(text)) return null;
+    // "where the login is handled" searches better without its leading glue.
+    const query = match[1].replace(/^(?:where|the\s+code\s+(?:that|for))\s+/i, '').trim();
+    return query.length >= 2 ? { query } : null;
+}
+
+/**
+ * One sentence on which pillars shaped these results, built from what the
+ * pipeline reports rather than assumed. Claiming a pillar that did not apply
+ * would make a degraded search look like a full one.
+ */
+function describePillars({ contextExpert = true, graphify = false, openspec = false } = {}) {
+    const found = contextExpert
+        ? 'Found by Context Expert'
+        : 'Found by a plain text scan (Context Expert has not indexed this workspace; run Sync Repository)';
+    const ranked = graphify
+        ? 'ranked with the Graphify knowledge graph'
+        : 'not ranked by Graphify (no graph for this workspace yet, or none of these files are in it; build it in Graph Studio)';
+    const tagged = openspec
+        ? 'tagged with the OpenSpec specs that cover them'
+        : 'not tagged by OpenSpec (no specs in this workspace)';
+    return `${found}, ${ranked}, ${tagged}.`;
+}
+
+function formatSearchAnswer(query, hits, workspaceName, pillars = {}) {
+    // The pipeline has already deduplicated, filtered and ranked these.
+    const unique = (Array.isArray(hits) ? hits : []).filter(hitPath).slice(0, DIRECT_SEARCH_TOP);
+    if (!unique.length) {
+        return `No matches for **${query}** in ${workspaceName}. Try different keywords, or ask a question in Chat and the agent will investigate.`;
+    }
+    const lines = unique.map((hit, i) => {
+        const line = hitLine(hit);
+        const ref = `${chipPath(hitPath(hit))}${line ? `:${line}` : ''}`;
+        const preview = hitPreview(hit);
+        const specs = hit?.specFlag?.covered && hit.specFlag.specs?.length ? ` (spec: ${hit.specFlag.specs.join(', ')})` : '';
+        return `${i + 1}. \`${ref}\`${specs}${preview ? `\n   ${preview}` : ''}`;
+    });
+    return [
+        `Top ${unique.length} match${unique.length === 1 ? '' : 'es'} for **${query}** in ${workspaceName}:`,
+        '',
+        ...lines,
+        '',
+        `_${describePillars(pillars)}_`,
+        '',
+        'Click a file to open it in your editor. For an explanation, ask a follow-up such as "explain how the first one works".'
+    ].join('\n');
+}
+
+/**
+ * Files the agent has actually looked at, so running out of steps can report
+ * them instead of discarding them. Only paths and lines, never content: this
+ * exists to point the user somewhere, not to rebuild the transcript.
+ */
+function collectEvidence(evidence, toolName, params, result) {
+    if (!evidence || result?.error) return;
+    if (toolName === 'readFile' && params?.filePath) {
+        evidence.set(String(params.filePath), { path: String(params.filePath), line: null, via: 'read' });
+        return;
+    }
+    if (toolName === 'searchCode') {
+        const hits = Array.isArray(result) ? result : (Array.isArray(result?.results) ? result.results : []);
+        for (const hit of hits.filter(hitPath).slice(0, 5)) {
+            const key = hitPath(hit);
+            if (!evidence.has(key)) evidence.set(key, { path: key, line: hitLine(hit), via: 'search' });
+        }
+    }
+}
+
+const MAX_STEPS_FALLBACK = 'I reached the maximum number of steps without finishing. Please try breaking the task into smaller parts.';
+
 const COMPACT_PROMPT_CHARS = 5000;
 const COMPACT_TOP_K = 3;
 
@@ -390,6 +494,83 @@ Rules:
         return { name, plugin };
     }
 
+    /** Run a plain search without a model round-trip, emitting the usual events. */
+    async runSearchDirectly({ query }, { taskId, onStep, metadata }) {
+        const params = { query, project: metadata.projectId, top: 20 };
+        logger.info('agent_search_routed_directly', { taskId, query });
+
+        const emit = (event) => {
+            this.recordTaskEvent(taskId, event);
+            if (onStep) onStep(event);
+        };
+
+        // The same pipeline as the Search view: Context Expert retrieves,
+        // Graphify reranks by structure, OpenSpec marks spec coverage. Calling
+        // searchCode here instead would be Context Expert alone, and the same
+        // query would rank differently in Chat than in Search.
+        emit({ type: 'tool_start', taskId, tool: 'search', params, routed: 'direct' });
+        try {
+            // Required lazily: SearchPipeline -> ToolBox is already loaded here,
+            // and keeping it lazy keeps the engine's import graph acyclic.
+            const { search } = require('./SearchPipeline');
+            const { results: hits, pillars } = await search({ query, project: metadata.projectId, top: params.top });
+            logger.info('agent_search_completed', { taskId, hits: hits.length, pillars });
+            emit({ type: 'tool_end', taskId, tool: 'search', result: hits.slice(0, DIRECT_SEARCH_TOP) });
+            const workspaceName = String(metadata.projectId).split(/[\\/]/).filter(Boolean).pop() || 'this workspace';
+            const answer = formatSearchAnswer(query, hits, workspaceName, pillars);
+            this.recordTask(taskId, { status: 'completed', finalAnswer: answer });
+            // Recorded, not emitted: RestController sends final_answer from the
+            // returned value (see runPluginDirectly).
+            this.recordTaskEvent(taskId, { type: 'final_answer', taskId, answer });
+            return answer;
+        } catch (err) {
+            logger.error('agent_search_direct_failed', err, { taskId });
+            this.recordTask(taskId, { status: 'error', error: err.message });
+            emit({ type: 'error', taskId, message: err.message });
+            return null;
+        }
+    }
+
+    /**
+     * The loop ran out of steps. Answer from what was gathered rather than
+     * throwing it away.
+     *
+     * This used to return a fixed "try breaking the task into smaller parts",
+     * discarding every file the agent had read and every search it had run.
+     * After ten steps of real work the user got nothing they could act on. Now:
+     * one last model turn with tools forbidden, and if that fails, a plain list
+     * of the files that were examined, which is always worth more than a shrug.
+     */
+    async answerFromEvidence({ conversation, evidence, metadata, topK, taskId }) {
+        conversation.addNote(
+            `You have used all ${this.maxIterations} steps. Do NOT call any tool. `
+            + 'Answer the original task now using only the tool results above, naming the files and lines that matter. '
+            + 'If they are not enough to answer fully, say what is still missing.'
+        );
+        try {
+            const raw = await contextEngine.ask(conversation.render(), { project: metadata.projectId, topK });
+            const response = stripCliNoise(raw?.output).trim();
+            const stillCallingTools = extractToolCalls(response).total > 0;
+            if (!raw?.partial && hasSubstantiveAnswer(response) && !stillCallingTools) {
+                logger.info('agent_max_iterations_synthesised', { taskId, chars: response.length });
+                return `${response}\n\n---\n_Stopped after ${this.maxIterations} steps. This answer is based on what was found up to that point._`;
+            }
+        } catch (err) {
+            logger.warn('agent_max_iterations_synthesis_failed', { taskId, reason: err.message });
+        }
+
+        if (!evidence.size) return MAX_STEPS_FALLBACK;
+        const files = [...evidence.values()].slice(0, 10)
+            .map((item) => `- \`${chipPath(item.path)}${item.line ? `:${item.line}` : ''}\``);
+        return [
+            `I ran out of steps (${this.maxIterations}) before finishing. These are the files I examined, which are the best place to look:`,
+            '',
+            ...files,
+            '',
+            'Ask a narrower follow-up about one of them, for example "explain the first file".'
+        ].join('\n');
+    }
+
     /** Invoke a named plugin without a model round-trip, emitting the usual events. */
     async runPluginDirectly({ name, plugin }, { taskId, task, onStep, metadata }) {
         const parameters = {};
@@ -441,6 +622,19 @@ Rules:
             error: null
         });
 
+        // A workspace whose folder is gone cannot be worked on, and its stale
+        // index would send every step after files that no longer exist: the
+        // reported "maximum number of steps" on a simple search came from
+        // exactly this. Say so before spending a single step.
+        if (metadata.projectId && path.isAbsolute(metadata.projectId) && !fs.existsSync(metadata.projectId)) {
+            const answer = `The workspace folder **${metadata.projectId}** was not found. It may have been moved or deleted. `
+                + 'Edit its path in Settings, or remove it there, then ask again.';
+            logger.warn('agent_workspace_missing', { taskId, path: metadata.projectId });
+            this.recordTask(taskId, { status: 'completed', finalAnswer: answer });
+            this.recordTaskEvent(taskId, { type: 'final_answer', taskId, answer });
+            return answer;
+        }
+
         // ── Direct plugin routing ────────────────────────────────────────
         // "Run CodeTrooper" names the tool outright. Asking a 9B model to infer
         // which tool that means costs a retrieval, a model round-trip and about
@@ -457,6 +651,15 @@ Rules:
         const routed = this.resolveDirectPluginCall(task);
         if (routed && metadata.projectId) {
             return this.runPluginDirectly(routed, { taskId, task, onStep, metadata });
+        }
+
+        // A plain search runs as a search: one read-only call, no model, no
+        // step budget to run out of. See resolveDirectSearch for why.
+        const search = metadata.projectId && !(metadata.uploadedFiles || []).length
+            ? resolveDirectSearch(task)
+            : null;
+        if (search) {
+            return this.runSearchDirectly(search, { taskId, task, onStep, metadata });
         }
 
         // The workspace's own state, composed from all three tools and scoped to
@@ -557,6 +760,9 @@ Rules:
         // Workspaces this task wrote to, refreshed once when the task ends.
         const touchedWorkspaces = new Set();
         let finalAnswer = '';
+        // What the agent has looked at, kept so running out of steps can
+        // still point somewhere. See answerFromEvidence.
+        const evidence = new Map();
 
         logger.info('agent_loop_started', { taskPreview: task.substring(0, 50) });
 
@@ -753,6 +959,7 @@ Rules:
                         : { error: outcome.reason?.message || 'tool failed' };
 
                     conversation.addToolResult(call.name, result);
+                    collectEvidence(evidence, call.name, call.parameters, result);
                     const endEvent = { type: 'tool_end', taskId, tool: call.name, result };
                     this.recordTaskEvent(taskId, endEvent);
                     if (onStep) onStep(endEvent);
@@ -942,6 +1149,7 @@ Rules:
                     // Clipped on arrival: a large file read must not be re-sent in
                     // full on every remaining iteration.
                     conversation.addToolResult(toolCall.name, result);
+                    collectEvidence(evidence, toolCall.name, toolCall.parameters, result);
 
 
                     // An accepted write makes the ctx index and the graph stale the
@@ -985,8 +1193,16 @@ Rules:
         // reached a conclusion — including a specific diagnosis of why it could not
         // answer — has said something more useful than "try smaller parts".
         if (iteration >= this.maxIterations && !finalAnswer) {
-            finalAnswer = "I reached the maximum number of steps without finishing. Please try breaking the task into smaller parts.";
-            logger.warn('agent_max_iterations_reached', { maxIterations: this.maxIterations });
+            logger.warn('agent_max_iterations_reached', { maxIterations: this.maxIterations, evidence: evidence.size });
+            finalAnswer = await this.answerFromEvidence({ conversation, evidence, metadata, topK, taskId });
+            if (this.isCancelled(taskId)) {
+                const event = { type: 'task_cancelled', taskId, message: 'Task cancelled.' };
+                this.recordTaskEvent(taskId, event);
+                if (onStep) onStep(event);
+                this.recordTask(taskId, { status: 'cancelled' });
+                this.cancelledTasks.delete(taskId);
+                return null;
+            }
         }
 
         this.recordTask(taskId, { status: 'completed', finalAnswer });
@@ -1069,3 +1285,6 @@ module.exports = new AgentReasoningEngine();
 // directly rather than only through a full agent run.
 module.exports.extractToolCalls = extractToolCalls;
 module.exports.MAX_PARALLEL_TOOL_CALLS = MAX_PARALLEL_TOOL_CALLS;
+module.exports.resolveDirectSearch = resolveDirectSearch;
+module.exports.formatSearchAnswer = formatSearchAnswer;
+module.exports.MAX_STEPS_FALLBACK = MAX_STEPS_FALLBACK;

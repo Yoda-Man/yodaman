@@ -1,11 +1,7 @@
 jest.mock('../../backend/infrastructure/ToolBox', () => ({
-    searchCode: jest.fn(async ({ query, project, top }) => [{ query, project, top }])
+    contextExpertSearch: jest.fn(async ({ query, project, top }) => [{ query, project, top }])
 }));
 
-jest.mock('../../backend/utils/docPreprocessor', () => ({
-    preprocessDocumentation: jest.fn(async () => []),
-    updateCtxConfig: jest.fn(async () => {})
-}));
 
 jest.mock('../../backend/infrastructure/Logger', () => ({
     error: jest.fn(),
@@ -15,9 +11,18 @@ jest.mock('../../backend/infrastructure/Logger', () => ({
 
 const fs = require('fs');
 const toolBox = require('../../backend/infrastructure/ToolBox');
-const docPreprocessor = require('../../backend/utils/docPreprocessor');
 const logger = require('../../backend/infrastructure/Logger');
 const router = require('../../backend/services/searchRouter');
+
+// Real folders: the pipeline refuses a workspace that does not exist.
+const os = require('os');
+const path = require('path');
+const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-search-router-'));
+const PROJECT = path.join(ROOT, 'project');
+const ANCHOR = path.join(ROOT, 'Anchor');
+fs.mkdirSync(PROJECT);
+fs.mkdirSync(ANCHOR);
+afterAll(() => fs.rmSync(ROOT, { recursive: true, force: true }));
 
 describe('SearchRouter', () => {
     let originalConfig;
@@ -63,15 +68,13 @@ describe('SearchRouter', () => {
         return res;
     }
 
-    test('routes documentation queries through preprocessing and returns unified results', async () => {
-        const response = await invoke('/', { query: 'how to use the api', project: '/tmp/project', top: 3 });
+    test('returns unified results for a documentation query', async () => {
+        const response = await invoke('/', { query: 'how to use the api', project: PROJECT, top: 3 });
 
         expect(response.payload.results).toBeDefined();
-        expect(docPreprocessor.preprocessDocumentation).toHaveBeenCalledWith('/tmp/project');
-        expect(docPreprocessor.updateCtxConfig).toHaveBeenCalledWith('/tmp/project');
-        expect(toolBox.searchCode).toHaveBeenCalledWith({
+        expect(toolBox.contextExpertSearch).toHaveBeenCalledWith({
             query: 'how to use the api',
-            project: '/tmp/project',
+            project: PROJECT,
             top: 3
         });
     });
@@ -80,8 +83,7 @@ describe('SearchRouter', () => {
         const response = await invoke('/code', { query: 'function classifyQuery', top: 5 });
 
         expect(response.payload.mode).toBe('code');
-        expect(docPreprocessor.preprocessDocumentation).not.toHaveBeenCalled();
-        expect(toolBox.searchCode).toHaveBeenCalledWith({
+        expect(toolBox.contextExpertSearch).toHaveBeenCalledWith({
             query: 'function classifyQuery',
             project: undefined,
             top: 5
@@ -90,25 +92,25 @@ describe('SearchRouter', () => {
 
     test('resolves workspace display names to registered paths before searching', async () => {
         fs.writeFileSync('config.json', JSON.stringify({
-            watchedDirectories: ['/tmp/Anchor'],
+            watchedDirectories: [ANCHOR],
             removedDirectories: []
         }));
 
         const response = await invoke('/', { query: 'menu', project: 'Anchor', top: 7 });
 
         expect(response.statusCode).toBe(200);
-        expect(toolBox.searchCode).toHaveBeenCalledWith({
+        expect(toolBox.contextExpertSearch).toHaveBeenCalledWith({
             query: 'menu',
-            project: '/tmp/Anchor',
+            project: ANCHOR,
             top: 7
         });
     });
 
     test('logs search failures with request context before returning errors', async () => {
         const failure = new Error('ctx search unavailable');
-        toolBox.searchCode.mockRejectedValueOnce(failure);
+        toolBox.contextExpertSearch.mockRejectedValueOnce(failure);
 
-        const response = await invoke('/code', { query: 'menu', project: '/tmp/Anchor' });
+        const response = await invoke('/code', { query: 'menu', project: ANCHOR });
 
         expect(response.statusCode).toBe(500);
         expect(response.payload).toEqual(expect.objectContaining({
@@ -117,7 +119,7 @@ describe('SearchRouter', () => {
         }));
         expect(logger.error).toHaveBeenCalledWith('search_failed', failure, expect.objectContaining({
             query: 'menu',
-            project: '/tmp/Anchor',
+            project: ANCHOR,
             mode: 'code'
         }));
     });

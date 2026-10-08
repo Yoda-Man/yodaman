@@ -1,6 +1,6 @@
 {
   "name": "yodaman",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "description": "YodaMan — local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
@@ -37,7 +37,7 @@
     "test:render": "jest tests/electron/DesktopRenderSmoke.test.js tests/electron/GraphRenderSmoke.test.js",
     "website:downloads": "node scripts/sync-website-downloads.js",
     "preview": "vite preview",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "test": "jest",
@@ -63,7 +63,7 @@
     "cors": "^2.8.5",
     "express": "^5.2.1",
     "multer": "^2.1.1",
-    "simple-git": "^3.36.0",
+    "simple-git": "^4.0.2",
     "ws": "^8.21.3"
   },
   "devDependencies": {

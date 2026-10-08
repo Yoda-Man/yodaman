@@ -1,8 +1,29 @@
 # YodaMan
 
-YodaMan is local-first workspace intelligence for developers. **Context Expert** (semantic search), **Graphify** (structure), and **OpenSpec** (architectural intent) form a single pillar: every search, every agent turn, and every plan draws on all three at once — none is optional, none runs alone.
+**Local-first code intelligence that understands your workspace the way you do: what the code says, how it fits together, and what it was meant to do.**
 
-![Version](https://img.shields.io/badge/Version-0.5.7-gold) ![License](https://img.shields.io/badge/License-MIT-green)
+![Version](https://img.shields.io/badge/Version-0.5.8-gold) ![License](https://img.shields.io/badge/License-MIT-green) ![Node](https://img.shields.io/badge/Node-22%2B-339933) ![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
+
+YodaMan combines three tools into one search and one agent:
+
+- **Context Expert** finds code by meaning.
+- **Graphify** knows how the code is connected.
+- **OpenSpec** records what the code is supposed to do.
+
+Every search and every agent turn uses all three. Everything runs on your machine against a local model: no code is uploaded, no account, no API key.
+
+## Contents
+
+- [Two minutes in](#two-minutes-in)
+- [What it looks like](#what-it-looks-like)
+- [How search works](#how-search-works)
+- [Install](#install)
+- [Using YodaMan](#using-yodaman)
+- [Choosing a model](#choosing-a-model)
+- [Configuration](#configuration)
+- [Connecting other agents (MCP)](#connecting-other-agents-mcp)
+- [Project layout](#project-layout)
+- [Contributing, security and license](#contributing)
 
 ## Two minutes in
 
@@ -13,44 +34,69 @@ brew install Yoda-Man/yodaman/yodaman   # or: npm install -g yodaman
 yodaman setup                           # installs the tools it needs
 ```
 
-Ask YodaMan what it holds up:
+Ask YodaMan what depends on it:
 
 > **32 files import it.** Four are in the auth middleware chain. Two are covered
-> by no test. **And one — your `sessionRefresh` module — is load-bearing in the
+> by no test. **And one, your `sessionRefresh` module, is load-bearing in the
 > graph but described by no spec at all.**
 
 That last sentence is the one you cannot get anywhere else. Your editor's search
-finds the string. Your language server finds the references. Neither knows which
-parts of your system nobody has written down — that needs the dependency graph
-and your specs read together, which is what YodaMan does on every query.
-
-It runs against a local model on your machine. No code is uploaded, no account,
-no API key. Other agents — Cursor, Claude Code, Zed — can query the same index
-through [YodaMan's MCP server](docs/guides/mcp.md), read-only.
-
+finds the string and your language server finds the references, but neither
+knows which parts of your system nobody has written down. That takes the
+dependency graph and your specs read together, which is what YodaMan does on
+every query.
 
 ## What it looks like
 
 ![YodaMan walking through the dashboard, knowledge graph, plugins and spec drift](website/assets/screenshots/demo.gif)
 
-**Project Stardust — where intent and code disagree.** `0 stale · 56
-undocumented`: fifty-six modules this codebase depends on that no spec
-describes. That number is the reason the other two tools are mandatory — it
-takes the dependency graph and the specs together to produce it.
+### Project Stardust
 
-![Project Stardust showing spec drift and coverage](website/assets/screenshots/stardust.png)
+The workspace's state across all three tools in one place: Context Expert's
+index, Graphify's graph and OpenSpec's specs, with drift between intent and
+code called out.
 
-**Graph Studio — 4,819 nodes and 6,044 links**, clustered by community, with
-impact analysis and a natural-language query box against the structure itself.
+![Project Stardust board showing the state of Context Expert, Graphify and OpenSpec](website/assets/screenshots/stardust.png)
+
+**Trace** shows why each search result ranked where it did: its semantic score
+from Context Expert, its proximity and centrality in the Graphify graph, and
+its OpenSpec coverage, blended into the order you see.
+
+![Stardust Trace explaining the ranking of each search result](website/assets/screenshots/stardust-trace.png)
+
+### Graph Studio
+
+The knowledge graph, clustered by community, with impact analysis and a
+natural-language query box against the structure itself.
 
 ![Graph Studio rendering the knowledge graph](website/assets/screenshots/graph.png)
 
-**The dashboard.** Vector storage, the active local model and its context
-window, and every indexed workspace. The context warning is doing real work
-here: a window too small for the prompt is the single most common cause of poor
-answers, so YodaMan says so and offers to fix it.
+### Dashboard
+
+Vector storage, the active local model and its context window, and every
+indexed workspace. A context window too small for the prompt is the most common
+cause of poor answers, so YodaMan says so and offers to fix it.
 
 ![System dashboard showing storage, model and indexing state](website/assets/screenshots/dashboard.png)
+
+## How search works
+
+Every search in YodaMan, whether typed into Search, asked in Chat, run by the
+agent mid-task, shown in Trace, or requested by another agent over MCP, goes
+through the same pipeline:
+
+| Step | Tool | What it does |
+|------|------|--------------|
+| 1. Retrieve | **Context Expert** | Finds code and docs by meaning |
+| 2. Clean | YodaMan | Removes duplicates, generated files, and files no longer on disk |
+| 3. Rank | **Graphify** | Reorders by structure: semantic 0.50, proximity 0.20, centrality 0.15, spec coverage 0.15 |
+| 4. Tag | **OpenSpec** | Marks each result with the specs that cover it |
+
+Each response reports which tools actually contributed. If a workspace has no
+graph yet, or no specs, results still come back and YodaMan tells you which
+step was skipped and how to enable it; a partial search never looks like a full
+one. The pipeline lives in one module, and an architecture test fails the build
+if any code searches around it.
 
 ## Install
 
@@ -72,243 +118,129 @@ Then let YodaMan install what it depends on:
 yodaman setup
 ```
 
-That installs Context Expert, Graphify and OpenSpec. **Ollama is not installed
-automatically** — it is a system service with its own installer, so `yodaman
-setup` prints the command and leaves the decision to you. `yodaman setup
---dry-run` shows exactly what would run without running any of it.
+`setup` installs Context Expert, Graphify and OpenSpec. **Ollama is not
+installed automatically**: it is a system service with its own installer, so
+`setup` prints the command and leaves the decision to you. `yodaman setup
+--dry-run` shows exactly what would run, without running it.
 
 Desktop builds (`.dmg`, `.AppImage`) are on the
 [releases page](https://github.com/Yoda-Man/yodaman/releases).
 
-## The three-tool pillar
+### Check your setup
 
-Every answer in YodaMan blends three mandatory tools. No silos, no optional features — this is the architecture:
+```bash
+yodaman doctor          # every dependency: version, path, reachability
+yodaman doctor --graph  # knowledge graph freshness
+```
 
-| Tool | Role | Powers |
-|------|------|--------|
-| **Context Expert** | Semantic search + LLM reasoning | Search, agent finding files, RAG retrieval |
-| **Graphify** | Knowledge graph — structure | Blast radius, centrality, proximity, ranking |
-| **OpenSpec** | Architecture intent — specs | Spec coverage, drift detection, propose/validate/archive workflow |
+`doctor` exits non-zero when anything is missing, so it can gate a script or CI
+step; add `--json` for machine-readable output. The same checks appear in the
+Dashboard health panel, at `GET /api/health`, and on the desktop startup screen,
+where a missing component offers a one-click install.
 
-**Search** ranks by all three: semantic × 0.50 + proximity × 0.20 + centrality × 0.15 + specCoverage × 0.15. **The agent** gets a Stardust Brief every turn with graph state, spec awareness, and per-file impact. **Planning** follows Propose → Validate → Archive with drift checking.
-
-## Why YodaMan
-
-- **Keep code private**: Designed around local project indexing and local model workflows through Context Expert and Ollama. No code leaves your machine.
-- **Understand the whole workspace**: Search and ask across indexed repositories instead of juggling isolated editor tabs.
-- **See relationships, not fragments**: Graphify builds mandatory knowledge graphs that connect code, docs, diagrams, and architectural concepts.
-- **Lend your codebase to other agents**: Cursor, Claude Code and Zed can query your private code through YodaMan's MCP server — read-only, no egress. See [why](#why-we-added-mcp).
-- **Delegate carefully**: Run agent tasks with streamed progress, persisted task history, cancellation, audit logs, and an approval gate on every action that changes anything — see [Approvals](docs/guides/approvals.md).
-- **Work where you already are**: Web UI, desktop app, CLI, VS Code extension, and mobile companion all talk to the same runtime.
-- **Extend the assistant**: Add JavaScript plugins for custom tools. Ships with 5 plugins: CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, and Graphify.
-- **Drive specs with the agent**: The agent can propose, validate, and archive OpenSpec changes through `specPropose`, `specValidate`, and `specArchive` tools — following a structured Propose → Apply → Archive workflow.
-- **See every tool's view of a file**: The Compose tab cross-references any file across OpenSpec (specs), Graphify (structure), and Context Expert (relevance) in three columns.
-- **Understand search rankings**: The Trace tab shows why each result ranked where it did — semantic × 0.50 + proximity × 0.20 + centrality × 0.15 + specCoverage × 0.15 per result.
-- **Recover gracefully**: All clients show clear recovery guidance when the local service is unavailable.
-
-## Why we added MCP
-
-Adopting an industry protocol is usually where a local-first tool starts making
-compromises. This one does not, and the reason is worth stating plainly.
-
-**MCP is a protocol, not a destination.** It is a socket. It can be plugged into
-a remote service that ships your code somewhere, or into a process on your own
-machine that ships nothing. YodaMan's server runs over stdio: nothing listens on
-a port, there are no API keys, and there is no account. The protocol is
-standard; where the data goes is our decision, and it goes nowhere.
-
-**We are a server, not a client — deliberately.** The obvious move was the other
-one: consume other people's MCP servers for memory, retrieval, and search. We
-declined, because semantic search, the dependency graph, and spec coverage *are*
-Context Expert, Graphify, and OpenSpec. Wiring in a third-party equivalent would
-have traded the thing that makes YodaMan different for a generic version of
-itself. A protocol is worth adopting; a replacement for your own differentiator
-is not.
-
-**The asymmetry is what makes it useful.** Cursor, Claude Code and Zed run
-models far stronger than anything most people can run locally — and they know
-nothing about your private codebase. YodaMan knows exactly that, on your
-machine: which modules are load-bearing, what a change would reach, which specs
-describe a file and which files no spec describes. Serving that to them joins
-their reasoning to our knowledge, without the code leaving the machine.
-
-**It is also the honest answer to a real limitation.** A model you run at home is
-weaker than a frontier model, and pretending otherwise would be dishonest. So
-rather than competing on model quality, YodaMan makes the strong model better on
-*your* code. You do not have to choose between a capable assistant and keeping
-your source private.
-
-**Every tool is read-only, permanently.** YodaMan's approval gate stops each
-write for a diff and its blast radius — but it lives in YodaMan's own agent
-loop. A client on the far side of stdio never enters that loop and cannot be
-made to. Offering a write tool there would hand out a key to a door we
-deliberately lock, so the test suite fails if a tool with a mutating name
-appears, if the server issues a `PUT`/`PATCH`/`DELETE`, or if it imports a write
-path. If you want an agent to change files through YodaMan, use YodaMan's agent,
-where consent is enforced.
-
-Setup for every client is in [MCP](docs/guides/mcp.md), and in the app under
-**Settings → Connect other agents**.
-
-## Sub-Projects
-
-| Project | Location | Description |
-|---------|----------|-------------|
-| **YodaMan Core** | `core/` | Main Express runtime, React UI, agent engine, plugins |
-| **Lightsaber** | `lightsaber/` | Git health map plugin — code hotspot analysis |
-| **Holocron VR** | `Holocron VR/` | 3D VR codebase explorer (community plugin) |
-
-## Prerequisites
-
-- Node.js 22+
-- Python 3.10+
-- Context Expert CLI: `npm install -g @contextexpert/cli`
-- OpenSpec CLI: `npm install -g @fission-ai/openspec@latest`
-- Graphify: `pip install graphifyy`
-- Ollama (for local model execution)
-
-## Quick Start
+### From source
 
 ```bash
 git clone https://github.com/Yoda-Man/yodaman.git
 cd yodaman/core
 sh setup.sh
+npm run desktop          # or: npm start, then open http://localhost:3090
 ```
 
-The runtime listens on `http://localhost:3090`. For the desktop app:
+Prerequisites: Node.js 22+, Python 3.10+, and Ollama. `yodaman setup` (or
+`setup.sh`) installs the rest.
 
-```bash
-npm run desktop
-```
+## Using YodaMan
 
-## Health Checks
+**Search or ask.** The Search view returns ranked results with an **Open**
+button. In Chat, a plain search such as "find where login is handled" is
+answered directly from the search pipeline in seconds; anything that needs
+reasoning ("explain", "fix", "compare") goes to the agent.
 
-Verify every required dependency — Ollama, Context Expert (`ctx`), Graphify, and OpenSpec — before starting:
+**Open results in your editor.** Clicking a result or a file link opens it at
+the right line in your own editor. By default that is whatever your system
+opens that file type with. To choose another, go to **Settings > Open files in**
+and pick a detected editor, or enter a command for any editor:
 
-```bash
-yodaman doctor
-```
+| Editor | Command |
+|--------|---------|
+| JetBrains IDEs | `idea --line {line} {file}` |
+| Xcode | `xed -l {line} {file}` |
+| Emacs | `emacsclient -n +{line} {file}` |
+| Anything else | `/path/to/editor {file}:{line}` |
 
-Each tool reports its version, resolved path, and reachability, and anything missing lists the install command for your platform. The command exits non-zero when a dependency is missing or unreachable, so it can gate a script or CI step; add `--json` for machine-readable output. To check knowledge graph freshness instead:
+`{file}`, `{line}` and `{column}` are filled in for you. The command is never
+run through a shell, so a file name can never become part of a command.
 
-```bash
-yodaman doctor --graph
-```
+**Let the agent work.** Agent tasks stream their progress, can be cancelled, and
+stop for your approval with a diff and its blast radius before anything is
+changed; see [Approvals](docs/guides/approvals.md). If a task runs out of steps,
+it answers from what it found and lists the files it examined.
 
-The same dependency checks run at startup, appear in the Dashboard health panel and `GET /api/health`, and appear on the desktop startup diagnostics screen where missing components offer a one-click install.
+**Work with specs.** The agent can propose, validate and archive OpenSpec
+changes (`specPropose`, `specValidate`, `specArchive`), and the Stardust tab
+shows where specs and code have drifted apart.
+
+**Use it where you are.** The web UI, desktop app, `yodaman` CLI, VS Code
+extension and mobile companion all talk to the same local runtime.
+
+**Extend it.** Plugins are plain JavaScript. YodaMan ships with CodeTrooper,
+Droid-Sweep, Grand Inquisitor, Lightsaber and Graphify.
+
+### The Stardust tabs
+
+| Tab | Shows |
+|-----|-------|
+| **Board** | Live OpenSpec changes with task progress, spec diffs, and validate/archive |
+| **Drift** | Where specs and the knowledge graph disagree |
+| **Compose** | One file, seen by all three tools side by side |
+| **Trust** | Per-tool health and whether answers can be trusted right now |
+| **Trace** | Why each search result ranked where it did |
+| **Impact** | Blast radius of a change, with spec awareness |
+| **Diagnostics** | OpenSpec install, version and project setup |
+| **Commands** | Propose, validate, archive and list, with console output |
 
 ## Choosing a model
 
 **9B parameters is the floor, not the target.** YodaMan runs on a 9B model so it
-works on modest hardware, and gets genuinely better — not merely faster — when
-you give it more.
+works on modest hardware, and gets genuinely better, not merely faster, when you
+give it more.
 
-**If you run a bigger model, raise the context window to match.** These are one
-decision, not two. Ollama serves whatever `OLLAMA_CONTEXT_LENGTH` says; when it
-is unset it picks by available VRAM, often **4096 tokens, no matter how large a
-context the model itself supports**. A 32B model served through a 4096-token
-window behaves like a 9B one, and you paid for the 32B.
+**If you run a bigger model, raise the context window to match.** Ollama serves
+whatever `OLLAMA_CONTEXT_LENGTH` says; when it is unset it picks by available
+VRAM, often **4096 tokens regardless of what the model supports**. A 32B model
+served through a 4096-token window behaves like a 9B one.
 
 | Model | Set `OLLAMA_CONTEXT_LENGTH` | YodaMan then sends | What you get |
 |---|---|---|---|
-| `qwen3.5:9b` *(minimum)* | `8192` | ~10,000 chars | Works. Tool-calling is occasionally unreliable — the agent sometimes answers with citations instead of running the tool. |
-| `qwen2.5:14b` | `16384` | ~20,000 chars | Reliable tool-calling. The point where the agent stops needing retries. |
+| `qwen3.5:9b` *(minimum)* | `8192` | ~10,000 chars | Works. Tool-calling is occasionally unreliable. |
+| `qwen2.5:14b` | `16384` | ~20,000 chars | Reliable tool-calling; the agent stops needing retries. |
 | `codestral:22b` | `32768` | ~40,000 chars | Holds context across multi-step tasks. **Recommended.** |
-| 32B-class, `deepseek-coder-v2` | `65536`–`131072` | ~80,000–120,000 chars | Whole files kept verbatim rather than clipped mid-function. |
+| 32B-class, `deepseek-coder-v2` | `65536` to `131072` | ~80,000 to 120,000 chars | Whole files kept verbatim instead of clipped. |
 
-Leaving the window unset is not neutral — it is the small-window path, and
-YodaMan will deliberately compact its prompt to fit.
-
-### Setting it
-
-From the Dashboard: **Settings → Ollama context**. Accepted values are 8192,
-16384, 32768, 65536, and 131072; YodaMan writes the setting, restarts Ollama,
-and rolls back if the restart fails.
-
-Or by hand:
+When the window is too small, the Dashboard says so and offers to set it for you
+(YodaMan writes the setting, restarts Ollama, and rolls back if the restart
+fails). Or set it by hand:
 
 ```bash
 export OLLAMA_CONTEXT_LENGTH=32768
 ```
 
-Then check the Health panel, which reports the window actually being served —
-not the one you asked for. Those differ more often than you would expect.
+The Health panel reports the window actually being served, not the one you
+asked for; those differ more often than you would expect.
 
-### The trade-off
+**Context costs VRAM** whether or not a request uses it. On a GPU that cannot
+hold it, Ollama refuses to load the model or spills into system memory and slows
+to a crawl; if that happens, step down one value. As a rough guide, 32768 is
+comfortable on 24GB for a 14B to 22B model; below 16GB, stay at 8192 to 16384.
 
-**Context costs VRAM**, and it is charged whether or not a given request uses
-it. Raising the window on a GPU that cannot hold it makes Ollama either refuse
-to load the model or spill into system memory, where everything slows to a
-crawl. If that happens, step down one value; a 22B model at 32768 will
-comfortably beat a 32B model that is swapping.
+**Why YodaMan does not trust the model's advertised maximum.** A model may
+declare 262,144 tokens while Ollama serves it 4096. Overflowing the served
+window is silent: the server drops text from the front, so the first thing lost
+is the system prompt carrying the tool instructions, and the model stops calling
+tools without any visible error. YodaMan always sizes its prompt to the window
+actually being served.
 
-Rough guidance: 32768 is comfortable on 24GB for a 14B–22B model. Below 16GB,
-stay at 8192–16384 and prefer the smaller model.
-
-### Why YodaMan will not just read the model's maximum
-
-Your model may declare it supports 262,144 tokens while Ollama is serving it
-4096. YodaMan sizes its prompt against the window **actually being served**,
-never the declared maximum — because overflowing the served window is silent.
-llama-server runs with `--context-shift`, which drops from the *front*, so the
-first thing lost is the system prompt carrying the tool instructions. The model
-then answers with citations and never calls the tool, and nothing on screen
-explains why.
-
-That is why the setting is worth getting right rather than guessing at.
-
-## Key Technologies
-
-| Layer | Technology |
-|-------|-----------|
-| Runtime | Node.js/Express |
-| Frontend | React 18 + Vite + Tailwind CSS |
-| AI/LLM | Ollama (qwen3.5:9b minimum — see [Choosing a model](#choosing-a-model)) |
-| Embeddings | HuggingFace (BAAI/bge-large-en-v1.5) |
-| Knowledge Graph | Graphify |
-| Code Indexing | Context Expert (ctx) |
-| Desktop | Electron |
-| Mobile | React Native (companion) |
-| VS Code | Extension API |
-| Database | SQLite + JSON/JSONL fallback |
-| Git | simple-git |
-
-## Project Structure
-
-```
-yodaman/
-├── backend/                    # Express runtime
-│   ├── core/                   # Agent engine, queue service, coding skill
-│   ├── infrastructure/         # ToolBox, Graphify, ContextEngine, Logger, GraphFacts, ImpactAnalyzer, etc.
-│   ├── interfaces/             # REST controller + extracted route groups (~1626 lines)
-│   ├── services/               # Git, search, file upload
-│   ├── stardust/               # SpecDrift, StardustWrapper (CLI), StardustLive (WebSocket)
-│   └── utils/                  # Doc preprocessing, query classification
-├── bin/                        # CLI entrypoint (yodaman)
-├── dist/                       # Built frontend
-├── electron/                   # Desktop app shell
-├── extensions/vscode-yodaman/  # VS Code extension
-├── frontend/                   # Shared frontend utilities + Holocron VR plugin UI
-├── plugins/                    # Installed plugins (CodeTrooper, Droid-Sweep, etc.)
-├── scripts/                    # Build and release scripts
-├── shared/                     # Shared protocol/types for external clients
-├── src/                        # React UI source
-│   ├── components/             # 28 UI components (Stardust, AgentChat, GraphStudio, etc.)
-│   ├── hooks/                  # useHealthCheck, useStardustLive, useStardustPipeline
-│   └── api/                    # Frontend HTTP client
-├── tests/                      # Jest test suites
-├── website/                    # Public website + downloads
-├── server.js                   # Express entry point
-├── start.js                    # CLI launcher
-└── package.json
-```
-
-### Before deleting anything
-
-Much of this codebase is reached without a static import: plugins are `require()`d
-from a computed path, plugin UI components are named as strings in
-`plugins/plugin.json`, and several files are entry points launched by a host
-rather than imported. Tools that build an import graph report all of it as dead.
 ## Configuration
 
 Copy `config.example.json` to `config.json` and add your workspace paths:
@@ -320,113 +252,137 @@ Copy `config.example.json` to `config.json` and add your workspace paths:
 }
 ```
 
-### Security settings
+If a workspace folder is moved or deleted, YodaMan marks it **Folder not found**
+instead of serving results from its old index. Edit its path or remove
+it in **Settings**.
 
-These live under `settings` in `config.json` and are also editable from
-Settings → Developer Settings in the UI. **Every one defaults to the safe value** — you
-only need to change them deliberately.
+### Settings
 
-| Setting | Default | Effect when enabled |
-|---------|---------|---------------------|
+These live under `settings` in `config.json` and are editable in the app.
+**Every security setting defaults to the safe value.**
+
+| Setting | Default | Effect |
+|---------|---------|--------|
 | `requirePairingToken` | `true` | Non-local clients must present a pairing token. Turning this off exposes the API to any device that can reach the port. |
-| `allowAgentCommands` | `false` | Lets the agent run shell commands, restricted to an executable allowlist (see below). |
+| `allowAgentCommands` | `false` | Lets the agent run shell commands, restricted to an executable allowlist. |
 | `allowPluginUploads` | `false` | Accepts plugin uploads over `POST /api/plugins`. |
 | `allowUnrestrictedPlugins` | `false` | Loads plugins that declare no `permissions` array. |
-| `allowSelfHealInstall` | `false` | Lets `POST /api/health/install` install missing dependencies (Ollama, ctx, OpenSpec). |
-| `allowedCommands` | `[]` | Extra executables the agent may run, on top of the built-in allowlist. Bare names only — `["docker", "kubectl"]`. |
+| `allowSelfHealInstall` | `false` | Lets `POST /api/health/install` install missing dependencies. |
+| `allowedCommands` | `[]` | Extra executables the agent may run. Bare names only, for example `["docker", "kubectl"]`. |
+| `editorCommand` | `""` | How files are opened. Empty means the system default; see [Using YodaMan](#using-yodaman). Can only be changed from this computer. |
 
-Agent shell commands are restricted to an allowlist of executables (git, npm, node, python3,
-and standard read-only inspection tools). Commands run without a shell, so `;`, `|`, `&`,
-backticks, `$(…)`, and redirection are rejected rather than interpreted. Inline evaluation
-(`node -e`, `python3 -c`) is refused; run a script file instead. Inspect the effective policy
-at any time with `GET /api/policy`.
+Agent shell commands run without a shell, so `;`, `|`, `&`, backticks, `$(…)`
+and redirection are rejected rather than interpreted, and inline evaluation
+(`node -e`, `python3 -c`) is refused. Inspect the effective policy with
+`GET /api/policy`.
 
 ### Environment variables
 
-Every setting above can be overridden by an environment variable, which takes precedence over
-`config.json`. The name is the setting in `SCREAMING_SNAKE_CASE` with a `YODAMAN_` prefix:
-
-| Variable | Overrides |
-|----------|-----------|
-| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `requirePairingToken` |
-| `YODAMAN_ALLOW_AGENT_COMMANDS` | `allowAgentCommands` |
-| `YODAMAN_ALLOW_PLUGIN_UPLOADS` | `allowPluginUploads` |
-| `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `allowUnrestrictedPlugins` |
-| `YODAMAN_ALLOW_SELF_HEAL_INSTALL` | `allowSelfHealInstall` |
-| `YODAMAN_ALLOWED_COMMANDS` | `allowedCommands` (comma-separated) |
-
-Runtime and paths:
+Any setting can be overridden by an environment variable named after it with a
+`YODAMAN_` prefix, for example `YODAMAN_ALLOW_AGENT_COMMANDS` or
+`YODAMAN_EDITOR_COMMAND`. Environment variables take precedence over
+`config.json`.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `YODAMAN_PORT` | `3090` | HTTP/WebSocket port. |
-| `YODAMAN_HOST` | `127.0.0.1` | Bind address. **Loopback by default.** Set `0.0.0.0` only to pair a phone on your LAN — the API then reaches every device on that network. |
-| `YODAMAN_CONFIG_PATH` | `./config.json` | Location of the config file. |
+| `YODAMAN_PORT` | `3090` | HTTP and WebSocket port. |
+| `YODAMAN_HOST` | `127.0.0.1` | Bind address. **Loopback by default.** Set `0.0.0.0` only to pair a phone on your LAN; the API then reaches every device on that network. |
+| `YODAMAN_CONFIG_PATH` | `./config.json` | Config file location. |
 | `YODAMAN_DB_PATH` | `./yodaman.db` | SQLite database location. |
 | `YODAMAN_UPLOAD_ROOT` | OS temp dir | Where uploaded files are staged. |
 | `YODAMAN_WATCH_DEBOUNCE_MS` | `1500` | File-watcher debounce before re-indexing. |
-
-Logging:
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
 | `YODAMAN_LOG_DIR` | `~/.yodaman/logs` | Directory for `runtime.log`. |
 | `YODAMAN_LOG_TO_FILE` | `true` | Set `false` to log to stdout only. |
 | `YODAMAN_LOG_MAX_BYTES` | `5242880` | Rotate `runtime.log` at this size. |
-| `YODAMAN_LOG_MAX_FILES` | `3` | Rotated files to retain. |
-
-Agent and integrations:
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `YODAMAN_AGENT_PROMPT_CHARS` | — | Caps the character budget for agent prompts. |
-| `YODAMAN_CTX_ASK_TIMEOUT_MS` | — | Timeout for `ctx ask` calls. |
+| `YODAMAN_LOG_MAX_FILES` | `3` | Rotated files to keep. |
+| `YODAMAN_AGENT_PROMPT_CHARS` | | Caps the character budget for agent prompts. |
+| `YODAMAN_CTX_ASK_TIMEOUT_MS` | | Timeout for `ctx ask` calls. |
 | `YODAMAN_GRAPHIFY_BIN` | `graphify` | Path to the Graphify binary. |
-| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | — | Graphify subprocess timeout. |
-| `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | — | Model Graphify uses for enrichment. |
-| `YODAMAN_GRAPHIFY_FULL_EXTRACT` | — | Forces a full re-extract instead of incremental. |
-| `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | — | Caps nodes rendered in graph visualisations. |
-| `YODAMAN_GRAPHIFY_RUNNING_STALE_MS` | — | When a running Graphify job is considered stale. |
+| `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Graphify subprocess timeout. Raise it for very large workspaces. |
+| `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | | Model Graphify uses for enrichment. |
+| `YODAMAN_GRAPHIFY_FULL_EXTRACT` | | Forces a full re-extract instead of an incremental one. |
+| `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | `25000` | Largest graph rendered as an HTML visualisation. |
+| `YODAMAN_GRAPHIFY_RUNNING_STALE_MS` | | When a running Graphify job is treated as abandoned. |
 
-Frontend build-time variables (Vite, prefixed `VITE_`): `VITE_YODAMAN_API_BASE`,
+Frontend build-time variables (Vite): `VITE_YODAMAN_API_BASE`,
 `VITE_YODAMAN_FETCH_TIMEOUT_MS`.
 
-## Stardust Dashboard
+## Connecting other agents (MCP)
 
-The **Stardust** tab is a real-time OpenSpec dashboard with 8 views:
-- **Board** — live change cards with task progress, spec diff, validate/archive workflow
-- **Drift** — architecture drift detection (specs vs knowledge graph)
-- **Compose** — file-centric cross-reference across OpenSpec, Graphify, and Context Expert
-- **Trust** — unified health dashboard with per-tool status and WorkspaceReadiness verdict
-- **Trace** — search ranking transparency with per-result scoring breakdown
-- **Impact** — dedicated blast-radius analysis with configurable hop depth and spec awareness
-- **Diagnostics** — OpenSpec install check, version, project init
-- **Commands** — Propose, Validate, Archive, List Changes, List Specs with console output
+Cursor, Claude Code, Zed and any other MCP client can query YodaMan's index
+through its MCP server. Setup for each client is in [MCP](docs/guides/mcp.md)
+and in the app under **Settings > Connect other agents**.
 
-The agent has four OpenSpec tools: `specPropose`, `specValidate`, `specArchive`, and `specDrift`.
+**It stays local.** The server runs over stdio: nothing listens on a port, and
+there are no API keys and no account. The protocol is standard; where the data
+goes is our decision, and it goes nowhere.
 
-## Clients
+**YodaMan is a server, not a client, deliberately.** Consuming third-party MCP
+servers for search or memory would have replaced Context Expert, Graphify and
+OpenSpec with generic equivalents, trading the thing that makes YodaMan
+different for a weaker version of itself.
 
-- **Web UI**: React control center at `http://localhost:3090`
-- **Desktop app**: Electron shell with managed runtime
-- **VS Code extension**: Editor-native access from the command palette
-- **Mobile companion**: React Native app for task monitoring and approvals
+**It makes strong models better on your code.** Hosted assistants run models
+far stronger than most people can run locally, and know nothing about your
+private codebase. YodaMan knows which modules are load-bearing, what a change
+would reach, and which files no spec describes. Serving that to them joins their
+reasoning to your local knowledge, without the code leaving the machine.
+
+**Every tool is read-only, permanently.** YodaMan's approval gate lives in its
+own agent loop, which an MCP client never enters. The test suite fails if a
+mutating tool appears on the server, if it issues a `PUT`, `PATCH` or `DELETE`,
+or if it imports a write path. To change files through YodaMan, use YodaMan's
+agent, where consent is enforced.
+
+## Project layout
+
+| Project | Description |
+|---------|-------------|
+| **YodaMan Core** (`core/`) | Runtime, React UI, agent, search pipeline, plugins |
+| **Lightsaber** (`lightsaber/`) | Git health map plugin: code hotspot analysis |
+| **Holocron VR** (`Holocron VR/`) | 3D VR codebase explorer (community plugin) |
+
+```
+core/
+├── backend/
+│   ├── core/              # Agent engine, search pipeline, indexing queue
+│   ├── infrastructure/    # ToolBox, Context Expert, Graphify, editor launcher, logging
+│   ├── interfaces/        # REST API and route groups
+│   ├── services/          # Git, search endpoints, file upload
+│   └── stardust/          # Spec drift, OpenSpec CLI, live updates
+├── bin/                   # `yodaman` CLI and MCP server
+├── electron/              # Desktop app
+├── extensions/            # VS Code extension
+├── plugins/               # Bundled plugins
+├── shared/                # Code shared by the runtime, UI and clients
+├── src/                   # React UI
+├── tests/                 # Jest suites, including architecture tests
+└── website/               # Public website and downloads
+```
+
+Much of the codebase is reached without a static import: plugins are loaded
+from a computed path, plugin UI components are named as strings in
+`plugins/plugin.json`, and several files are entry points launched by a host.
+Import-graph tools report those as dead; `tests/architecture/NoDeadModules.test.js`
+is the check that accounts for them.
+
+**Built with** Node.js and Express 5, React 19, Vite and Tailwind CSS, Electron,
+SQLite, Ollama, Context Expert, Graphify and OpenSpec.
 
 ## Contributing
 
-Issues are very welcome — bug reports, feature requests, and questions.
+Issues are very welcome: bug reports, feature requests and questions.
 
-Please open an issue before a pull request: YodaMan has a few architectural
-commitments (the MCP server is read-only, nothing leaves the machine, the
-approval gate defaults to deny) that are easier to agree on before code is
-written than after. [CONTRIBUTING.md](CONTRIBUTING.md) sets them out, along with
-the testing standard.
-
-By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+Please open an issue before a pull request. YodaMan has a few architectural
+commitments (every search goes through the three-tool pipeline, the MCP server
+is read-only, nothing leaves the machine, the approval gate defaults to deny)
+that are easier to agree on before code is written than after.
+[CONTRIBUTING.md](CONTRIBUTING.md) sets them out, along with the testing
+standard. By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Security
 
-Please report vulnerabilities privately rather than in a public issue — see
+Please report vulnerabilities privately rather than in a public issue. See
 [SECURITY.md](SECURITY.md) for the process and what is in scope.
 
 ## Upgrading and uninstalling
@@ -436,4 +392,4 @@ migration is needed) and how to remove YodaMan and everything it generates.
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 Marwa Trust Mutemasango
+[MIT](LICENSE). Copyright (c) 2026 Marwa Trust Mutemasango.

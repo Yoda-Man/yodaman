@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { api } from '../api/api'
+// The bundled plugin manifest is the one version source; it was hardcoded
+// here as v0.5.1 and drifted from every release after it.
+import holocronManifest from '../../plugins/plugin.json'
 
 const COMMUNITY_COLORS = [
   '#38bdf8', '#a78bfa', '#34d399', '#fb7185', '#fbbf24',
@@ -325,7 +328,7 @@ export default function HolocronVrModal({ project, diagnostics, onClose }) {
 
   return <div className="starfield fixed inset-0 z-[100] flex flex-col bg-[#02040c] text-slate-100">
     <header className="relative z-30 flex items-center justify-between border-b border-cyan-300/10 bg-slate-950/90 px-5 py-3 backdrop-blur-xl">
-      <div><div className="font-black tracking-tight">Holocron VR <span className="ml-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-cyan-200">v0.5.1</span></div><div className="max-w-[48vw] truncate text-xs text-slate-400">{project.path}</div></div>
+      <div><div className="font-black tracking-tight">Holocron VR <span className="ml-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-cyan-200">v{holocronManifest.version}</span></div><div className="max-w-[48vw] truncate text-xs text-slate-400">{project.path}</div></div>
       <div className="flex items-center gap-3">
         <span role="status" className="max-w-[42vw] text-right text-xs text-cyan-200">{error || status}</span>
         <button type="button" onClick={toggleVr} disabled={!vrSupported && !session} className="saber rounded-lg bg-cyan-400 px-4 py-2 text-xs font-black text-slate-950 shadow-[0_0_24px_rgba(34,211,238,.24)] disabled:bg-slate-700 disabled:text-slate-400 disabled:shadow-none">{session ? 'Exit VR' : vrSupported ? 'Enter VR' : 'No headset detected'}</button>

@@ -104,31 +104,21 @@ async function graphTerms(projectPath, limit = 8) {
     }
 }
 
-async function checkSearchRanking(failures) {
-    const projects = await getJson('/api/projects', 15000);
-    const list = Array.isArray(projects) ? projects : projects.projects || [];
-    const project = list.find((p) => p.indexed && Number(p.files) > 0);
-    if (!project) {
-        log('  search ranking     SKIP — no indexed workspace with files to search');
-        return;
-    }
-
+/**
+ * Search one workspace for terms its graph contains, until one is graph-ranked.
+ * @returns {{status: 'ranked'|'unranked'|'skip', detail: string, payload?: object}}
+ */
+async function rankingOn(project) {
     // Query for something the graph demonstrably contains, rather than a word
     // picked at random. An arbitrary query can legitimately return hits that are
     // not in the graph — ctx and Graphify index overlapping but different file
     // sets — and asserting graphRanked on those would fail for a sound reason.
-    // Deriving the term from a graph file makes a match the expected outcome, so
-    // a failure means the blend is genuinely not working.
     const terms = await graphTerms(project.path);
-    if (!terms.length) {
-        log('  search ranking     SKIP — no knowledge graph for this workspace to rank against');
-        return;
-    }
+    if (!terms.length) return { status: 'skip', detail: 'no knowledge graph' };
 
     // Try candidates until one is a term BOTH sides know. A single term that
     // fails proves nothing about the blend; every candidate failing does.
     let payload = null;
-    let term = null;
     const tried = [];
     const slow = [];
     for (const candidate of terms) {
@@ -138,27 +128,47 @@ async function checkSearchRanking(failures) {
             result = await getJson(`/api/search?${attempt.toString()}`);
         } catch (err) {
             // One slow or failing term must not decide the gate. Semantic search
-            // on a large workspace can take tens of seconds, and a single abort
-            // used to take the whole run down with it — reported as a journey
-            // failure when nothing about ranking had been measured.
+            // on a large workspace can take tens of seconds.
             slow.push(`${candidate} (${err.message})`);
             continue;
         }
         tried.push(candidate);
         payload = result;
-        term = candidate;
-        if (result.graphRanked) break;
+        if (result.graphRanked) return { status: 'ranked', detail: `graph-ranked on "${candidate}"`, payload };
     }
+    if (!payload) return { status: 'skip', detail: `no term returned in time (${slow.length} slow)` };
+    return { status: 'unranked', detail: `${tried.length} graph term(s) fell back to semantic only: ${tried.join(', ')}`, payload };
+}
 
-    if (slow.length) {
-        log(`  search ranking     note — ${slow.length} term(s) did not return in time: ${slow.join(', ')}`);
-    }
-
-    if (!payload) {
-        log('  search ranking     SKIP — no candidate term returned a result to rank');
+async function checkSearchRanking(failures) {
+    const projects = await getJson('/api/projects', 15000);
+    const list = Array.isArray(projects) ? projects : projects.projects || [];
+    // Several workspaces, not the first one found. Which workspace comes first
+    // depends on the machine; an umbrella folder whose graph covers nested
+    // repositories that Context Expert skips is legitimately unranked, and
+    // judging the whole product on it measured the sample, not the blend. The
+    // blend is broken when it works in NONE of them.
+    const candidates = list.filter((p) => p.indexed && Number(p.files) > 0).slice(0, 4);
+    if (!candidates.length) {
+        log('  search ranking     SKIP — no indexed workspace with files to search');
         return;
     }
 
+    const outcomes = [];
+    let ranked = null;
+    for (const project of candidates) {
+        const outcome = await rankingOn(project);
+        outcomes.push({ name: path.basename(project.path), ...outcome });
+        if (outcome.status === 'ranked') { ranked = outcome; break; }
+    }
+
+    const measured = outcomes.filter((o) => o.status !== 'skip');
+    if (!measured.length) {
+        log(`  search ranking     SKIP — nothing to rank against (${outcomes.map((o) => `${o.name}: ${o.detail}`).join('; ')})`);
+        return;
+    }
+
+    const payload = (ranked || measured[0]).payload;
     const weights = payload.weights || {};
 
     const missing = EXPECTED_WEIGHTS.filter((signal) => typeof weights[signal] !== 'number');
@@ -175,19 +185,21 @@ async function checkSearchRanking(failures) {
         return;
     }
 
-    if (!payload.graphRanked) {
+    for (const o of outcomes.filter((x) => x.status !== 'ranked')) {
+        log(`  search ranking     note — ${o.name}: ${o.detail}`);
+    }
+
+    if (!ranked) {
         // Not a cosmetic failure: the product advertises a four-signal blend and
-        // is returning semantic-only ordering while still reporting the weights.
-        log('  search ranking     FAILED — weights advertised but graphRanked=false');
-        log(`                     ${tried.length} graph-connected term(s) all fell back to`);
-        log(`                     semantic only for ${path.basename(project.path)}: ${tried.join(', ')}`);
+        // returned semantic-only ordering everywhere it was measured.
+        log('  search ranking     FAILED — weights advertised but graphRanked=false in every workspace tried');
         log('                     Usually ctx and Graphify were indexed from different');
         log('                     roots: compare a result path against graphify-out/graph.json.');
         failures.push('graph ranking inactive');
         return;
     }
 
-    log(`  search ranking     ok — four signals, graph-ranked on "${term}", ${(payload.results || []).length} results`);
+    log(`  search ranking     ok — four signals, ${ranked.detail} in ${outcomes.at(-1).name}, ${(payload.results || []).length} results`);
 }
 
 async function checkReadiness(failures) {

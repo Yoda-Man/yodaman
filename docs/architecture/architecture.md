@@ -1,6 +1,6 @@
 # YodaMan Architecture Overview
 
-This document describes the architecture of YodaMan v0.5.7, a local-first workspace intelligence platform for developers.
+This document describes the architecture of YodaMan v0.5.8, a local-first workspace intelligence platform for developers.
 
 > **Before deleting any file listed here:** a significant part of this system is
 > wired up at runtime rather than through imports — plugins are `require()`d from
@@ -38,9 +38,6 @@ Infrastructure Layer — ToolBox, ContextEngine, GraphifyService, Logger,
     │
     ▼
 Stardust Layer — StardustLive + StardustWrapper + SpecDrift
-    │
-    ▼
-Utilities — docPreprocessor, queryClassifier
     │
     ▼
 External — Context Expert CLI (ctx), Graphify CLI, OpenSpec CLI,
@@ -103,11 +100,6 @@ graph TD
         StardustWrap[StardustWrapper]
     end
 
-    subgraph Utilities
-        DocPrep[docPreprocessor]
-        QueryClass[queryClassifier]
-    end
-
     subgraph External
         Ctx[Context Expert CLI]
         GFX[Graphify CLI]
@@ -126,7 +118,6 @@ graph TD
     API --> Queue
     API --> Settings
     API --> Audit
-    SearchRouter --> DocPrep
     SearchRouter --> QueryClass
     SearchRouter --> GraphRanker
     FileUpload --> FS
@@ -170,6 +161,7 @@ core/
 │   │   ├── ConversationBuffer.js       # Agent conversation context buffer + history manager
 │   │   ├── DefaultCodingSkill.js       # Default coding guidelines injected into every task
 │   │   ├── QueueService.js             # Background indexing job manager
+│   │   ├── SearchPipeline.js           # THE search: Context Expert -> Graphify -> OpenSpec
 │   │   └── StardustBrief.js            # Stardust change summarisation + briefing engine
 │   ├── infrastructure/
 │   │   ├── AuditLog.js                 # Tool-call audit trail
@@ -178,6 +170,7 @@ core/
 │   │   ├── Database.js                 # SQLite / JSON fallback persistence layer
 │   │   ├── DependencyChecker.js        # Cross-platform tool locator + health checker
 │   │   ├── DependencyDoctor.js         # Runtime dependency health report for CLI
+│   │   ├── EditorLauncher.js           # Opens a file at a line in the user's editor
 │   │   ├── FileSystemWatcher.js        # Chokidar-based file-change monitor
 │   │   ├── GraphFacts.js               # Workspace-wide structural graph queries
 │   │   ├── GraphRanker.js              # Semantic + structural hybrid search re-ranking
@@ -196,7 +189,9 @@ core/
 │   ├── interfaces/
 │   │   ├── RestController.js           # All HTTP endpoints + SSE streams
 │   │   ├── routes/
+│   │   │   ├── editorRoutes.js         # Open a workspace file in the user's editor
 │   │   │   ├── gitRoutes.js            # Git-related HTTP endpoints
+│   │   │   ├── graphifyRoutes.js       # Graph build, status, artifacts, queries
 │   │   │   └── stardustRoutes.js       # Stardust-related HTTP endpoints
 │   │   └── support/
 │   │       ├── git.js                  # Git helper utilities
@@ -204,14 +199,11 @@ core/
 │   ├── services/
 │   │   ├── fileUploadService.js        # File upload handling (temp storage, validation)
 │   │   ├── gitService.js               # Git operations (history, heatmap, commit, branch)
-│   │   └── searchRouter.js             # Hybrid code/doc search with query classification
-│   ├── stardust/
-│   │   ├── SpecDrift.js                # Architecture drift detection (spec vs. graph)
-│   │   ├── StardustLive.js             # Real-time WebSocket + chokidar change watcher
-│   │   └── StardustWrapper.js          # OpenSpec CLI subprocess wrapper
-│   └── utils/
-│       ├── docPreprocessor.js          # Documentation chunker for ctx indexing
-│       └── queryClassifier.js          # Heuristic code vs. documentation query classifier
+│   │   └── searchRouter.js             # /api/search endpoints over SearchPipeline
+│   └── stardust/
+│       ├── SpecDrift.js                # Architecture drift detection (spec vs. graph)
+│       ├── StardustLive.js             # Real-time WebSocket + chokidar change watcher
+│       └── StardustWrapper.js          # OpenSpec CLI subprocess wrapper
 ├── frontend/
 │   ├── FileUploader.jsx                # Drag-and-drop file upload component
 │   ├── UIPanel.js                      # VR launch panel (compiled JS)
@@ -303,7 +295,7 @@ Support modules under `backend/interfaces/support/`:
 |--------|------|---------|
 | **fileUploadService** | `fileUploadService.js` | File upload handling with Multer. Validates file types and size (5 MB max), stores temp files with TTL-based cleanup (1 hour), manages task-file associations. Accepted extensions: `.dart`, `.js`, `.ts`, `.json`, `.yaml`, `.md`, `.log`, `.txt`. |
 | **gitService** | `gitService.js` | Git operations via simple-git. Provides history, commit details, branch listing, heatmap data, and file context with workspace-path safety validation. All paths are validated to ensure they resolve within the workspace. |
-| **searchRouter** | `searchRouter.js` | Express router for hybrid search. Classifies queries as code or doc via queryClassifier, loads watched directories from config.json, uses ToolBox for code search and ContextEngine for semantic search, re-ranks results with GraphRanker, aggregates results from multiple sources. |
+| **searchRouter** | `searchRouter.js` | HTTP endpoints for search (`/api/search`, `/code`, `/docs`). Each calls `SearchPipeline.search` with a retrieval mode and shapes the response; it holds no search logic of its own. |
 
 ### 3. Core Layer (`backend/core/`)
 
@@ -317,7 +309,9 @@ Support modules under `backend/interfaces/support/`:
 
 **DefaultCodingSkill**: A string constant injected into every agent task as a system prompt. Encodes standard coding guidelines: surface assumptions and tradeoffs, prefer smallest change, keep edits surgical, verify with tests/builds, use Graphify impact analysis for risky edits, remove only self-created dead code, ask before editing when unclear.
 
-**QueueService**: Manages background indexing jobs. Wraps `ctx index` subprocess. Deduplicates queued paths.
+**QueueService**: Manages background indexing jobs. Wraps `ctx index` subprocess. Deduplicates queued paths. Indexes each workspace under a unique name (`ContextEngine.indexNameFor`), so two folders with the same name can both be indexed.
+
+**SearchPipeline**: The only place a search is assembled. Context Expert retrieves, duplicates and generated or missing files are dropped, Graphify ranks, OpenSpec tags, and the result reports which of the three contributed (`pillars`). See [Search Flow](#search-flow).
 
 **StardustBrief**: Stardust change summarisation and briefing engine. Reads OpenSpec change proposals and distils them into concise briefs injected into the agent's conversation context. Extracts affected files, acceptance criteria, and validation status so the agent understands the current change without parsing raw spec files.
 
@@ -325,8 +319,9 @@ Support modules under `backend/interfaces/support/`:
 
 | Module | File | Purpose |
 |--------|------|---------|
-| **ToolBox** | `ToolBox.js` | ~22,900 lines. Built-in tools + plugin loader + permission validation. Loads `.js` files from `plugins/` directory. Validates against permission allowlist. |
-| **ContextEngine** | `ContextEngine.js` | Wraps `ctx` CLI for search, ask, list, status operations. Handles subprocess spawning and JSON output parsing. Output passes through CliOutput for noise removal. |
+| **ToolBox** | `ToolBox.js` | Built-in tools + plugin loader + permission validation. Loads `.js` files from `plugins/` directory. Validates against permission allowlist. Its `searchCode` tool is the search pipeline; raw retrieval (`contextExpertSearch`) is private to the pipeline. |
+| **ContextEngine** | `ContextEngine.js` | Wraps `ctx` CLI for search, ask, list, status operations. Handles subprocess spawning and JSON output parsing. Output passes through CliOutput for noise removal. Maps a workspace path to its ctx project name, and never to a different project that shares the folder name. |
+| **EditorLauncher** | `EditorLauncher.js` | Opens a file at a line in the user's editor: the OS default for the file type, a chosen app, or any command template (`{file}`, `{line}`, `{column}`). Never runs a shell. |
 | **GraphifyService** | `GraphifyService.js` | Builds and queries the knowledge graph. Wraps Graphify CLI. Manages graph cache freshness. Provides `query()`, `build()`, `freshness()`, `explain()`, `path()`, `affected()`. |
 | **Logger** | `Logger.js` | Structured JSON logging with levels (debug, info, warn, error). Logs to file and console. Includes correlation IDs for request tracing. |
 | **AuditLog** | `AuditLog.js` | Records every tool call with parameters, result summary, and duration. Backed by SQLite or JSON file. Queryable by tool name, date range, or user action. |
@@ -356,13 +351,6 @@ The Stardust layer integrates YodaMan with OpenSpec, an external spec-driven cha
 | **StardustLive** | `StardustLive.js` | Real-time dashboard backend. Watches the `openspec/` directory with chokidar, builds typed snapshots (change board with task progress, validation status, graph freshness), parses operation-grouped spec deltas, and pushes live updates over WebSocket at `/api/stardust/live`. Also provides REST fallbacks (`GET /api/stardust/board`, `GET /api/stardust/deltas/:name`, `PUT /api/stardust/validation/:name`). |
 | **StardustWrapper** | `StardustWrapper.js` | CLI subprocess wrapper for `openspec`. Spawns the official OpenSpec CLI as a child process. Provides 100% functional coverage of OpenSpec's core workflow: propose → validate → apply → archive. Uses DependencyChecker for cross-platform binary resolution, falling back to `npx openspec`. Caches the resolved binary path after first call. |
 | **SpecDrift** | `SpecDrift.js` | Architecture drift detection. Compares intended architecture (prose in OpenSpec specs) against actual architecture (Graphify graph). Detects two drift types: **staleReferences** — a spec cites a file the graph has never seen (renamed/deleted); **undocumented** — a heavily depended-on module no spec mentions. Uses GraphFacts for graph queries. |
-
-### 6. Utilities (`backend/utils/`)
-
-| Module | File | Purpose |
-|--------|------|---------|
-| **docPreprocessor** | `docPreprocessor.js` | Documentation preprocessing for ctx indexing. Scans configured project directories for documentation files (Markdown, reST, AsciiDoc, plain text), splits them into heading-based chunks, and writes each chunk to a `.yodaman-doc-chunks` directory with YAML front-matter metadata. Also extracts JSDoc comment blocks from JavaScript/TypeScript sources. Updates ctx configuration to watch the generated chunk directories. |
-| **queryClassifier** | `queryClassifier.js` | Heuristic query classifier. Determines whether a user query is about code or documentation using keyword presence (function, class, import, etc. for code; readme, guide, tutorial, etc. for doc), file-type patterns, and punctuation heuristics. Returns `'code'` or `'doc'`. Falls back to word-count heuristic when signals are ambiguous: ≤4 words → code, otherwise doc. |
 
 ## MCP Server (`bin/yodaman-mcp.mjs`)
 
@@ -441,17 +429,28 @@ User → POST /api/agent/task { task: "Refactor App.jsx" }
     5. Stream final_answer via SSE
 ```
 
-### Hybrid Search Flow
+### Search Flow
+
+Every search (Search view, Chat, the agent's `searchCode` tool, Trace, docs
+search, Stardust Compose, the ask fallback, MCP) runs one pipeline,
+`backend/core/SearchPipeline.js`. Callers choose what to retrieve; they cannot
+skip a stage. `tests/architecture/SearchPipelineBoundary.test.js` fails the
+build if code searches around it.
 
 ```
-User → POST /api/search { query: "authentication middleware" }
-  → searchRouter receives query
-  → queryClassifier.classifyQuery() → "code" or "doc"
-  → ContextEngine.search() returns semantic results
-  → GraphRanker.rerank() blends semantic + structural scores
-  → If code query: GraphifyService.query() for graph-aware enrichment
-  → Aggregated results returned to UI
+GET /api/search?query=authentication middleware
+  → SearchPipeline.search({ mode: 'unified' | 'code' | 'doc' })
+  → 1. Context Expert retrieves     ToolBox.contextExpertSearch (ctx search -p <index name>)
+  → 2. Clean                        dedupe, drop generated files and files no longer on disk
+  → 3. Graphify ranks               GraphRanker.rerank: semantic 0.50, proximity 0.20,
+                                    centrality 0.15, spec coverage 0.15
+  → 4. OpenSpec tags                each hit's covering specs (specFlag)
+  → { results, pillars: { contextExpert, graphify, openspec }, dropped }
 ```
+
+A workspace whose folder is missing is refused with `workspace_missing`. A
+workspace Context Expert has not indexed falls back to a filesystem scan, and
+`pillars.contextExpert` is false.
 
 ### Workspace Readiness Check
 
@@ -589,7 +588,7 @@ The frontend communicates with the backend exclusively through the REST API. Age
 | **PluginAuthoringGuide** | `PluginAuthoringGuide.jsx` | In-app plugin authoring guide with live template generator. Walks developers through the plugin manifest, permissions, and execute/onLoad patterns. Generates a scaffolded plugin.js file ready for installation. |
 | **PluginsWindow** | `PluginsWindow.jsx` | Plugin list, upload, enable/disable management interface. ~13KB. |
 | **ProjectList** | `ProjectList.jsx` | Workspace project list sidebar with add/remove project management. ~12KB. |
-| **SearchTrace** | `SearchTrace.jsx` | Search result provenance trace view. Shows why each result was ranked where it is — semantic score, structural score, query classification, and source breakdown. |
+| **SearchTrace** | `SearchTrace.jsx` | Search result provenance trace view. Shows why each result was ranked where it is: semantic score, proximity, centrality and spec coverage. |
 | **SearchWindow** | `SearchWindow.jsx` | Semantic search interface with result listing. ~7KB. |
 | **SettingsModal** | `SettingsModal.jsx` | Workspace and developer settings modal. ~16KB. |
 | **SpecDiff** | `SpecDiff.jsx` | Operation-grouped spec delta viewer with side-by-side before/after rendering. Highlights additions, removals, and modifications per operation. |

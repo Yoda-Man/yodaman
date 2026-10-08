@@ -29,13 +29,70 @@ const REDACT = !process.argv.includes('--no-redact');
 const WIDTH = 1440;
 const HEIGHT = 900;
 
-/** Views to capture: a label, and the tab button text that opens it. */
+/**
+ * Views to capture: a label, the tab button text that opens it, and optional
+ * `steps` run inside the view before capture (a sub-tab click, a query).
+ *
+ * stardust-trace.png is the one that shows YodaMan's core: a real search, with
+ * each hit's Context Expert relevance, Graphify proximity and centrality, and
+ * OpenSpec coverage, blended into the order shown.
+ */
 const VIEWS = [
     { file: 'dashboard.png', tab: 'Dashboard', settle: 2500, expect: 'System Dashboard' },
     { file: 'graph.png', tab: 'Graph', settle: 4000, expect: 'Graph' },
     { file: 'stardust.png', tab: 'Stardust', settle: 3000, expect: 'Stardust' },
+    {
+        file: 'stardust-trace.png',
+        tab: 'Stardust',
+        settle: 1500,
+        expect: 'semantic',
+        steps: [
+            { click: 'Trace' },
+            { search: { placeholder: 'Search for anything', query: 'search pipeline ranking' } },
+            // Done when the summary says how the order was decided.
+            { waitFor: ['Blended', 'Semantic only'], timeoutMs: 120000 }
+        ]
+    },
     { file: 'plugins.png', tab: 'Plugins', settle: 1500, expect: 'Plugins' }
 ];
+
+/** Fill a React-controlled input and submit its form, the way typing would. */
+const searchScript = ({ placeholder, query }) => `
+(() => {
+  const input = [...document.querySelectorAll('input')]
+    .find(i => (i.placeholder || '').startsWith(${JSON.stringify(placeholder)}));
+  if (!input) return false;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  setter.call(input, ${JSON.stringify(query)});
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.form.requestSubmit();
+  return true;
+})()
+`;
+
+/** Run a view's steps. Each one fails loudly rather than capturing the wrong screen. */
+async function runSteps(win, view) {
+    for (const step of view.steps || []) {
+        if (step.click) {
+            if (!(await win.webContents.executeJavaScript(clickTabScript(step.click)))) {
+                throw new Error(`${view.file}: no "${step.click}" button to click.`);
+            }
+            await new Promise((r) => setTimeout(r, 1000));
+        } else if (step.search) {
+            if (!(await win.webContents.executeJavaScript(searchScript(step.search)))) {
+                throw new Error(`${view.file}: no search box with placeholder "${step.search.placeholder}".`);
+            }
+        } else if (step.waitFor) {
+            const deadline = Date.now() + (step.timeoutMs || 30000);
+            const probe = `(() => { const t = document.body.innerText; return ${JSON.stringify(step.waitFor)}.some(w => t.includes(w)); })()`;
+            while (!(await win.webContents.executeJavaScript(probe))) {
+                if (Date.now() > deadline) throw new Error(`${view.file}: "${step.waitFor.join('" or "')}" never appeared.`);
+                await new Promise((r) => setTimeout(r, 1000));
+            }
+            await new Promise((r) => setTimeout(r, 800));
+        }
+    }
+}
 
 /**
  * Click a top-level tab by its visible text.
@@ -98,11 +155,17 @@ const modalIsOpen = `
 })()
 `;
 
-/** Activate the workspace named 'yodaman' — the project itself, safe to show. */
+/**
+ * The workspace to photograph. YodaMan's own source by default: it is public,
+ * so nothing private reaches the README. YODAMAN_SCREENSHOT_WORKSPACE picks
+ * another (by the name shown in the sidebar).
+ */
+const WORKSPACE = process.env.YODAMAN_SCREENSHOT_WORKSPACE || 'yodaman';
+
 const selectWorkspace = `
 (() => {
   const el = [...document.querySelectorAll('*')]
-    .find(e => e.children.length === 0 && (e.textContent || '').trim() === 'yodaman');
+    .find(e => e.children.length === 0 && (e.textContent || '').trim() === ${JSON.stringify(WORKSPACE)});
   if (!el) return false;
   (el.closest('[class*=cursor], div') || el).click();
   return true;
@@ -175,6 +238,7 @@ async function capture(win, view) {
     }
 
     await new Promise((r) => setTimeout(r, view.settle));
+    await runSteps(win, view);
 
     // Refuse to photograph a modal. File size cannot tell the difference
     // between the dashboard and an onboarding dialog over a blurred dashboard —
@@ -243,7 +307,9 @@ app.whenReady().then(async () => {
         }
 
         const picked = await win.webContents.executeJavaScript(selectWorkspace);
-        if (!picked) console.warn('  (no "yodaman" workspace found — capturing whatever is active)');
+        // Capturing "whatever is active" produced README images of an app with
+        // no workspace selected. A missing workspace is a failed capture.
+        if (!picked) throw new Error(`No "${WORKSPACE}" workspace in the sidebar; add it, or every capture would show an empty app.`);
         await new Promise((r) => setTimeout(r, 2500));
 
         if (REDACT) {

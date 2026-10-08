@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, FolderPlus, Trash2, ShieldCheck, Info, Globe, HardDrive, Pencil, Save, FolderOpen, Clipboard } from 'lucide-react'
 import { api } from '../api/api'
+import EditorSettings from './EditorSettings'
 
 /**
  * How each client registers an MCP server.
@@ -328,6 +329,9 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
                     </div>
 
                 <div className="pb-2">
+                    <div className="mb-4">
+                        <EditorSettings />
+                    </div>
                     <details className="group">
                         <summary className="text-[10px] font-black uppercase tracking-widest text-slate-500 cursor-pointer hover:text-slate-300 select-none">⚙️ Developer Settings</summary>
                         <div className="mt-4 space-y-4 text-sm" id="dev-settings">
