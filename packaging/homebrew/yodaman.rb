@@ -11,8 +11,8 @@
 class Yodaman < Formula
   desc "Local-first workspace intelligence: semantic search, knowledge graph, spec drift"
   homepage "https://github.com/Yoda-Man/yodaman"
-  url "https://registry.npmjs.org/yodaman/-/yodaman-0.5.5.tgz"
-  sha256 "1205729eaa6ed4b02c7b2581f4a103d8d0d6190e96e79adaaf0e2f6e075d9ddf"
+  url "https://registry.npmjs.org/yodaman/-/yodaman-0.5.8.tgz"
+  sha256 "8bce3d075ef26f9bc4d528a4460936c8eae6a0cb7f4f3afcf55370a57525d67f"
   license "MIT"
 
   depends_on "node"
@@ -35,21 +35,13 @@ class Yodaman < Formula
   end
 
   test do
-    # NOTE: `yodaman --version` and `--help` only exit (rather than starting the
-    # runtime) from 0.5.6 onward. Asserting on them here while `url` still
-    # points at 0.5.5 makes `brew test` hang on a server that never returns —
-    # a test that cannot pass is worse than one that is narrow.
-    #
-    # After publishing 0.5.6, `node scripts/brew-formula.js` repoints the url,
-    # and these two lines should replace the checks below:
-    #
-    #   assert_match version.to_s, shell_output("#{bin}/yodaman --version")
-    #   assert_match "yodaman setup", shell_output("#{bin}/yodaman --help")
-    #
-    # Until then, verify what can be verified without starting anything: the
-    # executables are installed, and the package is the version claimed.
-    assert_predicate bin/"yodaman", :exist?
-    assert_predicate bin/"yodaman-mcp", :exist?
-    assert_match version.to_s, (libexec/"lib/node_modules/yodaman/package.json").read
+    # Exercise the CLI rather than just asserting the files are on disk: both
+    # subcommands must exit instead of starting the runtime, and a regression
+    # there hangs `brew test` rather than failing it.
+    assert_match version.to_s, shell_output("#{bin}/yodaman --version")
+    assert_match "yodaman setup", shell_output("#{bin}/yodaman --help")
+
+    # Nothing above covers the second executable.
+    assert_path_exists bin/"yodaman-mcp"
   end
 end
