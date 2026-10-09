@@ -334,6 +334,33 @@ function isStaleRunningBuild(buildStatus, now = new Date()) {
     return now.getTime() - timestamp > STALE_RUNNING_BUILD_MS;
 }
 
+/** The most a map request may return: enough for the VR view, bounded for the runtime. */
+const MAX_MAP_NODES = 10000;
+
+/**
+ * Which nodes a map shows.
+ *
+ * 'order' is the graph file's own order (Graph Studio's small preview).
+ * 'degree' is the most connected nodes first. On a large workspace the file's
+ * first N nodes are an arbitrary slice, often configs and fixtures; the
+ * structure worth seeing is in the hubs. Ties keep file order, so the result
+ * is stable.
+ */
+function selectMapNodes(graph, max, rank) {
+    const all = graph.nodes || [];
+    if (rank !== 'degree' || all.length <= max) return all.slice(0, max);
+    const degree = new Map();
+    for (const link of graph.links || []) {
+        degree.set(link.source, (degree.get(link.source) || 0) + 1);
+        degree.set(link.target, (degree.get(link.target) || 0) + 1);
+    }
+    return all
+        .map((node, index) => ({ node, index, degree: degree.get(node.id) || 0 }))
+        .sort((a, b) => b.degree - a.degree || a.index - b.index)
+        .slice(0, max)
+        .map(entry => entry.node);
+}
+
 function summarizeBuildStatus(projectPath, buildStatus, { now = new Date() } = {}) {
     const currentGraphPath = graphPath(projectPath);
     const graphExists = fs.existsSync(currentGraphPath);
@@ -843,9 +870,10 @@ module.exports = {
      *
      * A read must never write, and never block on a build.
      */
-    async map(projectPath, { limit = 80 } = {}) {
+    async map(projectPath, { limit = 80, rank = 'order' } = {}) {
         const graph = this.readGraph(projectPath);
-        const nodes = (graph.nodes || []).slice(0, Number(limit || 80)).map(node => ({
+        const max = Math.min(Math.max(Number(limit) || 80, 1), MAX_MAP_NODES);
+        const nodes = selectMapNodes(graph, max, rank).map(node => ({
             id: node.id,
             label: node.label || node.id,
             community: node.community,
@@ -856,7 +884,7 @@ module.exports = {
         const nodeIds = new Set(nodes.map(node => node.id));
         const links = (graph.links || [])
             .filter(link => nodeIds.has(link.source) && nodeIds.has(link.target))
-            .slice(0, Number(limit || 80) * 2)
+            .slice(0, max * (rank === 'degree' ? 6 : 2))
             .map(link => ({
                 source: link.source,
                 target: link.target,

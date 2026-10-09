@@ -239,3 +239,37 @@ describe('any editor, through a command template', () => {
         expect(validateSetting(42)).toMatch(/text/);
     });
 });
+
+describe('GET /editor/preview', () => {
+    function previewHandler() {
+        const layer = router.stack.find((l) => l.route?.path === '/editor/preview' && l.route.methods.get);
+        return layer.route.stack[0].handle;
+    }
+    async function get(query) {
+        const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(p) { this.payload = p; return this; } };
+        await previewHandler()({ query, ip: '127.0.0.1', id: 't' }, res);
+        return res;
+    }
+
+    test('returns a window of lines starting at the requested line', async () => {
+        fs.writeFileSync(path.join(workspace, 'auth', 'login.py'), Array.from({ length: 100 }, (_, i) => `line ${i + 1}`).join('\n'));
+        const res = await get({ workspace, path: 'auth/login.py', line: '10' });
+        expect(res.statusCode).toBe(200);
+        expect(res.payload.startLine).toBe(10);
+        expect(res.payload.lines[0]).toBe('line 10');
+        expect(res.payload.lines).toHaveLength(40);
+        expect(res.payload.totalLines).toBe(100);
+    });
+
+    test('has the same containment as opening a file', async () => {
+        fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(workspace, 'link.txt'));
+        expect((await get({ workspace, path: 'link.txt' })).statusCode).toBe(403);
+        expect((await get({ workspace: outside, path: 'secret.txt' })).statusCode).toBe(404);
+        expect((await get({ workspace, path: '../x' })).statusCode).toBe(404);
+    });
+
+    test('refuses binary files', async () => {
+        fs.writeFileSync(path.join(workspace, 'blob.bin'), Buffer.from([0x50, 0x00, 0x01, 0x02]));
+        expect((await get({ workspace, path: 'blob.bin' })).statusCode).toBe(415);
+    });
+});

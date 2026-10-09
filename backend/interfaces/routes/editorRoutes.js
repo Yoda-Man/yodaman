@@ -94,6 +94,43 @@ router.post('/editor/open', async (req, res) => {
     }
 });
 
+const PREVIEW_MAX_BYTES = 1024 * 1024;
+const PREVIEW_LINES = 40;
+
+/**
+ * A short, read-only window of a workspace file, for Holocron's node detail.
+ *
+ * Same containment as /editor/open (registered workspace, real file, no
+ * symlink escapes). Reading is not limited to this computer, because search
+ * already returns snippets to paired clients; it is limited to text files of
+ * at most 1 MB, and to PREVIEW_LINES lines from `line`.
+ */
+router.get('/editor/preview', (req, res) => {
+    let file;
+    let line;
+    try {
+        const workspace = resolveRegisteredProjectPath(req.query?.workspace);
+        file = resolveWorkspaceFile(workspace, validateString(req.query?.path, 'path', { max: 4096 }));
+        line = parseLine(req.query?.line) || 1;
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, err.code || 'invalid_request');
+    }
+
+    const { size } = fs.statSync(file);
+    if (size > PREVIEW_MAX_BYTES) return jsonError(res, 413, 'File is too large to preview', 'preview_too_large');
+    const bytes = fs.readFileSync(file);
+    if (bytes.subarray(0, 8192).includes(0)) return jsonError(res, 415, 'Binary file; nothing to preview', 'preview_binary');
+
+    const lines = bytes.toString('utf8').split('\n');
+    const start = Math.min(Math.max(line, 1), Math.max(lines.length, 1));
+    res.json({
+        file,
+        startLine: start,
+        totalLines: lines.length,
+        lines: lines.slice(start - 1, start - 1 + PREVIEW_LINES).map((text) => text.slice(0, 400))
+    });
+});
+
 /**
  * What the Settings picker offers: the current choice, the OS default for a
  * typical source file, and the editors found on this machine. Detection only

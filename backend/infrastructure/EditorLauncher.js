@@ -53,6 +53,8 @@ const BUNDLED_CLIS = [
         find: (app) => {
             const dir = path.join(app, 'Contents', 'Resources', 'app', 'bin');
             let entries;
+            // No bin/ directory: not a VS Code-family bundle. Not an error;
+            // the next layout is tried.
             try { entries = fs.readdirSync(dir); } catch (_err) { return null; }
             // The CLI is the one extensionless executable; skip helper scripts.
             const cli = entries.find((name) => !name.includes('.') && !/tunnel/i.test(name));
@@ -73,6 +75,7 @@ const BUNDLED_CLIS = [
 ];
 
 function existing(candidate) {
+    // A missing path is the expected answer for most candidates.
     try { return fs.statSync(candidate).isFile() ? candidate : null; } catch (_err) { return null; }
 }
 
@@ -249,6 +252,7 @@ function detectEditors() {
         const roots = ['/Applications', path.join(require('os').homedir(), 'Applications')];
         for (const root of roots) {
             let entries;
+            // ~/Applications often does not exist; that only means nothing is installed there.
             try { entries = fs.readdirSync(root); } catch (_err) { continue; }
             for (const entry of entries.filter((name) => name.endsWith('.app')).sort()) {
                 const app = path.join(root, entry);

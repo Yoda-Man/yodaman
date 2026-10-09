@@ -206,8 +206,6 @@ core/
 │       └── StardustWrapper.js          # OpenSpec CLI subprocess wrapper
 ├── frontend/
 │   ├── FileUploader.jsx                # Drag-and-drop file upload component
-│   ├── UIPanel.js                      # VR launch panel (compiled JS)
-│   ├── VRViewer.js                     # Three.js 3D constellation viewer (compiled JS)
 │   ├── voiceAgentBridge.js             # Voice recognition bridge + hotword detection
 │   └── voiceCommands.js                # SpeechRecognition wrapper + transcript normalizer
 ├── src/
@@ -606,8 +604,6 @@ The `frontend/` directory at the project root contains self-contained modules th
 | Module | File | Purpose |
 |--------|------|---------|
 | **FileUploader** | `FileUploader.jsx` | Drag-and-drop file upload component. Accepts `.dart`, `.js`, `.ts`, `.json`, `.yaml`, `.md`, `.log`, `.txt`. Uses the API client for temp file upload with progress tracking. Displays file size and provides remove capability. |
-| **UIPanel** | `UIPanel.js` | VR launch panel (compiled JS). Provides a "Launch VR Explorer" button with Graphify status checking and loading/error states. Loads VRViewer via the plugin modal system. |
-| **VRViewer** | `VRViewer.js` | Three.js 3D constellation viewer (compiled JS). Renders the knowledge graph as an interactive 3D force-directed layout with LOD tiers (FULL/MID/DOT/CULLED), glow effects on high-importance nodes, edge type coloring, cluster aggregation, Git time-travel mode, Git heatmap overlay, voice command support, and filter controls. ~33KB. |
 | **voiceAgentBridge** | `voiceAgentBridge.js` | Voice recognition bridge. Manages SpeechRecognition lifecycle, hotword detection ("Hey Yoda"), silence timeout (10s), auto-submit on pause (2s), and voice agent settings persistence in localStorage. |
 | **voiceCommands** | `voiceCommands.js` | SpeechRecognition constructor wrapper with cross-browser support (webkitSpeechRecognition fallback). Provides `createSpeechRecognition()` factory and `normalizeVoiceTranscript()` for converting spoken punctuation to text (e.g., "new line" → \\n, "question mark" → ?). |
 

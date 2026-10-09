@@ -48,13 +48,17 @@ app.use(cors({ origin: originPolicy.corsOrigin, credentials: true }));
 app.use(express.json());
 app.use(logger.requestId);
 app.use(logger.requestLogger);
+// 'wasm-unsafe-eval' lets the page compile WebAssembly (Holocron's layout
+// engine) and nothing else: JavaScript eval stays forbidden. Without it the
+// engine failed with a CSP CompileError and Holocron fell back to its basic
+// layout. tests/infrastructure/SecurityHeaders.test.js holds both halves.
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader(
         'Content-Security-Policy',
-        "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:*"
+        "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' http://localhost:* http://127.0.0.1:*"
     );
     next();
 });

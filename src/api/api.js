@@ -108,6 +108,17 @@ export const api = {
         }));
     },
 
+    /** Files changed in the last 30 days: { files: [{ filePath, changeCount, lastChangeDate, authors }] }. */
+    async gitHeatmap(path) {
+        return request(`${API_BASE}/git/heatmap?path=${encodeURIComponent(path)}`);
+    },
+
+    async previewFile(workspace, filePath, line) {
+        const query = new URLSearchParams({ workspace, path: filePath });
+        if (line) query.set('line', String(line));
+        return request(`${API_BASE}/editor/preview?${query}`);
+    },
+
     async getEditorOptions() {
         return request(`${API_BASE}/editor/options`);
     },
@@ -211,8 +222,10 @@ export const api = {
         return request(`${API_BASE}/graphify/affected`, jsonOptions('POST', { path, node, depth, relations }));
     },
 
-    async mapGraphify(path, limit = 80) {
-        return request(`${API_BASE}/graphify/map?path=${encodeURIComponent(path)}&limit=${encodeURIComponent(limit)}`);
+    async mapGraphify(path, limit = 80, { rank } = {}) {
+        const query = new URLSearchParams({ path, limit: String(limit) });
+        if (rank) query.set('rank', rank);
+        return request(`${API_BASE}/graphify/map?${query}`);
     },
 
     async getLogs(limit = 200, filters = {}) {

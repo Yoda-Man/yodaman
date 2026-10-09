@@ -279,7 +279,8 @@ router.get('/graphify/map', async (req, res) => {
     try {
         dirPath = resolveRegisteredProjectPath(req.query.path);
         const limit = Number(req.query.limit || 80);
-        res.json(await graphifyService.map(dirPath, { limit }));
+        const rank = req.query.rank === 'degree' ? 'degree' : 'order';
+        res.json(await graphifyService.map(dirPath, { limit, rank }));
     } catch (err) {
         logger.error('graphify_map_request_failed', err, { requestId: req.id, path: dirPath });
         jsonError(res, err.status || 500, err.message, err.code || 'graphify_map_failed');

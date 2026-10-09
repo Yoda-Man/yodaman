@@ -210,3 +210,36 @@ describe('a build stopped by the timeout says so', () => {
         expect(written.message).toMatch(/YODAMAN_GRAPHIFY_TIMEOUT_MS/);
     }, 20000);
 });
+
+describe('map: which nodes a large graph shows', () => {
+    let workspace;
+    beforeEach(() => {
+        workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-map-rank-'));
+        fs.mkdirSync(path.join(workspace, 'graphify-out'));
+        // "leaf" nodes first in file order; "hub" is last but linked to all.
+        const nodes = [...Array.from({ length: 5 }, (_, i) => ({ id: `leaf${i}` })), { id: 'hub' }, { id: 'loner' }];
+        const links = Array.from({ length: 5 }, (_, i) => ({ source: 'hub', target: `leaf${i}` }));
+        fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, links }));
+    });
+    afterEach(() => fs.rmSync(workspace, { recursive: true, force: true }));
+
+    test('by default keeps file order (Graph Studio preview)', async () => {
+        const out = await graphifyService.map(workspace, { limit: 3 });
+        expect(out.nodes.map((n) => n.id)).toEqual(['leaf0', 'leaf1', 'leaf2']);
+    });
+
+    test('rank=degree shows the most connected nodes, hubs first', async () => {
+        // The file's first N nodes are an arbitrary slice on a big workspace;
+        // the VR view asks for the structure instead.
+        const out = await graphifyService.map(workspace, { limit: 3, rank: 'degree' });
+        expect(out.nodes[0].id).toBe('hub');
+        expect(out.nodes.map((n) => n.id)).not.toContain('loner');
+        expect(out.links).toHaveLength(2);
+        expect(out.totalNodes).toBe(7);
+    });
+
+    test('a request cannot ask for an unbounded map', async () => {
+        const out = await graphifyService.map(workspace, { limit: 1e9, rank: 'degree' });
+        expect(out.nodes.length).toBeLessThanOrEqual(7);
+    });
+});

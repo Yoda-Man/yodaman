@@ -2,6 +2,38 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Holocron, rebuilt toward its design vision.** The in-app viewer now lays the
+  workspace out with Holocron's WebAssembly force engine, in a worker so large
+  graphs never freeze the screen, and falls back to the previous spiral layout
+  if the engine cannot run. The viewer says which layout it used.
+  - Distinct, named cluster systems with glowing hubs and spokes; bloom,
+    depth-faded starfield, labels for clusters and the biggest hubs.
+  - Search (`/` or `⌘K`) that flies the camera to a file or symbol.
+  - Click a node: its neighbourhood lights up and the rest dims. A detail panel
+    shows its path, language, cluster, what it uses and what uses it (each
+    clickable), changes in the last 30 days, a code preview, **Open in editor**
+    (your editor, at the line) and **Ask Agent** (pre-fills Chat; never sends).
+  - Filters: hide tests, docs or third-party code (including minified
+    bundles), languages, recent changes only. A git change heatmap.
+  - 500, 1,500 or 4,000 nodes, sampled by connectivity instead of file order.
+    Measured at 4,000 nodes and 8,036 edges: 75 fps.
+- `GET /api/graphify/map?rank=degree`, the most connected nodes first.
+- `GET /api/editor/preview`, a read-only window of a workspace file, with the
+  same containment rules as opening a file.
+
+### Fixed
+- **WebAssembly was blocked by the page's security policy.** `script-src`
+  now includes `'wasm-unsafe-eval'`, which allows compiling WebAssembly and
+  nothing else; JavaScript `eval` stays forbidden, and a test holds both.
+
+### Removed
+- `frontend/VRViewer.js` and `frontend/UIPanel.js`: compiled copies of an old
+  Holocron viewer that nothing loaded (the plugin host only logs UI
+  registrations). Their minified symbols also showed up in YodaMan's own graph.
+
 ## [0.5.8] - 2026-10-08
 
 ### Fixed

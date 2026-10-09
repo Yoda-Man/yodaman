@@ -580,6 +580,21 @@ export default function AgentChatTab({ selectedProject }) {
   const [isOpeningVr, setIsOpeningVr] = useState(false)
   const [holocronAvailable, setHolocronAvailable] = useState(false)
   const [workspaceView, setWorkspaceView] = useState('chat')
+  const composerRef = useRef(null)
+
+  // Holocron's "Ask Agent" pre-fills a question about a node. It is never
+  // sent automatically: the user reads it, edits it if they like, and sends.
+  useEffect(() => {
+    const onAsk = (event) => {
+      const prompt = event.detail?.prompt
+      if (!prompt) return
+      setWorkspaceView('chat')
+      setInputText(prompt)
+      setTimeout(() => composerRef.current?.focus(), 0)
+    }
+    window.addEventListener('yodaman:ask-agent', onAsk)
+    return () => window.removeEventListener('yodaman:ask-agent', onAsk)
+  }, [])
   const [searchRequest, setSearchRequest] = useState({ id: 0, query: '' })
   const [isSearchPending, setIsSearchPending] = useState(false)
   const [pendingApproval, setPendingApproval] = useState(null)
@@ -1212,6 +1227,7 @@ export default function AgentChatTab({ selectedProject }) {
               </div>
             ) : null}
             <textarea
+              ref={composerRef}
               value={inputText}
               onChange={event => setInputText(event.target.value)}
               onKeyDown={handleComposerKeyDown}
