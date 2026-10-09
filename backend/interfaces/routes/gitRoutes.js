@@ -57,6 +57,15 @@ router.get('/git/heatmap', async (req, res) => {
     }
 });
 
+router.get('/git/timeline', async (req, res) => {
+    try {
+        const workspacePath = validateString(req.query?.path, 'path', { max: 4096 });
+        res.json(await gitService.getTimeline(workspacePath, { days: req.query?.days }));
+    } catch (err) {
+        jsonError(res, err.status || 500, err.message, 'git_timeline_failed');
+    }
+});
+
 router.get('/git/branch', async (req, res) => {
     try {
         const workspacePath = validateString(req.query?.path, 'path', { max: 4096 });

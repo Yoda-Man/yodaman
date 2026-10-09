@@ -208,3 +208,30 @@ export function timeAgo(date, now = Date.now()) {
   if (hours < 48) return `${hours}h ago`
   return `${Math.round(hours / 24)} days ago`
 }
+
+/**
+ * The shortest chain of links between two nodes, ignoring direction, or null.
+ * Used to trace the route when flying from one node to another.
+ */
+export function shortestPath(model, from, to, maxDepth = 12) {
+  if (from === to) return [from]
+  const previous = new Map([[from, -1]])
+  let frontier = [from]
+  for (let depth = 0; depth < maxDepth && frontier.length; depth++) {
+    const next = []
+    for (const node of frontier) {
+      for (const neighbour of [...model.outgoing[node], ...model.incoming[node]]) {
+        if (previous.has(neighbour)) continue
+        previous.set(neighbour, node)
+        if (neighbour === to) {
+          const path = [to]
+          for (let step = node; step !== -1; step = previous.get(step)) path.unshift(step)
+          return path
+        }
+        next.push(neighbour)
+      }
+    }
+    frontier = next
+  }
+  return null
+}

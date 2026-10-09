@@ -86,4 +86,38 @@ describe('gitService', () => {
             })
         }));
     });
+
+    describe('timeline', () => {
+        test('lists commits oldest first, with each file and whether it was added or modified', async () => {
+            const { commits, truncated } = await gitService.getTimeline(workspace);
+            expect(truncated).toBe(false);
+            expect(commits).toHaveLength(2);
+            expect(commits[0].files).toEqual([{ path: 'alpha.js', status: 'A' }]);
+            expect(commits[1].files).toEqual(expect.arrayContaining([
+                { path: 'alpha.js', status: 'M' },
+                { path: 'beta.ts', status: 'A' }
+            ]));
+            expect(Date.parse(commits[0].date)).toBeLessThanOrEqual(Date.parse(commits[1].date));
+            expect(commits[0].author).toBe('Yoda Test');
+        });
+
+        test('reports paths relative to a workspace that is a subfolder of the repository', async () => {
+            // Git's own paths start at the repository root; the graph's start at
+            // the workspace. --relative makes them agree.
+            fs.mkdirSync(path.join(workspace, 'core'));
+            fs.writeFileSync(path.join(workspace, 'core', 'gamma.js'), 'gamma\n');
+            git(workspace, ['add', 'core/gamma.js']);
+            git(workspace, ['commit', '-m', 'Add gamma']);
+
+            const { commits } = await gitService.getTimeline(path.join(workspace, 'core'));
+            expect(commits).toHaveLength(1);
+            expect(commits[0].files).toEqual([{ path: 'gamma.js', status: 'A' }]);
+        });
+
+        test('is bounded', async () => {
+            const { commits, truncated } = await gitService.getTimeline(workspace, { maxCommits: 1 });
+            expect(commits).toHaveLength(1);
+            expect(truncated).toBe(true);
+        });
+    });
 });

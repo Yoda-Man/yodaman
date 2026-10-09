@@ -17,7 +17,7 @@ const BROWSER_GLOBALS = new Set([
     // Constructors and namespaces
     'AbortController', 'ArrayBuffer', 'Array', 'Audio', 'BigInt', 'Blob', 'Boolean',
     'CustomEvent', 'DataView', 'Date', 'DOMParser', 'Error', 'Event', 'EventSource',
-    'File', 'FileReader', 'Float32Array', 'FormData', 'Headers', 'Image', 'Infinity',
+    'File', 'FileReader', 'Float32Array', 'Float64Array', 'FormData', 'Headers', 'Image', 'Infinity',
     'Int32Array', 'Intl', 'IntersectionObserver', 'JSON', 'Map', 'Math', 'MutationObserver',
     'NaN', 'Notification', 'Number', 'Object', 'Promise', 'Proxy', 'Reflect', 'RegExp',
     'Request', 'ResizeObserver', 'Response', 'Set', 'SpeechRecognition', 'String', 'Symbol',
