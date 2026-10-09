@@ -18,6 +18,18 @@ const { spawn } = require('child_process');
 // answers a question about the CLI should not boot the product to answer it.
 // They are required lazily, inside the commands that use them.
 
+/**
+ * The config.json the runtime itself uses, in the user's data folder, with
+ * an older install's copy brought over first. These commands used to prefer
+ * a config.json in the current directory, which the runtime never read, so
+ * they could report on different workspaces than YodaMan was watching.
+ */
+function runtimeConfigPath() {
+    const dataPaths = require('../backend/infrastructure/DataPaths');
+    dataPaths.prepareDataDir();
+    return dataPaths.configPath();
+}
+
 const args = process.argv.slice(2);
 
 // ─── help / version ────────────────────────────────────────────────────
@@ -70,10 +82,7 @@ if (args[0] === 'uninstall' || args[0] === 'clean') {
     try {
         // Workspaces come from the runtime's own config, so this only ever
         // looks where YodaMan was actually told to work.
-        const cwdConfig = path.join(process.cwd(), 'config.json');
-        const pkgConfig = path.join(__dirname, '..', 'config.json');
-        const configPath = process.env.YODAMAN_CONFIG_PATH
-            || (fsx.existsSync(cwdConfig) ? cwdConfig : pkgConfig);
+        const configPath = runtimeConfigPath();
 
         let workspaces = [];
         if (fsx.existsSync(configPath)) {
@@ -81,7 +90,8 @@ if (args[0] === 'uninstall' || args[0] === 'clean') {
             workspaces = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
         }
 
-        const plan = uninstallPlanner.buildUninstallPlan({ workspaces });
+        const dataPaths = require('../backend/infrastructure/DataPaths');
+        const plan = uninstallPlanner.buildUninstallPlan({ workspaces, dataFiles: [configPath, dataPaths.databasePath()] });
         console.log(uninstallPlanner.formatUninstallPlan(plan));
 
         if (!confirmed) {
@@ -317,9 +327,7 @@ describe('${pluginName} plugin', () => {
     }
 
     // Auto-register in config.json
-    const cwdConfigPath = path.join(process.cwd(), 'config.json');
-    const pkgConfigPath = path.join(__dirname, '..', 'config.json');
-    const configPath = fs.existsSync(cwdConfigPath) ? cwdConfigPath : pkgConfigPath;
+    const configPath = runtimeConfigPath();
 
     if (fs.existsSync(configPath)) {
         try {
@@ -350,9 +358,7 @@ describe('${pluginName} plugin', () => {
 
 if (args[0] === 'doctor' && args.includes('--graph')) {
     try {
-        const cwdConfigPath = path.join(process.cwd(), 'config.json');
-        const packageConfigPath = path.join(__dirname, '..', 'config.json');
-        const configPath = require('fs').existsSync(cwdConfigPath) ? cwdConfigPath : packageConfigPath;
+        const configPath = runtimeConfigPath();
         const graphifyDoctor = require('../backend/infrastructure/GraphifyDoctor');
         const report = graphifyDoctor.runGraphDoctor({ configPath });
         console.log(graphifyDoctor.formatGraphDoctorReport(report));

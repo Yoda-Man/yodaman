@@ -27,6 +27,15 @@ const TEST_PATH = /(^|\/)(tests?|__tests__|spec|specs)\/|\.(test|spec)\.[a-z]+$|
 // one-letter symbols would otherwise form clusters named "g", "A" and "C".
 const THIRD_PARTY_PATH = /(^|\/)(node_modules|vendor|third_party|thirdparty|site-packages|\.venv|venv|dist|build)\/|\.min\.(js|css)$/i
 
+/**
+ * Whether a name says anything as a label. One- and two-letter names ("n",
+ * "l", "g()") are minifier output or loop variables: fine on a selected node,
+ * noise as a cluster title or one of the few labels drawn over the overview.
+ */
+export function isReadableLabel(label) {
+  return String(label || '').replace(/\(\)\s*$/, '').trim().length >= 3
+}
+
 function extensionOf(value) {
   const match = /\.([a-z0-9]+)$/i.exec(String(value || ''))
   return match ? match[1].toLowerCase() : ''
@@ -86,8 +95,14 @@ export function buildModel(map) {
     .sort((a, b) => b[1].length - a[1].length)
     .map(([key, members], i) => {
       const hub = members.reduce((best, m) => (degree[m] > degree[best] ? m : best), members[0])
-      const hubLabel = String(raw[hub].label || raw[hub].id).replace(/\(\)\s*$/, '')
-      return { index: i, key, members, hub, name: hubLabel, color: CLUSTER_COLORS[i % CLUSTER_COLORS.length] }
+      // Named after its best-connected member with a readable name; the hub
+      // still anchors the layout. Failing that, after the hub's file.
+      const label = (m) => String(raw[m].label || raw[m].id)
+      const named = members.filter((m) => isReadableLabel(label(m)))
+        .reduce((best, m) => (best === -1 || degree[m] > degree[best] ? m : best), -1)
+      const file = String(raw[hub].sourceFile || '').split('/').pop()
+      const name = (named >= 0 ? label(named) : file || label(hub)).replace(/\(\)\s*$/, '')
+      return { index: i, key, members, hub, name, color: CLUSTER_COLORS[i % CLUSTER_COLORS.length] }
     })
   const clusterOf = new Int32Array(raw.length)
   clusters.forEach((cluster) => cluster.members.forEach((m) => { clusterOf[m] = cluster.index }))
@@ -207,4 +222,31 @@ export function timeAgo(date, now = Date.now()) {
   const hours = Math.round(minutes / 60)
   if (hours < 48) return `${hours}h ago`
   return `${Math.round(hours / 24)} days ago`
+}
+
+/**
+ * The shortest chain of links between two nodes, ignoring direction, or null.
+ * Used to trace the route when flying from one node to another.
+ */
+export function shortestPath(model, from, to, maxDepth = 12) {
+  if (from === to) return [from]
+  const previous = new Map([[from, -1]])
+  let frontier = [from]
+  for (let depth = 0; depth < maxDepth && frontier.length; depth++) {
+    const next = []
+    for (const node of frontier) {
+      for (const neighbour of [...model.outgoing[node], ...model.incoming[node]]) {
+        if (previous.has(neighbour)) continue
+        previous.set(neighbour, node)
+        if (neighbour === to) {
+          const path = [to]
+          for (let step = node; step !== -1; step = previous.get(step)) path.unshift(step)
+          return path
+        }
+        next.push(neighbour)
+      }
+    }
+    frontier = next
+  }
+  return null
 }

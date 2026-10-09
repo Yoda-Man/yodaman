@@ -167,6 +167,53 @@ async function getHeatmapData(workspacePath) {
         .sort((a, b) => b.changeCount - a.changeCount || a.filePath.localeCompare(b.filePath));
 }
 
+/**
+ * Commits and the files each touched, oldest first, for Holocron's time
+ * slider.
+ *
+ * `--relative` limits history to the workspace folder and reports paths from
+ * it, so a workspace that is a subfolder of a larger repository lines up with
+ * the graph's own paths. Bounded by age and count: this feeds an animation,
+ * not an audit.
+ *
+ * @returns {Promise<{commits: Array<{hash, date, author, files: Array<{path, status}>}>, truncated: boolean}>}
+ */
+async function getTimeline(workspacePath, { days = 365, maxCommits = 3000 } = {}) {
+    const git = gitFor(workspacePath);
+    const span = Math.min(Math.max(Number(days) || 365, 1), 3650);
+    const limit = Math.min(Math.max(Number(maxCommits) || 3000, 1), 10000);
+    const output = await git.raw([
+        'log',
+        '--relative',
+        '--no-renames',
+        `--since=${span} days ago`,
+        '-n', String(limit),
+        '--date=iso-strict',
+        '--pretty=format:commit%x09%H%x09%an%x09%ad',
+        '--name-status',
+        // Only commits that touched this folder; --relative alone still lists
+        // the rest, with no files.
+        '--',
+        '.'
+    ]);
+
+    const commits = [];
+    let current = null;
+    for (const rawLine of output.split('\n')) {
+        const line = rawLine.trim();
+        if (!line) continue;
+        if (line.startsWith('commit\t')) {
+            const [, hash, author, date] = line.split('\t');
+            current = { hash: hash.slice(0, 10), author, date: parseIsoDate(date), files: [] };
+            commits.push(current);
+            continue;
+        }
+        const [status, filePath] = line.split('\t');
+        if (current && filePath) current.files.push({ path: filePath, status: status.charAt(0) });
+    }
+    return { commits: commits.filter((c) => c.files.length).reverse(), truncated: commits.length === limit };
+}
+
 async function getCommitDiff(workspacePath, commitHash) {
     if (!commitHash || !/^[0-9a-fA-F]{7,40}$/.test(commitHash)) {
         const err = new Error('commitHash must be a git hash');
@@ -229,6 +276,7 @@ module.exports = {
     getFileBlame,
     getChangeFrequency,
     getHeatmapData,
+    getTimeline,
     getCommitDiff,
     getBranchInfo
 };

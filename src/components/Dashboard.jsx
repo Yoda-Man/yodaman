@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Database, Cpu, Shield, Activity, Package, Server, RefreshCw, Link, ClipboardList, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
+import { Database, Cpu, Shield, Activity, Package, Server, RefreshCw, Link, ClipboardList, CheckCircle, AlertTriangle, XCircle, FolderOpen, Copy } from 'lucide-react'
 import { api } from '../api/api'
 import HealthDashboard from './HealthDashboard'
 import useHealthCheck from '../hooks/useHealthCheck'
@@ -140,6 +140,28 @@ function HealthPill({ checks }) {
         <div className="flex items-center gap-2 px-4 py-2 bg-slate-500/10 border border-slate-500/20 rounded-xl">
             <Activity size={16} className="text-slate-400" />
             <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Unknown</span>
+        </div>
+    )
+}
+
+function formatBytes(bytes) {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+/** One of the user's data files: what it holds, where it is, and a copy button. */
+function DataFile({ label, file }) {
+    return (
+        <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+            <div className="flex items-baseline justify-between gap-4 mb-1">
+                <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{label}</div>
+                <div className="text-[10px] text-slate-500 shrink-0">{file.exists ? formatBytes(file.bytes) : 'created on first use'}</div>
+            </div>
+            <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-200 font-mono break-all flex-1 min-w-0">{file.path}</span>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(file.path)} className="shrink-0 p-1.5 rounded hover:bg-white/10 text-slate-500 hover:text-slate-200 transition-colors" title="Copy path" aria-label={`Copy path of ${label}`}><Copy size={14} /></button>
+            </div>
         </div>
     )
 }
@@ -521,6 +543,21 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
+
+                {/* Where the user's data lives: outside the app, so upgrades keep it */}
+                {diagnostics?.data ? <div className="glass-panel p-8 space-y-5">
+                    <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center">
+                            <FolderOpen size={20} className="text-emerald-300" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-slate-100 tracking-tight">Your Data</h3>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Kept outside the app, so upgrades never erase it</p>
+                        </div>
+                    </div>
+                    <DataFile label="Settings and workspaces" file={diagnostics.data.config} />
+                    <DataFile label="Task history and audit log" file={diagnostics.data.database} />
+                </div> : null}
 
                 {/* System Health — reusable HealthDashboard component */}
                 <div className="glass-panel p-8 space-y-6">

@@ -1,6 +1,6 @@
 # YodaMan Architecture Overview
 
-This document describes the architecture of YodaMan v0.5.8, a local-first workspace intelligence platform for developers.
+This document describes the architecture of YodaMan v0.5.9, a local-first workspace intelligence platform for developers.
 
 > **Before deleting any file listed here:** a significant part of this system is
 > wired up at runtime rather than through imports — plugins are `require()`d from
@@ -260,9 +260,11 @@ core/
 ├── server.js                           # Express server entry point
 ├── start.js                            # Dev startup script
 ├── package.json                        # Node.js dependencies
-├── config.json                         # Runtime configuration
 └── vite.config.js                      # Vite build configuration
 ```
+
+The user's data is not in this tree: `config.json` and `yodaman.db` live in the
+per-user data folder (`backend/infrastructure/DataPaths.js`), so upgrades keep them.
 
 ## Layer Responsibilities
 

@@ -319,11 +319,26 @@ describe('MCP tools return real data', () => {
         if (!workspace) return; // No indexed workspace here; nothing to compare.
 
         const query = 'search';
-        const viaMcp = await callTool('yodaman_search', { query, project: workspace });
-
         const params = new URLSearchParams({ query, project: workspace });
-        const { body } = await get(`${LIVE_URL}/api/search?${params}`);
-        const viaHttp = JSON.parse(body);
+        const viaHttpNow = async () => JSON.parse((await get(`${LIVE_URL}/api/search?${params}`)).body);
+        const identity = (list) => (list || []).slice(0, 5)
+            .map((r) => `${r.filePath}:${r.lineStart}-${r.lineEnd}`);
+
+        // Compare only while the index holds still. This runtime watches real
+        // workspaces, and during the full suite other tests write into them;
+        // a re-index between the two calls changed the 5th hit (README.md:114
+        // vs docs/USER_MANUAL.md:17) and failed the release gate twice. HTTP is
+        // read before and after the MCP call; when both agree nothing moved in
+        // between, and the MCP result must match exactly.
+        let viaMcp;
+        let viaHttp;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            const before = await viaHttpNow();
+            viaMcp = await callTool('yodaman_search', { query, project: workspace });
+            viaHttp = await viaHttpNow();
+            if (JSON.stringify(identity(before.results)) === JSON.stringify(identity(viaHttp.results))) break;
+            if (attempt === 3) throw new Error('the index changed during every attempt; nothing stable to compare');
+        }
 
         // Non-empty FIRST. Comparing two empty lists proves nothing, and the
         // first version of this test did exactly that: it read `r.file`, which
@@ -341,8 +356,6 @@ describe('MCP tools return real data', () => {
         // Including the span makes ordering discriminating: every query returns
         // the same top-30 files, so file names alone would not tell two
         // different searches apart.
-        const identity = (list) => list.slice(0, 5)
-            .map((r) => `${r.filePath}:${r.lineStart}-${r.lineEnd}`);
         expect(identity(viaMcp.results).every((entry) => !entry.includes('undefined'))).toBe(true);
         expect(identity(viaMcp.results)).toEqual(identity(viaHttp.results || []));
     }, 180000);

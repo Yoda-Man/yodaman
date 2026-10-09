@@ -977,4 +977,13 @@ describe('RestController Integration', () => {
             }
         });
     });
+
+    test('desktop diagnostics say where the user\'s config.json and yodaman.db are, for the Dashboard', async () => {
+        const res = await invoke('get', '/desktop/diagnostics');
+        const { data } = res.payload;
+        expect(data.config).toMatchObject({ path: configPath(), exists: true });
+        expect(data.config.bytes).toBeGreaterThan(0);
+        expect(data.database.path).toBe(require('../../backend/infrastructure/DataPaths').databasePath());
+        expect(typeof data.database.exists).toBe('boolean');
+    });
 });

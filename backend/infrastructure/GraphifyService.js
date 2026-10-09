@@ -4,6 +4,7 @@ const os = require('os');
 const { execFile } = require('child_process');
 const logger = require('./Logger');
 const { IGNORED_DIRECTORIES } = require('../../shared/ignoredPaths');
+const { workspaceFileExists } = require('../../shared/workspaceFiles');
 const dependencyChecker = require('./DependencyChecker');
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 300000);
@@ -346,6 +347,27 @@ const MAX_MAP_NODES = 10000;
  * structure worth seeing is in the hubs. Ties keep file order, so the result
  * is stable.
  */
+/**
+ * The graph without nodes from files that no longer exist, and their links.
+ *
+ * Graphify's incremental update keeps nodes for deleted files: core's graph
+ * still held 207 from files removed since, including two minified bundles
+ * whose one-letter symbols ("n", "l") were drawn as Holocron labels. Each
+ * file is checked once, however many nodes it has.
+ */
+function withoutMissingFiles(graph, projectPath) {
+    const exists = new Map();
+    const live = (file) => {
+        if (!exists.has(file)) exists.set(file, workspaceFileExists(projectPath, file));
+        return exists.get(file);
+    };
+    const nodes = (graph.nodes || []).filter((node) => live(node.source_file));
+    if (nodes.length === (graph.nodes || []).length) return { graph, missing: 0 };
+    const ids = new Set(nodes.map((node) => node.id));
+    const links = (graph.links || []).filter((link) => ids.has(link.source) && ids.has(link.target));
+    return { graph: { ...graph, nodes, links }, missing: graph.nodes.length - nodes.length };
+}
+
 function selectMapNodes(graph, max, rank) {
     const all = graph.nodes || [];
     if (rank !== 'degree' || all.length <= max) return all.slice(0, max);
@@ -871,7 +893,7 @@ module.exports = {
      * A read must never write, and never block on a build.
      */
     async map(projectPath, { limit = 80, rank = 'order' } = {}) {
-        const graph = this.readGraph(projectPath);
+        const { graph, missing } = withoutMissingFiles(this.readGraph(projectPath), projectPath);
         const max = Math.min(Math.max(Number(limit) || 80, 1), MAX_MAP_NODES);
         const nodes = selectMapNodes(graph, max, rank).map(node => ({
             id: node.id,
@@ -904,6 +926,8 @@ module.exports = {
             graphPath: graphPath(projectPath),
             totalNodes: (graph.nodes || []).length,
             totalLinks: (graph.links || []).length,
+            // Nodes left out because their file is gone; a rebuild removes them for good.
+            missingFileNodes: missing,
             communities,
             nodes,
             links

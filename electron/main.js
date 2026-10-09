@@ -84,7 +84,10 @@ async function ensureBackend() {
         env: {
             ...process.env,
             NODE_ENV: 'production',
-            ELECTRON_RUN_AS_NODE: '1'
+            ELECTRON_RUN_AS_NODE: '1',
+            // The runtime keeps config.json and yodaman.db beside the app's
+            // own data, outside the bundle, so upgrades never erase them.
+            YODAMAN_DATA_DIR: process.env.YODAMAN_DATA_DIR || app.getPath('userData')
         },
         stdio: ['ignore', 'pipe', 'pipe']
     });

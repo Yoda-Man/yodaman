@@ -18,6 +18,7 @@
  */
 const { spawn } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const RELEASE_DIR = path.resolve(__dirname, '..', 'release');
@@ -56,9 +57,12 @@ async function main() {
     const appRoot = path.dirname(serverPath);
     log(`Booting the packaged runtime: ${path.relative(RELEASE_DIR, serverPath)}`);
 
+    // A fresh data folder: the packaged app boots as a first install would,
+    // and never touches the data of the YodaMan you use.
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-packaged-smoke-'));
     const child = spawn(process.execPath, [serverPath], {
         cwd: appRoot,
-        env: { ...process.env, YODAMAN_PORT: String(PORT) },
+        env: { ...process.env, YODAMAN_PORT: String(PORT), YODAMAN_DATA_DIR: dataDir },
         stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -76,8 +80,18 @@ async function main() {
 
     child.kill('SIGKILL');
 
+    // 0.5.8 and earlier kept the database inside the bundle, where every
+    // upgrade erased it. It must be created in the data folder instead.
+    const inDataDir = fs.existsSync(path.join(dataDir, 'yodaman.db'));
+    const inBundle = fs.existsSync(path.join(appRoot, 'yodaman.db'));
+    fs.rmSync(dataDir, { recursive: true, force: true });
+    if (healthy && (!inDataDir || inBundle)) {
+        log(`\nPACKAGED RUNTIME WROTE ITS DATABASE ${inBundle ? 'INSIDE THE BUNDLE' : 'NOWHERE'}: upgrades would erase it.\n`);
+        return false;
+    }
+
     if (healthy) {
-        log('Packaged runtime started and answered /api/health.');
+        log('Packaged runtime started, answered /api/health, and kept its data outside the bundle.');
         return true;
     }
 

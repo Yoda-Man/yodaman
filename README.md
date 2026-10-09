@@ -2,7 +2,7 @@
 
 **Local-first code intelligence that understands your workspace the way you do: what the code says, how it fits together, and what it was meant to do.**
 
-![Version](https://img.shields.io/badge/Version-0.5.8-gold) ![License](https://img.shields.io/badge/License-MIT-green) ![Node](https://img.shields.io/badge/Node-22%2B-339933) ![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
+![Version](https://img.shields.io/badge/Version-0.5.9-gold) ![License](https://img.shields.io/badge/License-MIT-green) ![Node](https://img.shields.io/badge/Node-22%2B-339933) ![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
 
 YodaMan combines three tools into one search and one agent:
 
@@ -287,8 +287,9 @@ Any setting can be overridden by an environment variable named after it with a
 |----------|---------|---------|
 | `YODAMAN_PORT` | `3090` | HTTP and WebSocket port. |
 | `YODAMAN_HOST` | `127.0.0.1` | Bind address. **Loopback by default.** Set `0.0.0.0` only to pair a phone on your LAN; the API then reaches every device on that network. |
-| `YODAMAN_CONFIG_PATH` | `./config.json` | Config file location. |
-| `YODAMAN_DB_PATH` | `./yodaman.db` | SQLite database location. |
+| `YODAMAN_DATA_DIR` | your data folder | Where `config.json` and `yodaman.db` live: `~/Library/Application Support/YodaMan` on macOS, `%APPDATA%\YodaMan` on Windows, `~/.config/YodaMan` on Linux. Outside the install, so upgrades keep them. |
+| `YODAMAN_CONFIG_PATH` | `<data folder>/config.json` | Config file location. |
+| `YODAMAN_DB_PATH` | `<data folder>/yodaman.db` | SQLite database location. |
 | `YODAMAN_UPLOAD_ROOT` | OS temp dir | Where uploaded files are staged. |
 | `YODAMAN_WATCH_DEBOUNCE_MS` | `1500` | File-watcher debounce before re-indexing. |
 | `YODAMAN_LOG_DIR` | `~/.yodaman/logs` | Directory for `runtime.log`. |

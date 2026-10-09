@@ -12,11 +12,11 @@ const path = require('path');
 const logger = require('../../infrastructure/Logger');
 const { IGNORED_DIRECTORIES } = require('../../../shared/ignoredPaths');
 
-const DEFAULT_CONFIG_PATH = path.join(__dirname, '../../../config.json');
+const { configPath } = require('../../infrastructure/DataPaths');
 
 /** The active config file — overridable so tests never touch the real one. */
 function getConfigPath() {
-    return process.env.YODAMAN_CONFIG_PATH || DEFAULT_CONFIG_PATH;
+    return configPath();
 }
 
 const EMPTY_CONFIG = { watchedDirectories: [], removedDirectories: [] };

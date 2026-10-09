@@ -2,7 +2,7 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
-## [Unreleased]
+## [0.5.9] - 2026-10-09
 
 ### Added
 - **Holocron, rebuilt toward its design vision.** The in-app viewer now lays the
@@ -20,11 +20,67 @@ All notable changes to **YodaMan** will be documented in this file.
     bundles), languages, recent changes only. A git change heatmap.
   - 500, 1,500 or 4,000 nodes, sampled by connectivity instead of file order.
     Measured at 4,000 nodes and 8,036 edges: 75 fps.
+- **Holocron history slider** (`H`, or say "play history"). Replays the
+  workspace's git history on the graph: files appear when they were added and
+  glow while they are being changed. A commit-density strip, month ticks,
+  scrubbing, play and pause (`Space`) and **Now**. Measured at 4,000 nodes
+  while playing: 13 ms per frame, the same as without it.
+- **Holocron voice** (`V`, or the mic). "Where is AuthService", "fly to …",
+  "find …"; "reset", "clear", "hide tests", "show docs", "heatmap on",
+  "play history", "pause", "now". Spoken identifiers match their written form
+  ("tool box" finds `ToolBox`). It uses the same speech recognition as Chat
+  and respects Chat's voice input setting.
+- **Paths between nodes.** Going from one selected node to another, by voice,
+  search or the uses lists, lights the shortest chain of links between them
+  for a few seconds.
+- **Holocron in a headset.** The constellation is scaled to a few metres in
+  front of you. Point with either controller (or hand) and pull the trigger to
+  select; grip and move your hand to turn it; the right thumbstick scales it.
+  The selected node's details float beside you, labels are drawn in the
+  headset, and "fly to" brings the node within reach. Controllers are drawn
+  as plain rays, so nothing is downloaded. Not yet tried on a physical
+  headset; the decisions behind it are tested without one.
+- `GET /api/git/timeline`, commits with the files each one touched, paths
+  relative to the workspace.
 - `GET /api/graphify/map?rank=degree`, the most connected nodes first.
 - `GET /api/editor/preview`, a read-only window of a workspace file, with the
   same containment rules as opening a file.
 
+### Changed
+- **Your settings and history now survive upgrades.** `config.json` (settings
+  and the workspace list) and `yodaman.db` (task history and audit log) lived
+  inside the install folder, so replacing the app or reinstalling the npm
+  package erased them. They now live in the per-user data folder:
+  `~/Library/Application Support/YodaMan` on macOS, `%APPDATA%\YodaMan` on
+  Windows, `~/.config/YodaMan` on Linux (`YODAMAN_DATA_DIR` to change it). On
+  first start, files left in the install folder are copied over, never moved,
+  so an older version still finds its own; the database is copied as a
+  consistent snapshot that keeps rows not yet written back from its log.
+- **The Dashboard shows where both files are** (Your Data), with their sizes
+  and a copy button.
+- `yodaman doctor --graph` and `yodaman uninstall` read the runtime's own
+  `config.json`. They preferred one in the current directory, which the
+  runtime never read, so they could report on different workspaces.
+- `yodaman uninstall` lists `config.json` and `yodaman.db`, since removing the
+  program no longer removes them.
+
 ### Fixed
+- **Holocron and Graph Studio showed files that no longer exist.** Graphify's
+  incremental update keeps nodes of deleted files (562 in YodaMan's own
+  graph); the map now leaves them out, the same rule search already used.
+  Among them were two deleted minified bundles whose one-letter symbols
+  ("n", "l") were drawn as labels. Holocron also no longer uses a one- or
+  two-letter name as a label or cluster title.
+- The Dashboard's runtime health always said port 3090, whichever port the
+  runtime served.
+- `GET /api/desktop/diagnostics` failed with a 500 if called before startup
+  finished.
+- A search test overwrote the repository's real `config.json` and restored it
+  afterwards; a crash between the two would have lost the workspace list.
+  Every test run now gets its own data folder, and so does the release smoke,
+  which opened the database directly and created an empty one in the user's
+  data folder ahead of the copy. Whatever opens the database first now
+  brings the old one over.
 - **WebAssembly was blocked by the page's security policy.** `script-src`
   now includes `'wasm-unsafe-eval'`, which allows compiling WebAssembly and
   nothing else; JavaScript `eval` stays forbidden, and a test holds both.

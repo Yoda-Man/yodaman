@@ -2,8 +2,8 @@
  * SettingsProvider — centralized settings store backed by config.json
  */
 const fs = require('fs');
-const path = require('path');
 const logger = require('./Logger');
+const { configPath, prepareDataDir } = require('./DataPaths');
 
 const DEFAULTS = {
   allowPluginUploads: false,
@@ -22,10 +22,6 @@ const DEFAULTS = {
 
 let cache = null;
 let loadedPath = null;
-
-function configPath() {
-  return process.env.YODAMAN_CONFIG_PATH || path.join(__dirname, '../../config.json');
-}
 
 function load() {
   const currentPath = configPath();
@@ -64,6 +60,7 @@ function save(updates) {
   loadedPath = currentPath;
 
   try {
+    prepareDataDir();
     let cfg = {};
     if (fs.existsSync(currentPath)) cfg = JSON.parse(fs.readFileSync(currentPath, 'utf8'));
     cfg.settings = settings;

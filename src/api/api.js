@@ -113,6 +113,11 @@ export const api = {
         return request(`${API_BASE}/git/heatmap?path=${encodeURIComponent(path)}`);
     },
 
+    /** Commits with the files each touched, oldest first: { commits, truncated }. */
+    async gitTimeline(path, days = 365) {
+        return request(`${API_BASE}/git/timeline?path=${encodeURIComponent(path)}&days=${encodeURIComponent(days)}`);
+    },
+
     async previewFile(workspace, filePath, line) {
         const query = new URLSearchParams({ workspace, path: filePath });
         if (line) query.set('line', String(line));

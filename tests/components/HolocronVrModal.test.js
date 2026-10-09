@@ -36,9 +36,9 @@ describe('Holocron before its scene loads', () => {
     expect(render()).toContain('Mapping workspace constellation')
   })
 
-  test('offers search, filters, the heatmap, the node limit, VR and close', () => {
+  test('offers search, voice, history, filters, the heatmap, the node limit, VR and close', () => {
     const html = render()
-    for (const label of ['Search the constellation', 'Filters', 'Change heatmap', 'Maximum nodes', 'Close Holocron']) {
+    for (const label of ['Search the constellation', 'Voice command', 'History', 'Filters', 'Change heatmap', 'Maximum nodes', 'Close Holocron']) {
       expect(html).toContain(`aria-label="${label}"`)
     }
     expect(html).toMatch(/1,500 nodes/)
@@ -47,6 +47,6 @@ describe('Holocron before its scene loads', () => {
 
   test('explains the controls', () => {
     const html = render()
-    for (const hint of ['orbit', 'pan', 'zoom', 'inspect', 'search', 'reset camera']) expect(html).toContain(hint)
+    for (const hint of ['orbit', 'pan', 'zoom', 'inspect', 'search', 'reset camera', 'voice', 'history']) expect(html).toContain(hint)
   })
 })

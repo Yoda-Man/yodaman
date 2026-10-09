@@ -2,7 +2,7 @@
 
 ## Upgrading
 
-**No migration is needed anywhere in 0.5.x.** Upgrade in place:
+**Nothing to do by hand in 0.5.x.** Upgrade in place:
 
 ```bash
 npm install -g yodaman@latest
@@ -14,6 +14,28 @@ the old one. If you run from source, `git pull && npm install`.
 Restart the runtime afterwards so the new version is the one serving requests.
 Anything connected over MCP picks up the new server the next time it spawns it;
 no client configuration changes between 0.5.x versions.
+
+### Where your settings and history live (0.5.9 and later)
+
+`config.json` (settings and the workspace list) and `yodaman.db` (task
+history and the audit log) used to sit inside the install folder, so every
+upgrade of the desktop app or the npm package erased them. From 0.5.9 they
+live in your per-user data folder:
+
+| System | Folder |
+| --- | --- |
+| macOS | `~/Library/Application Support/YodaMan` |
+| Windows | `%APPDATA%\YodaMan` |
+| Linux | `$XDG_CONFIG_HOME/YodaMan` (usually `~/.config/YodaMan`) |
+
+The Dashboard shows both paths under **Your Data**. Set `YODAMAN_DATA_DIR` to
+use another folder.
+
+The first time 0.5.9 starts, it copies both files from the install folder if
+they are there and the data folder does not already have them. They are
+copied, never moved, so an older version run again still finds its own. A
+desktop app replaced by the upgrade has already lost its copy; running from
+source or from a folder you kept, they come across.
 
 ### Do I need to re-index?
 
@@ -76,6 +98,7 @@ directory: `config.json`, `sessions.json`, `audit-log.json`,
 
 | Location | What it is |
 | --- | --- |
+| Your data folder (see [above](#where-your-settings-and-history-live-059-and-later)): `config.json` and `yodaman.db` | Your settings, workspace list, task history and audit log. `yodaman uninstall` lists both. |
 | `~/.yodaman/logs` | Runtime logs. The whole `~/.yodaman` directory can go. |
 | `<workspace>/.yodaman-doc-chunks/` | Generated document chunks, one directory per indexed workspace. |
 | `<workspace>/graphify-out/` | Graphify's knowledge graph and AST cache, one per indexed workspace. |
@@ -90,8 +113,8 @@ Then, in each workspace you indexed:
 rm -rf .yodaman-doc-chunks graphify-out
 ```
 
-If you set a custom `YODAMAN_LOG_DIR` or `YODAMAN_CONFIG_PATH`, remove those
-locations too.
+If you set a custom `YODAMAN_LOG_DIR`, `YODAMAN_DATA_DIR`,
+`YODAMAN_CONFIG_PATH` or `YODAMAN_DB_PATH`, remove those locations too.
 
 ### 3. macOS only — if you changed the Ollama context length from YodaMan
 

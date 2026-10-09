@@ -1,5 +1,7 @@
+const fs = require('fs');
 const path = require('path');
 const logger = require('./Logger');
+const { databasePath, prepareDataDir } = require('./DataPaths');
 
 // Both are assigned by initialise() on success and reset by its catch, so
 // they are never read before being written. Undefined reads as falsy in the
@@ -10,11 +12,15 @@ let useSqlite;
 // Overridable so tests can use a throwaway database. Without this the suite
 // wrote into the live `yodaman.db`, leaving fake `test-task-*` rows in the
 // user's real task history and failing whenever the app held the file open.
-// Mirrors the existing YODAMAN_CONFIG_PATH convention.
-const DB_PATH = process.env.YODAMAN_DB_PATH || path.join(__dirname, '../../yodaman.db');
+// Mirrors the existing YODAMAN_CONFIG_PATH convention. The default is the
+// user's data folder, outside the install (see DataPaths).
+const DB_PATH = databasePath();
+// Before opening, which creates the file: an older install's copy must get here first.
+prepareDataDir();
 
 try {
     const { DatabaseSync } = require('node:sqlite');
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     db = new DatabaseSync(DB_PATH);
     useSqlite = true;
 
