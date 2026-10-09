@@ -2,7 +2,7 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
-## [Unreleased]
+## [0.5.9] - 2026-10-09
 
 ### Added
 - **Holocron, rebuilt toward its design vision.** The in-app viewer now lays the
@@ -77,7 +77,10 @@ All notable changes to **YodaMan** will be documented in this file.
   finished.
 - A search test overwrote the repository's real `config.json` and restored it
   afterwards; a crash between the two would have lost the workspace list.
-  Every test run now gets its own data folder.
+  Every test run now gets its own data folder, and so does the release smoke,
+  which opened the database directly and created an empty one in the user's
+  data folder ahead of the copy. Whatever opens the database first now
+  brings the old one over.
 - **WebAssembly was blocked by the page's security policy.** `script-src`
   now includes `'wasm-unsafe-eval'`, which allows compiling WebAssembly and
   nothing else; JavaScript `eval` stays forbidden, and a test holds both.

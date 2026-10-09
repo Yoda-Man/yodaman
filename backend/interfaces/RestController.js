@@ -256,6 +256,7 @@ function loadConfig() {
 loadConfig();
 
 function saveConfig() {
+    dataPaths.prepareDataDir();
     fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
 }
 

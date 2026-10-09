@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('./Logger');
-const { databasePath } = require('./DataPaths');
+const { databasePath, prepareDataDir } = require('./DataPaths');
 
 // Both are assigned by initialise() on success and reset by its catch, so
 // they are never read before being written. Undefined reads as falsy in the
@@ -15,6 +15,8 @@ let useSqlite;
 // Mirrors the existing YODAMAN_CONFIG_PATH convention. The default is the
 // user's data folder, outside the install (see DataPaths).
 const DB_PATH = databasePath();
+// Before opening, which creates the file: an older install's copy must get here first.
+prepareDataDir();
 
 try {
     const { DatabaseSync } = require('node:sqlite');

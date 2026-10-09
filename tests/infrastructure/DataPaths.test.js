@@ -101,6 +101,41 @@ describe('bringing data over from an older install', () => {
     });
 });
 
+describe('whoever touches the data first', () => {
+    test('opening the database before any server starts still brings the old one over', () => {
+        // The release smoke required Database.js directly: it created an empty
+        // yodaman.db in the data folder, and the copy that followed refused to
+        // overwrite it, so 28 tasks stayed behind. Reproduced with a throwaway
+        // install that has an old yodaman.db beside its code.
+        const root = path.join(__dirname, '../..');
+        const install = scratch();
+        fs.cpSync(path.join(root, 'backend'), path.join(install, 'backend'), { recursive: true });
+        fs.cpSync(path.join(root, 'shared'), path.join(install, 'shared'), { recursive: true });
+        fs.symlinkSync(path.join(root, 'node_modules'), path.join(install, 'node_modules'), 'dir');
+        const { DatabaseSync } = require('node:sqlite');
+        const old = new DatabaseSync(path.join(install, 'yodaman.db'));
+        old.exec("CREATE TABLE tasks (taskId TEXT PRIMARY KEY, task TEXT, projectId TEXT, status TEXT, createdAt TEXT, updatedAt TEXT, pendingApproval TEXT, finalAnswer TEXT, error TEXT, events TEXT); INSERT INTO tasks (taskId) VALUES ('order-66');");
+        old.close();
+
+        const env = { ...process.env, YODAMAN_DATA_DIR: scratch(), YODAMAN_LOG_DIR: scratch() };
+        delete env.YODAMAN_DB_PATH;
+        // A fresh process that opens the database first, as the smoke did.
+        require('child_process').execFileSync(process.execPath,
+            ['-e', `require(${JSON.stringify(path.join(install, 'backend/infrastructure/Database.js'))})`],
+            { env, stdio: 'pipe' });
+
+        const copy = new DatabaseSync(dataPaths.databasePath(env));
+        expect(copy.prepare('SELECT taskId FROM tasks').all().map((r) => r.taskId)).toEqual(['order-66']);
+        copy.close();
+    }, 30000);
+
+    test('Database.js prepares the folder itself, before it opens the file', () => {
+        const source = fs.readFileSync(path.join(__dirname, '../../backend/infrastructure/Database.js'), 'utf8');
+        expect(source.indexOf('prepareDataDir()')).toBeGreaterThan(-1);
+        expect(source.indexOf('prepareDataDir()')).toBeLessThan(source.indexOf('new DatabaseSync('));
+    });
+});
+
 describe('what the Dashboard shows', () => {
     test('each file: where it is, whether it exists, its size', () => {
         const env = { YODAMAN_DATA_DIR: scratch() };

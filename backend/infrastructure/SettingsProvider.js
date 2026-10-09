@@ -3,7 +3,7 @@
  */
 const fs = require('fs');
 const logger = require('./Logger');
-const { configPath } = require('./DataPaths');
+const { configPath, prepareDataDir } = require('./DataPaths');
 
 const DEFAULTS = {
   allowPluginUploads: false,
@@ -60,6 +60,7 @@ function save(updates) {
   loadedPath = currentPath;
 
   try {
+    prepareDataDir();
     let cfg = {};
     if (fs.existsSync(currentPath)) cfg = JSON.parse(fs.readFileSync(currentPath, 'utf8'));
     cfg.settings = settings;

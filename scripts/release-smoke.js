@@ -81,7 +81,10 @@ function main() {
             }
         });
 
-    // Verify Database.js and SQLite initialization if supported
+    // Verify Database.js and SQLite initialization if supported, in a
+    // throwaway data folder: opening it creates the file, and this once
+    // created an empty yodaman.db in the user's real data folder.
+    process.env.YODAMAN_DATA_DIR = fs.mkdtempSync(path.join(require('os').tmpdir(), 'yodaman-release-smoke-'));
     const dbHelper = require(path.join(root, 'backend/infrastructure/Database.js'));
     if (typeof dbHelper.useSqlite !== 'boolean') {
         throw new Error('Database.js did not export useSqlite boolean');

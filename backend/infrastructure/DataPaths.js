@@ -83,11 +83,23 @@ function snapshotDatabase(source, target) {
     }
 }
 
-/** Ready the data folder: create it, and bring over data from an older install. */
+/**
+ * Ready the data folder: create it, and bring over data from an older install.
+ *
+ * Called by whatever touches the data first, not only by server.js: the
+ * release smoke opened the database directly, created an empty yodaman.db,
+ * and the copy that followed then rightly refused to overwrite it. Once per
+ * process and destination; later calls return the first result.
+ */
+const prepared = new Map();
 function prepareDataDir(options = {}) {
     const env = options.env || process.env;
-    fs.mkdirSync(dataDir(env), { recursive: true });
-    return migrateLegacyData({ ...options, env });
+    const key = [options.from || INSTALL_ROOT, dataDir(env), configPath(env), databasePath(env)].join('\0');
+    if (!prepared.has(key)) {
+        fs.mkdirSync(dataDir(env), { recursive: true });
+        prepared.set(key, migrateLegacyData({ ...options, env }));
+    }
+    return prepared.get(key);
 }
 
 /** What the Dashboard shows: where each file is, and whether it exists yet. */
