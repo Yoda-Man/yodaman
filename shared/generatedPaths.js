@@ -50,8 +50,9 @@ const USER_OWNED_DIRS = ['openspec'];
  * reporting only: `npm uninstall -g yodaman` removes the whole directory, so
  * nothing here is deleted individually.
  */
+// config.json and yodaman.db are not here: they live in the user's data
+// folder (backend/infrastructure/DataPaths.js), so upgrades keep them.
 const INSTALL_DIR_STATE = [
-    'config.json',
     'sessions.json',
     'audit-log.json',
     'audit-log.jsonl',

@@ -210,3 +210,23 @@ describe('generatedPaths has not drifted from the code that writes these', () =>
         expect(USER_OWNED_DIRS).toContain('openspec');
     });
 });
+
+describe('the user\'s data files', () => {
+    const DATA = path.join(HOME, 'Library', 'Application Support', 'YodaMan');
+    const files = [path.join(DATA, 'config.json'), path.join(DATA, 'yodaman.db')];
+
+    it('lists config.json and yodaman.db by name, now that uninstalling the program no longer removes them', () => {
+        const plan = planFor({ dataFiles: files });
+        expect(removedPaths(plan)).toEqual(expect.arrayContaining(files));
+    });
+
+    it('never the folder they sit in, which also holds the desktop app\'s own data', () => {
+        expect(removedPaths(planFor({ dataFiles: files }))).not.toContain(DATA);
+    });
+
+    it('skips a file that does not exist', () => {
+        const plan = planFor({ dataFiles: files, exists: (p) => !p.endsWith('yodaman.db') });
+        expect(removedPaths(plan)).toContain(files[0]);
+        expect(removedPaths(plan)).not.toContain(files[1]);
+    });
+});

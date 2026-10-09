@@ -147,7 +147,7 @@ function formatGraphDoctorReport(report) {
     return lines.join('\n');
 }
 
-function runGraphDoctor({ configPath = path.join(process.cwd(), 'config.json'), now = new Date() } = {}) {
+function runGraphDoctor({ configPath = require('./DataPaths').configPath(), now = new Date() } = {}) {
     const projects = readConfig(configPath);
     return buildGraphDoctorReport({ projects, now });
 }

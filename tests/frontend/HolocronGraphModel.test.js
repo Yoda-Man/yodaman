@@ -128,3 +128,29 @@ describe('heat from git history', () => {
         expect(timeAgo('2026-10-05T12:00:00Z', now)).toBe('4 days ago');
     });
 });
+
+describe('readable names', () => {
+    const { isReadableLabel } = require('../../src/holocron/graphModel');
+
+    test('one- and two-letter names are not titles', () => {
+        for (const label of ['n', 'l', 'g()', 'Ze()', 'fs', '']) expect(isReadableLabel(label)).toBe(false);
+        for (const label of ['api', 'ToolBox', 'run()', 'SearchPipeline.js']) expect(isReadableLabel(label)).toBe(true);
+    });
+
+    test('a cluster whose hub is minified is named after a readable member, or its file', () => {
+        const model = buildModel({
+            nodes: [
+                { id: 'n', label: 'n', community: 1, sourceFile: 'frontend/bundle.js' },
+                { id: 'a', label: 'a', community: 1, sourceFile: 'frontend/bundle.js' },
+                { id: 'panel', label: 'createPanel()', community: 1, sourceFile: 'frontend/bundle.js' },
+                { id: 'x', label: 'x', community: 2, sourceFile: 'frontend/other.js' },
+                { id: 'y', label: 'y', community: 2, sourceFile: 'frontend/other.js' }
+            ],
+            links: [{ source: 'n', target: 'a' }, { source: 'n', target: 'panel' }, { source: 'x', target: 'y' }]
+        });
+        const byKey = Object.fromEntries(model.clusters.map((c) => [c.key, c]));
+        expect(model.nodes[byKey['1'].hub].label).toBe('n');   // still the layout anchor
+        expect(byKey['1'].name).toBe('createPanel');
+        expect(byKey['2'].name).toBe('other.js');
+    });
+});

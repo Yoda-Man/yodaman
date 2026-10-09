@@ -46,7 +46,38 @@ All notable changes to **YodaMan** will be documented in this file.
 - `GET /api/editor/preview`, a read-only window of a workspace file, with the
   same containment rules as opening a file.
 
+### Changed
+- **Your settings and history now survive upgrades.** `config.json` (settings
+  and the workspace list) and `yodaman.db` (task history and audit log) lived
+  inside the install folder, so replacing the app or reinstalling the npm
+  package erased them. They now live in the per-user data folder:
+  `~/Library/Application Support/YodaMan` on macOS, `%APPDATA%\YodaMan` on
+  Windows, `~/.config/YodaMan` on Linux (`YODAMAN_DATA_DIR` to change it). On
+  first start, files left in the install folder are copied over, never moved,
+  so an older version still finds its own; the database is copied as a
+  consistent snapshot that keeps rows not yet written back from its log.
+- **The Dashboard shows where both files are** (Your Data), with their sizes
+  and a copy button.
+- `yodaman doctor --graph` and `yodaman uninstall` read the runtime's own
+  `config.json`. They preferred one in the current directory, which the
+  runtime never read, so they could report on different workspaces.
+- `yodaman uninstall` lists `config.json` and `yodaman.db`, since removing the
+  program no longer removes them.
+
 ### Fixed
+- **Holocron and Graph Studio showed files that no longer exist.** Graphify's
+  incremental update keeps nodes of deleted files (562 in YodaMan's own
+  graph); the map now leaves them out, the same rule search already used.
+  Among them were two deleted minified bundles whose one-letter symbols
+  ("n", "l") were drawn as labels. Holocron also no longer uses a one- or
+  two-letter name as a label or cluster title.
+- The Dashboard's runtime health always said port 3090, whichever port the
+  runtime served.
+- `GET /api/desktop/diagnostics` failed with a 500 if called before startup
+  finished.
+- A search test overwrote the repository's real `config.json` and restored it
+  afterwards; a crash between the two would have lost the workspace list.
+  Every test run now gets its own data folder.
 - **WebAssembly was blocked by the page's security policy.** `script-src`
   now includes `'wasm-unsafe-eval'`, which allows compiling WebAssembly and
   nothing else; JavaScript `eval` stays forbidden, and a test holds both.

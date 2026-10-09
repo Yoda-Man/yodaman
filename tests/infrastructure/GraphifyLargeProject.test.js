@@ -57,6 +57,8 @@ function makeStaleWorkspace() {
 
     // A source edit one hour in the future guarantees `stale`, with no sleeping
     // and no dependence on filesystem timestamp granularity.
+    // Both files the graph names exist: map() leaves out nodes of deleted files.
+    fs.writeFileSync(path.join(workspace, 'b.js'), 'module.exports = 2;\n');
     const source = path.join(workspace, 'a.js');
     fs.writeFileSync(source, 'module.exports = 1;\n');
     const future = new Date(Date.now() + 3600 * 1000);
@@ -241,5 +243,40 @@ describe('map: which nodes a large graph shows', () => {
     test('a request cannot ask for an unbounded map', async () => {
         const out = await graphifyService.map(workspace, { limit: 1e9, rank: 'degree' });
         expect(out.nodes.length).toBeLessThanOrEqual(7);
+    });
+});
+
+describe('map: files that no longer exist', () => {
+    let workspace;
+    beforeEach(() => {
+        workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-map-missing-'));
+        fs.mkdirSync(path.join(workspace, 'graphify-out'));
+        fs.mkdirSync(path.join(workspace, 'src'));
+        fs.writeFileSync(path.join(workspace, 'src', 'alive.js'), 'module.exports = 1;\n');
+        // Graphify's incremental update keeps nodes for deleted files; this
+        // graph still lists a minified bundle that was removed.
+        const nodes = [
+            { id: 'alive', label: 'Alive', source_file: 'src/alive.js' },
+            { id: 'n', label: 'n', source_file: 'frontend/UIPanel.js' },
+            { id: 'l', label: 'l', source_file: 'frontend/UIPanel.js' },
+            { id: 'concept', label: 'Architecture' }
+        ];
+        const links = [{ source: 'alive', target: 'n' }, { source: 'n', target: 'l' }, { source: 'alive', target: 'concept' }];
+        fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, links }));
+    });
+    afterEach(() => fs.rmSync(workspace, { recursive: true, force: true }));
+
+    test('are left out, with their links, and counted', async () => {
+        const out = await graphifyService.map(workspace, { limit: 100, rank: 'degree' });
+        expect(out.nodes.map((n) => n.id).sort()).toEqual(['alive', 'concept']);
+        expect(out.links).toEqual([expect.objectContaining({ source: 'alive', target: 'concept' })]);
+        expect(out.missingFileNodes).toBe(2);
+        expect(out.totalNodes).toBe(2);
+    });
+
+    test('the graph file itself is not rewritten: a map is a read', async () => {
+        const before = fs.readFileSync(path.join(workspace, 'graphify-out', 'graph.json'), 'utf8');
+        await graphifyService.map(workspace, { limit: 100 });
+        expect(fs.readFileSync(path.join(workspace, 'graphify-out', 'graph.json'), 'utf8')).toBe(before);
     });
 });

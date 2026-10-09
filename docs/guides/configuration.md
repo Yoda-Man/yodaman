@@ -1,6 +1,6 @@
 # Configuration
 
-YodaMan reads persistent workspace configuration from local `config.json` and runtime settings from environment variables. Releases ship `config.example.json`; each support machine should keep its own ignored `config.json`.
+YodaMan reads persistent workspace configuration from `config.json` and runtime settings from environment variables. `config.json` lives in the user's data folder (`~/Library/Application Support/YodaMan` on macOS, `%APPDATA%\YodaMan` on Windows, `~/.config/YodaMan` on Linux), outside the install, so upgrades keep it; the Dashboard shows its path under **Your Data**. `YODAMAN_DATA_DIR` moves the folder and `YODAMAN_CONFIG_PATH` points at a single file. Releases ship `config.example.json` as a starting point.
 
 ## `config.json`
 
@@ -92,4 +92,4 @@ Run a local Graphify health summary from the project root or installed package:
 yodaman doctor --graph
 ```
 
-The command reads `config.json`, checks each workspace's `graphify-out/graph.json`, reports active graph count, persisted freshness, orphaned nodes, and the most dependency-heavy source file.
+The command reads the runtime's own `config.json` (not one in the current directory), checks each workspace's `graphify-out/graph.json`, reports active graph count, persisted freshness, orphaned nodes, and the most dependency-heavy source file.

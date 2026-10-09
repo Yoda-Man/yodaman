@@ -47,7 +47,7 @@ const INLINE_EVAL_FLAGS = {
     perl: ['-e']
 };
 
-const CONFIG_PATH = path.join(__dirname, '../../config.json');
+const { configPath } = require('./DataPaths');
 const PLUGIN_CONFIG_PATH = path.join(__dirname, '../../plugins/config.json');
 const PLUGIN_PERMISSION_ALLOWLIST = new Set([
     'read',
@@ -808,9 +808,10 @@ class ToolBox {
 
     getAllowedRoots() {
         let watchedDirectories = [];
-        if (fs.existsSync(CONFIG_PATH)) {
+        const config = configPath();
+        if (fs.existsSync(config)) {
             try {
-                watchedDirectories = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')).watchedDirectories || [];
+                watchedDirectories = JSON.parse(fs.readFileSync(config, 'utf8')).watchedDirectories || [];
             } catch (err) {
                 logger.error('toolbox_config_load_failed', err);
             }

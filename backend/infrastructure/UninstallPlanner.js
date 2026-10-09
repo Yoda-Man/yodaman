@@ -70,13 +70,15 @@ function isDangerousRoot(target, homeDir = os.homedir()) {
  * @param {string}   options.homeDir     Defaults to os.homedir().
  * @param {function} options.exists      Injectable for tests; defaults to fs.existsSync.
  * @param {string}   options.platform    Defaults to process.platform.
+ * @param {string[]} options.dataFiles   The user's config.json and yodaman.db (see DataPaths).
  * @returns {{remove: object[], protected: object[], manual: object[], skipped: object[]}}
  */
 function buildUninstallPlan({
     workspaces = [],
     homeDir = os.homedir(),
     exists = fs.existsSync,
-    platform = process.platform
+    platform = process.platform,
+    dataFiles = []
 } = {}) {
     const remove = [];
     const protectedPaths = [];
@@ -87,6 +89,12 @@ function buildUninstallPlan({
     const homeState = path.join(homeDir, HOME_STATE_DIR);
     if (exists(homeState)) {
         remove.push({ path: homeState, what: 'Runtime logs and state' });
+    }
+
+    // The user's settings, workspace list and history. Named one by one: the
+    // folder they sit in also holds the desktop app's own browser data.
+    for (const file of dataFiles) {
+        if (exists(file)) remove.push({ path: file, what: path.basename(file) === 'yodaman.db' ? 'Your task history and audit log' : 'Your settings and workspace list' });
     }
 
     for (const workspace of workspaces) {

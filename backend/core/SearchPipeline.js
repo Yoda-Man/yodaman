@@ -43,8 +43,9 @@ const logger = require('../infrastructure/Logger');
 const graphRanker = require('../infrastructure/GraphRanker');
 const specDrift = require('../stardust/SpecDrift');
 const { hitPath, dedupeHits } = require('../../shared/searchHits');
+const { workspaceFileExists } = require('../../shared/workspaceFiles');
 
-const CONFIG_PATH = path.join(__dirname, '../../config.json');
+const { configPath } = require('../infrastructure/DataPaths');
 const MODES = new Set(['unified', 'code', 'doc']);
 const MISSING_WORKSPACE_HINT = 'It may have been moved or deleted: edit its path in Settings, or remove it there.';
 
@@ -56,12 +57,13 @@ const MISSING_WORKSPACE_HINT = 'It may have been moved or deleted: edit its path
 const GENERATED = /(^|\/)(graphify-out|\.yodaman|\.yodaman-doc-chunks|node_modules|dist|release)\//;
 
 function loadWatchedDirectories() {
-    if (!fs.existsSync(CONFIG_PATH)) return [];
+    const file = configPath();
+    if (!fs.existsSync(file)) return [];
     try {
-        const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+        const config = JSON.parse(fs.readFileSync(file, 'utf8'));
         return Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
     } catch (err) {
-        logger.error('search_config_load_failed', err, { path: CONFIG_PATH, userAction: 'code_search', severity: 'medium' });
+        logger.error('search_config_load_failed', err, { path: file, userAction: 'code_search', severity: 'medium' });
         return [];
     }
 }
@@ -138,10 +140,7 @@ function keepRealFiles(hits, project) {
     for (const hit of unique) {
         const rel = hitPath(hit);
         if (GENERATED.test(rel)) { generated += 1; continue; }
-        if (project && rel) {
-            const absolute = path.isAbsolute(rel) ? rel : path.join(project, rel);
-            if (!fs.existsSync(absolute)) { missing += 1; continue; }
-        }
+        if (project && rel && !workspaceFileExists(project, rel)) { missing += 1; continue; }
         kept.push(hit);
     }
     return { kept, generated, missing, duplicates: hits.length - unique.length };

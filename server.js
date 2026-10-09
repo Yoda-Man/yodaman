@@ -4,6 +4,11 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
+// First, before anything reads config.json or opens yodaman.db: the user's
+// data folder, with data from an older install copied in (see DataPaths).
+const dataPaths = require('./backend/infrastructure/DataPaths');
+const dataMigration = dataPaths.prepareDataDir();
+
 // Initialize Infrastructure & Services
 process.env.DOTENVX_QUIET = 'true';
 const watcherService = require('./backend/infrastructure/FileSystemWatcher');
@@ -40,7 +45,7 @@ const PORT = Number(process.env.YODAMAN_PORT || 3090);
 // network; mobile pairing is the only reason to widen it, so that now has to be
 // an explicit opt-in via YODAMAN_HOST=0.0.0.0.
 const HOST = process.env.YODAMAN_HOST || '127.0.0.1';
-const CONFIG_PATH = process.env.YODAMAN_CONFIG_PATH || path.join(__dirname, 'config.json');
+const CONFIG_PATH = dataPaths.configPath();
 
 // Reflect loopback origins only. `cors()` sent Access-Control-Allow-Origin: *,
 // which let any website read API responses. See OriginPolicy for the rationale.
@@ -72,6 +77,8 @@ if (fs.existsSync(DIST_PATH)) {
 
 // Expose health state for the RestController
 app.set('healthState', healthState);
+// Health reports the port actually served; it used to fall back to 3090 always.
+app.set('port', PORT);
 
 // --- API Routes ---
 app.use('/api', apiRoutes);
@@ -268,6 +275,11 @@ stardustLive.attachToServer(server);
 
 server.listen(PORT, HOST, async () => {
     logger.info('runtime_started', { url: `http://localhost:${PORT}`, host: HOST });
+    logger.info('data_dir_ready', { dataDir: dataPaths.dataDir(), config: CONFIG_PATH, database: dataPaths.databasePath(), copiedFromInstall: dataMigration.copied });
+    for (const { file, error } of dataMigration.failed) {
+        // The old copy is untouched, so nothing is lost, but this run starts without it.
+        logger.error('data_migration_failed', new Error(error), { file, from: dataPaths.INSTALL_ROOT, to: dataPaths.dataDir(), severity: 'high' });
+    }
     if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
         logger.warn('runtime_bound_non_loopback', {
             host: HOST,

@@ -260,9 +260,11 @@ core/
 ├── server.js                           # Express server entry point
 ├── start.js                            # Dev startup script
 ├── package.json                        # Node.js dependencies
-├── config.json                         # Runtime configuration
 └── vite.config.js                      # Vite build configuration
 ```
+
+The user's data is not in this tree: `config.json` and `yodaman.db` live in the
+per-user data folder (`backend/infrastructure/DataPaths.js`), so upgrades keep them.
 
 ## Layer Responsibilities
 

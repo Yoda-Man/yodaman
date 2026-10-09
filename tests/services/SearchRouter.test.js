@@ -24,22 +24,24 @@ fs.mkdirSync(PROJECT);
 fs.mkdirSync(ANCHOR);
 afterAll(() => fs.rmSync(ROOT, { recursive: true, force: true }));
 
+// Its own config.json. This used to overwrite the repository's real one and
+// restore it afterwards, so a crash mid-test would have lost the user's
+// workspaces; it also only worked because search read the file beside the code.
+const CONFIG = path.join(ROOT, 'config.json');
+
 describe('SearchRouter', () => {
-    let originalConfig;
+    let previousConfigPath;
 
     beforeEach(() => {
         jest.clearAllMocks();
-        originalConfig = fs.existsSync('config.json')
-            ? fs.readFileSync('config.json', 'utf8')
-            : undefined;
+        previousConfigPath = process.env.YODAMAN_CONFIG_PATH;
+        process.env.YODAMAN_CONFIG_PATH = CONFIG;
     });
 
     afterEach(() => {
-        if (originalConfig === undefined) {
-            fs.rmSync('config.json', { force: true });
-        } else {
-            fs.writeFileSync('config.json', originalConfig);
-        }
+        if (previousConfigPath === undefined) delete process.env.YODAMAN_CONFIG_PATH;
+        else process.env.YODAMAN_CONFIG_PATH = previousConfigPath;
+        fs.rmSync(CONFIG, { force: true });
     });
 
     function routeHandler(routePath) {
@@ -91,7 +93,7 @@ describe('SearchRouter', () => {
     });
 
     test('resolves workspace display names to registered paths before searching', async () => {
-        fs.writeFileSync('config.json', JSON.stringify({
+        fs.writeFileSync(CONFIG, JSON.stringify({
             watchedDirectories: [ANCHOR],
             removedDirectories: []
         }));

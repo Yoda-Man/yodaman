@@ -11,6 +11,7 @@ const toolBox = require('../infrastructure/ToolBox');
 const searchRouter = require('../services/searchRouter');
 const fileUploadService = require('../services/fileUploadService');
 const auditLog = require('../infrastructure/AuditLog');
+const dataPaths = require('../infrastructure/DataPaths');
 const pairingService = require('../infrastructure/PairingService');
 const originPolicy = require('../infrastructure/OriginPolicy');
 const logger = require('../infrastructure/Logger');
@@ -976,7 +977,8 @@ router.post('/logs/client-error', (req, res) => {
 });
 
 router.get('/desktop/diagnostics', (req, res) => {
-    const healthState = req.app ? req.app.get('healthState') : {};
+    // Before startup registers its health state, report dependencies as unknown, not a 500.
+    const healthState = req.app?.get('healthState') || {};
     res.json({
         runtime: {
             pid: process.pid,
@@ -995,6 +997,8 @@ router.get('/desktop/diagnostics', (req, res) => {
             total: agentEngine.getTasks().length,
             pendingApprovals: agentEngine.getPendingApprovals().length
         },
+        // Where the user's settings, workspaces and history are kept.
+        data: dataPaths.describeDataFiles(),
         plugins: toolBox.getPolicy().plugins,
         dependencies: {
             ollama: healthState.ollama || null,

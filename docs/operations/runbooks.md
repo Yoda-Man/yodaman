@@ -113,7 +113,7 @@ YodaMan also keeps append-only local state, which does **not** self-rotate:
 - `task-history.jsonl`
 - `audit-log.json`
 - `task-history.json`
-- `yodaman.db`, when SQLite is available
+- `yodaman.db`, when SQLite is available (in the user's data folder; the Dashboard shows the path)
 
 To archive those, stop the runtime, move the files to a dated backup directory, then start the runtime again. Use `DELETE /api/audit` and `DELETE /api/agent/tasks` only when support intentionally wants to clear visible history.
 
@@ -207,7 +207,7 @@ restart and destroy the only record of the cause.
 ## Roll back a release
 
 1. Stop the runtime.
-2. Preserve `config.json`, `audit-log*`, `task-history*`, and `yodaman.db`.
+2. Preserve `audit-log*` and `task-history*` from the install folder. `config.json` and `yodaman.db` live in the user's data folder from 0.5.9 and are untouched by a reinstall.
 3. Check out the previous release tag or install the previous package version.
 4. Run `npm install`.
 5. Restore preserved local state files.

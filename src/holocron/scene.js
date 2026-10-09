@@ -26,7 +26,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
-import { neighborhood } from './graphModel'
+import { neighborhood, isReadableLabel } from './graphModel'
 import { vrFit, nextScale, panelContent, drawPanel, VR_RADIUS_M, VR_FOCUS_DISTANCE_M } from './vr'
 
 const BACKGROUND = 0x02030a
@@ -328,7 +328,7 @@ export function createConstellation({ mount, labelsLayer, model, positions, onHo
       named.add(cluster.hub)
     })
     model.nodes
-      .filter((n) => visible[n.index] && !named.has(n.index))
+      .filter((n) => visible[n.index] && !named.has(n.index) && isReadableLabel(n.label))
       .sort((a, b) => b.degree - a.degree)
       .slice(0, 14)
       .forEach((n) => specs.push({ text: n.label, kind: 'node', index: n.index }))
