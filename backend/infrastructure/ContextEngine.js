@@ -1,4 +1,5 @@
 const { spawn } = require('child_process');
+const crypto = require('crypto');
 const path = require('path');
 const dependencyChecker = require('./DependencyChecker');
 const { stripCliNoise, summarizeCliError } = require('./CliOutput');
@@ -48,29 +49,41 @@ class ContextEngine {
      * whenever a workspace was specified, which is the normal case. Resolving the
      * name here is what turns Context Expert back on.
      *
-     * Falls back to the directory's basename, which is what ctx names a project
-     * by default — so this still works when `ctx list` cannot be read.
+     * Returns null when `ctx list` was read and this workspace is not in it.
+     * It used to fall back to the directory's basename whenever the path was
+     * not found, and names are not unique: a registered `Documents/yodaman` that
+     * ctx had never indexed was searched as ctx's `yodaman` project, which was
+     * a different, since-deleted folder. Every hit was another project's file.
+     *
+     * The basename is still used when `ctx list` cannot be read at all, because
+     * that is what ctx names a project by default and nothing better is known.
+     * With `exact`, only this path's own index name is returned, or null.
      */
-    async projectName(projectPath) {
+    async projectName(projectPath, { exact = false } = {}) {
         if (!projectPath) return null;
         const absolute = path.resolve(projectPath);
 
         const fresh = this._projectCache && (Date.now() - this._projectCache.at) < PROJECT_CACHE_TTL_MS;
         if (!fresh) {
             const byPath = new Map();
+            let listed = true;
             try {
                 const listing = await this.executeJson(['list']);
                 for (const project of listing?.projects || []) {
                     if (project?.path && project?.name) byPath.set(path.resolve(project.path), project.name);
                 }
             } catch (err) {
+                listed = false;
                 logger.warn('ctx_list_failed', { reason: err.message, detail: 'falling back to basename' });
             }
-            this._projectCache = { at: Date.now(), byPath };
+            this._projectCache = { at: Date.now(), byPath, listed };
         }
 
         const known = this._projectCache.byPath.get(absolute);
         if (known) return known;
+        // `exact` is for destructive callers: removing a workspace's index must
+        // never resolve to an ancestor's or a namesake's.
+        if (exact) return null;
 
         // Nested workspace: the closest indexed ancestor still scopes better than
         // searching every indexed project.
@@ -80,7 +93,42 @@ class ContextEngine {
                 bestPath = candidate;
             }
         }
-        return bestPath ? this._projectCache.byPath.get(bestPath) : path.basename(absolute);
+        if (bestPath) return this._projectCache.byPath.get(bestPath);
+        return this._projectCache.listed === false ? path.basename(absolute) : null;
+    }
+
+    /**
+     * The name to index a workspace under, unique across ctx's projects.
+     *
+     * ctx names a project after its folder by default, and names are unique in
+     * its store. A second workspace whose folder shares a name (two `api`
+     * checkouts, or a `yodaman` folder after another `yodaman` was indexed)
+     * failed with "UNIQUE constraint failed: projects.name" on every Sync, so
+     * Context Expert could never index it, and searches fell back to text scans.
+     *
+     * Keeps the name a workspace already has; otherwise the folder name when it
+     * is free; otherwise the folder name plus a short hash of the full path.
+     */
+    async indexNameFor(projectPath) {
+        const absolute = path.resolve(projectPath);
+        const base = path.basename(absolute) || 'workspace';
+        let projects;
+        try {
+            projects = (await this.executeJson(['list']))?.projects || [];
+        } catch (err) {
+            // Nothing better is known; this is what ctx would choose anyway.
+            logger.warn('ctx_list_failed', { reason: err.message, detail: 'indexing under the folder name' });
+            return base;
+        }
+        const own = projects.find((project) => project?.path && path.resolve(project.path) === absolute);
+        if (own?.name) return own.name;
+        if (!projects.some((project) => project?.name === base)) return base;
+        return `${base}-${crypto.createHash('sha1').update(absolute).digest('hex').slice(0, 6)}`;
+    }
+
+    /** Drop the cached project list, so a newly indexed workspace is found. */
+    forgetProjects() {
+        this._projectCache = null;
     }
 
     /**
@@ -102,7 +150,13 @@ class ContextEngine {
         const args = ['ask'];
         if (project) {
             const name = await this.projectName(project);
-            if (name) args.push('-p', name);
+            if (name) {
+                args.push('-p', name);
+            } else {
+                // Not indexed yet. Asking unscoped beats asking a same-named
+                // stranger, but it is not the workspace's own context: say so.
+                logger.warn('ctx_project_not_indexed', { project, hint: 'Run Sync Repository to index this workspace.' });
+            }
         }
         if (topK) args.push('-k', String(topK));
         args.push('--', text);

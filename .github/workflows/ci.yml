@@ -3,8 +3,13 @@ name: CI
 on:
   pull_request:
   push:
+    # dev too, not just main. Work happens on dev and is merged to main once a
+    # release is judged stable, so a main-only trigger meant every commit sat
+    # untested until PR time — the branch where the work actually lives got no
+    # CI at all.
     branches:
       - main
+      - dev
 
 jobs:
   test:

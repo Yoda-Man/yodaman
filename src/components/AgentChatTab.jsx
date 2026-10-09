@@ -56,30 +56,6 @@ function normalizeMessages(items) {
   }))
 }
 
-function isAbsolutePath(filePath) {
-  return filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath)
-}
-
-// Search hits and agent answers cite paths relative to the workspace
-// (`graphify-out/GRAPH_REPORT.md`). Handing one of those to vscode://file
-// unresolved makes VS Code look for it at the filesystem root, so anchor
-// relative refs to the active workspace before building the URI.
-function resolveRefPath(refPath, workspaceRoot) {
-  const filePath = String(refPath || '').replace(/^\.\//, '')
-  if (!filePath || isAbsolutePath(filePath) || !workspaceRoot) return filePath
-  return `${String(workspaceRoot).replace(/[\\/]+$/, '')}/${filePath}`
-}
-
-function fileRefUrl(ref, workspaceRoot) {
-  const absolute = resolveRefPath(ref.path, workspaceRoot).replace(/\\/g, '/')
-  // vscode://file/ already supplies the leading slash of a POSIX path.
-  const encoded = encodeURI(absolute.replace(/^\/+/, ''))
-    .replace(/#/g, '%23')
-    .replace(/\?/g, '%3F')
-  const line = ref.line ? `:${ref.line}` : ''
-  return `vscode://file/${encoded}${line}`
-}
-
 function extractFileReferences(content) {
   const refs = []
   const seen = new Set()
@@ -303,7 +279,8 @@ const READINESS_STYLES = {
   ready: { label: 'Graph current', className: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' },
   stale: { label: 'Graph stale', className: 'border-amber-400/25 bg-amber-400/10 text-amber-200' },
   building: { label: 'Refreshing', className: 'border-indigo-400/25 bg-indigo-400/10 text-indigo-200' },
-  unindexed: { label: 'Not indexed', className: 'border-rose-400/25 bg-rose-400/10 text-rose-200' }
+  unindexed: { label: 'Not indexed', className: 'border-rose-400/25 bg-rose-400/10 text-rose-200' },
+  missing: { label: 'Folder not found', className: 'border-rose-500/40 bg-rose-500/15 text-rose-100' }
 }
 
 /**
@@ -603,6 +580,21 @@ export default function AgentChatTab({ selectedProject }) {
   const [isOpeningVr, setIsOpeningVr] = useState(false)
   const [holocronAvailable, setHolocronAvailable] = useState(false)
   const [workspaceView, setWorkspaceView] = useState('chat')
+  const composerRef = useRef(null)
+
+  // Holocron's "Ask Agent" pre-fills a question about a node. It is never
+  // sent automatically: the user reads it, edits it if they like, and sends.
+  useEffect(() => {
+    const onAsk = (event) => {
+      const prompt = event.detail?.prompt
+      if (!prompt) return
+      setWorkspaceView('chat')
+      setInputText(prompt)
+      setTimeout(() => composerRef.current?.focus(), 0)
+    }
+    window.addEventListener('yodaman:ask-agent', onAsk)
+    return () => window.removeEventListener('yodaman:ask-agent', onAsk)
+  }, [])
   const [searchRequest, setSearchRequest] = useState({ id: 0, query: '' })
   const [isSearchPending, setIsSearchPending] = useState(false)
   const [pendingApproval, setPendingApproval] = useState(null)
@@ -792,10 +784,19 @@ export default function AgentChatTab({ selectedProject }) {
 
   // Callers hand over either a {path, line} ref (file chips) or a bare path
   // string (the approval panel's cross-reference link).
-  function openFileReference(ref) {
+  //
+  // The runtime opens the file in the user's own editor. This used to build a
+  // vscode://file URL, which opened VS Code whatever the user's default was, and
+  // nothing at all on a machine without it. Relative paths are resolved against
+  // the workspace on the server, which also refuses anything outside it.
+  async function openFileReference(ref) {
     const normalized = typeof ref === 'string' ? { path: ref, line: null } : ref
-    if (!normalized?.path) return
-    window.open(fileRefUrl(normalized, selectedProject?.path), '_blank', 'noopener,noreferrer')
+    if (!normalized?.path || !selectedProject?.path) return
+    try {
+      await api.openInEditor(selectedProject.path, normalized.path, normalized.line)
+    } catch (err) {
+      setError(`Could not open ${normalized.path}: ${err.message}`)
+    }
   }
 
   function viewInVr(refs, diagnostics) {
@@ -1226,6 +1227,7 @@ export default function AgentChatTab({ selectedProject }) {
               </div>
             ) : null}
             <textarea
+              ref={composerRef}
               value={inputText}
               onChange={event => setInputText(event.target.value)}
               onKeyDown={handleComposerKeyDown}

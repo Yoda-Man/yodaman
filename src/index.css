@@ -3,9 +3,8 @@
    a local-first product should not call out to a font CDN on every launch, and
    the packaged desktop app has no network to rely on. */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.cjs";
 
 :root {
   --bg-primary: #020617;
@@ -240,4 +239,44 @@
 /* Custom shadow for glowing effects */
 .glow-indigo {
   box-shadow: 0 0 20px -5px rgba(99, 102, 241, 0.4);
+}
+/* ─── Holocron constellation labels ───────────────────────────────────────
+   Positioned by holocron/scene.js each frame; transform carries the screen
+   position, opacity the depth.                                            */
+.holo-label,
+.holo-label-focus,
+.holo-cluster {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.holo-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(226 232 240);
+  text-shadow: 0 0 6px rgb(2 3 10), 0 0 12px rgb(2 3 10);
+}
+
+.holo-label-focus {
+  padding: 3px 8px;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  border-radius: 6px;
+  background: rgb(2 6 23 / 0.8);
+  font-size: 13px;
+  font-weight: 800;
+  color: white;
+  backdrop-filter: blur(8px);
+}
+
+.holo-cluster {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgb(203 213 225 / 0.55);
+  text-shadow: 0 0 10px rgb(2 3 10);
 }

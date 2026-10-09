@@ -45,6 +45,21 @@ for what is generated versus what is yours.
 YodaMan is local-first, so removing it is a matter of deleting files. Nothing
 was uploaded anywhere and there is no account to close.
 
+### See exactly what would be removed
+
+```bash
+yodaman uninstall
+```
+
+That is a **dry run** — it lists every path it would delete and changes nothing.
+Add `--yes` to actually remove them.
+
+It never touches `openspec/` (your specs), your source code, or your Ollama
+service config — the last is only ever offered for you to restore by hand,
+because YodaMan's backup is the only copy of your original.
+
+The manual route below does the same thing, if you would rather see it yourself.
+
 ### 1. Remove the program
 
 ```bash

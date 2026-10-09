@@ -12,21 +12,40 @@ describe('SearchWindow component contract', () => {
         expect(text).toContain('results.length === 0 && hasSearched');
     });
 
-    test('has expand/collapse state for search results', () => {
-        const text = fs.readFileSync(componentPath, 'utf8');
+    // These two used to assert the source text, including the label of an
+    // ExternalLink icon that only expanded the snippet: the test locked in a
+    // button that looked like "open" and wasn't. They now check behaviour on
+    // the rendered card: Open opens, the chevron expands.
+    function renderCard(props) {
+        require('../helpers/browserStub').installBrowserStub();
+        const React = require('react');
+        const { renderToStaticMarkup } = require('react-dom/server');
+        const { SearchResultCard } = require('../../src/components/SearchWindow');
+        const result = { score: 0.9, filePath: 'auth/login.py', lineStart: 12, content: 'def login():' };
+        return renderToStaticMarkup(React.createElement(SearchResultCard, { result, onOpen() {}, onToggle() {}, ...props }));
+    }
 
-        expect(text).toContain('expandedResults');
-        expect(text).toContain('setExpandedResults');
-        expect(text).toContain('ChevronUp');
-        expect(text).toContain('View full content');
+    test('a result can be expanded, and expanding is not dressed up as opening', () => {
+        const collapsed = renderCard({ expanded: false });
+        expect(collapsed).toContain('title="Show details"');
+        expect(collapsed).not.toContain('Full path:');
+        expect(renderCard({ expanded: true })).toContain('Full path: auth/login.py');
     });
 
-    test('search result view button has onClick handler', () => {
-        const text = fs.readFileSync(componentPath, 'utf8');
-
-        // The ExternalLink/expand button must have an onClick with setExpandedResults
-        const viewButtonRegex = /onClick\s*=\s*\{[^}]*setExpandedResults[^}]*\}/s;
-        expect(viewButtonRegex.test(text)).toBe(true);
+    test('the expand toggle is wired to its handler', () => {
+        require('../helpers/browserStub').installBrowserStub();
+        const { SearchResultCard } = require('../../src/components/SearchWindow');
+        let toggled = 0;
+        const tree = SearchResultCard({ result: { filePath: 'a.py', content: 'x', score: 1 }, onOpen() {}, onToggle: () => { toggled += 1; } });
+        const buttons = [];
+        (function walk(node) {
+            if (!node || typeof node !== 'object') return;
+            if (Array.isArray(node)) return node.forEach(walk);
+            if (node.type === 'button') buttons.push(node);
+            walk(node.props?.children);
+        })(tree);
+        buttons.find((b) => b.props.title === 'Show details').props.onClick();
+        expect(toggled).toBe(1);
     });
 
     test('uses the shared chat composer request and has no duplicate search input', () => {

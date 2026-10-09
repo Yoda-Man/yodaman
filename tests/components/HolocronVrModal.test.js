@@ -1,19 +1,52 @@
-const fs = require('fs')
-const path = require('path')
+/**
+ * What Holocron shows before its scene loads: the chrome a user navigates by.
+ *
+ * This file used to assert source text from the previous viewer, including a
+ * hardcoded "v0.5.1" that tests/plugins/BundledHolocron.test.js forbids, so
+ * the two tests contradicted each other. It now renders the component
+ * (server-side; effects, and therefore the WebGL scene, do not run) and checks
+ * what is on screen. The scene and data rules are tested in
+ * tests/frontend/HolocronLayout.test.js and HolocronGraphModel.test.js.
+ */
+const React = require('react')
+const { renderToStaticMarkup } = require('react-dom/server')
 
-describe('HolocronVrModal visual contract', () => {
-  const componentPath = path.resolve(__dirname, '../../src/components/HolocronVrModal.jsx')
+beforeAll(() => {
+  require('../helpers/browserStub').installBrowserStub()
+})
 
-  test('renders a vivid clustered constellation with useful node context', () => {
-    const text = fs.readFileSync(componentPath, 'utf8')
+function render() {
+  const HolocronVrModal = require('../../src/components/HolocronVrModal').default
+  return renderToStaticMarkup(React.createElement(HolocronVrModal, {
+    project: { name: 'coruscant', path: '/tmp/coruscant' },
+    diagnostics: {},
+    onClose: () => {}
+  }))
+}
 
-    expect(text).toContain('COMMUNITY_COLORS')
-    expect(text).toContain('new THREE.MeshBasicMaterial({ vertexColors: true })')
-    expect(text).toContain('Architecture clusters')
-    expect(text).toContain('nodeDescription')
-    expect(text).toContain('sourceLocation')
-    expect(text).toContain('click a node to inspect')
-    expect(text).toContain('v0.5.1')
-    expect(text).not.toContain('setHSL(((Number(node.community)')
+describe('Holocron before its scene loads', () => {
+  test('names the workspace and the bundled version', () => {
+    const html = render()
+    const { version } = require('../../plugins/plugin.json')
+    expect(html).toContain('coruscant')
+    expect(html).toContain(`v${version}`)
+  })
+
+  test('says it is mapping, rather than showing an empty void', () => {
+    expect(render()).toContain('Mapping workspace constellation')
+  })
+
+  test('offers search, filters, the heatmap, the node limit, VR and close', () => {
+    const html = render()
+    for (const label of ['Search the constellation', 'Filters', 'Change heatmap', 'Maximum nodes', 'Close Holocron']) {
+      expect(html).toContain(`aria-label="${label}"`)
+    }
+    expect(html).toMatch(/1,500 nodes/)
+    expect(html).toMatch(/4,000 nodes/)
+  })
+
+  test('explains the controls', () => {
+    const html = render()
+    for (const hint of ['orbit', 'pan', 'zoom', 'inspect', 'search', 'reset camera']) expect(html).toContain(hint)
   })
 })

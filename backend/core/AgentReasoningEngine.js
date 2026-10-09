@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const contextEngine = require('../infrastructure/ContextEngine');
 const { stripCliNoise, hasSubstantiveAnswer } = require('../infrastructure/CliOutput');
 const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
@@ -14,9 +16,109 @@ const { promptBudgetFor } = require('./promptBudget');
 const { requiresApproval } = require('../../shared/toolCapabilities');
 const stardustBrief = require('./StardustBrief');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
+const { hitPath, hitLine, hitPreview, chipPath } = require('../../shared/searchHits');
 
 // Tools whose success invalidates the retrieval index and the knowledge graph.
 const MUTATING_TOOLS = new Set(['writeFile']);
+
+/**
+ * Most tool calls a model may act on in a single turn.
+ *
+ * A bound, not a target. A model that has lost the thread can emit dozens of
+ * calls, and fanning all of them out at once turns one confused turn into a
+ * burst of filesystem work. Five covers every legitimate "read these files
+ * together" case seen in practice.
+ */
+const MAX_PARALLEL_TOOL_CALLS = 5;
+
+/**
+ * Every tool call in a model response, in the order it wrote them.
+ *
+ * THE BUG THIS REPLACES:
+ *
+ *     const toolCallMatch = response.match(/<tool_call>([\s\S]*?)<\/tool_call>/)
+ *
+ * `String.match` without the `g` flag returns the FIRST match only. Everything
+ * after it was discarded with no error and no log line. A model emitting three
+ * reads had two thrown away silently.
+ *
+ * The cost was mostly not lost work — it was wasted iterations. The model saw
+ * one result, re-emitted the rest, and three calls consumed three turns instead
+ * of one. Against `maxIterations = 10` that burns the budget roughly three
+ * times faster than the work requires, and the user sees "I reached the maximum
+ * number of steps without finishing" on a task that needed a dozen file reads.
+ * The logs showed nothing but ordinary `agent_iteration` events.
+ *
+ * Returns `{ calls, malformed }`. Malformed blocks are RETURNED, never dropped:
+ * silence is the defect being fixed here, and a bad block the model is told
+ * about is something it can correct on the next turn.
+ *
+ * @param {string} response
+ * @param {number} limit
+ * @returns {{calls: object[], malformed: string[], total: number}}
+ */
+function extractToolCalls(response, limit = MAX_PARALLEL_TOOL_CALLS) {
+    if (typeof response !== 'string' || !response) {
+        return { calls: [], malformed: [], total: 0 };
+    }
+
+    // Both delimiters, global this time. TOOL_CALL is the wire format; the
+    // angle-bracket form is still parsed because a model may emit it from
+    // habit. See the note at the call site for why the plain-text delimiter
+    // matters to ctx 1.4.0.
+    const raw = [
+        ...response.matchAll(/TOOL_CALL\s*(\{[\s\S]*?\})\s*(?:\n|$)/g),
+        ...response.matchAll(/<tool_call>([\s\S]*?)<\/tool_call>/g)
+    ];
+
+    // A model that emits both forms in one response would otherwise have its
+    // calls ordered by delimiter rather than by what it actually wrote.
+    raw.sort((a, b) => a.index - b.index);
+
+    const calls = [];
+    const malformed = [];
+
+    for (const match of raw) {
+        const text = String(match[1]).trim();
+        if (!text) continue;
+
+        let parsed = null;
+        let reason = null;
+
+        try {
+            parsed = JSON.parse(text);
+        } catch (err) {
+            // Keep the message: the caller reports it to the model and to the
+            // task record, and "Unexpected end of JSON input" is far more
+            // actionable than "a call failed". Small models truncate mid-object
+            // often enough that this is the common path, not the rare one.
+            reason = err.message;
+            const repaired = repairJSON(text);
+            if (repaired) {
+                try {
+                    parsed = JSON.parse(repaired);
+                    reason = null;
+                } catch (_repairErr) {
+                    // Repair produced something still unparseable. The ORIGINAL
+                    // error is the useful one — it describes what the model
+                    // actually wrote — so keep it and discard this second one.
+                    reason = err.message;
+                }
+            }
+        }
+
+        if (parsed && typeof parsed.name === 'string') {
+            calls.push({ call: parsed, raw: text });
+        } else {
+            malformed.push({
+                raw: text.slice(0, 200),
+                reason: reason || 'tool call had no "name"'
+            });
+        }
+    }
+
+    return { calls: calls.slice(0, limit), malformed, total: calls.length };
+}
 
 function safeToolName(rawToolCall) {
     try {
@@ -39,6 +141,107 @@ function safeToolName(rawToolCall) {
 // Budgets for a small model, whose context the full prompt plus ctx's retrieved
 // chunks will not fit. Both are deliberately conservative: an answer that fits
 // beats a richer prompt that gets truncated from the front.
+/**
+ * A request that is only a search, phrased the way people type into a search
+ * box: "find where user login is handled", "search for the main entry point",
+ * "where is the config loaded".
+ *
+ * WHY THIS ROUTES DIRECTLY:
+ *
+ * Typed into Chat, a one-line search went through the full reasoning loop. On a
+ * large workspace each step is a `ctx ask` of two to three minutes, the model
+ * spends a step deciding to search, another reading, another searching again,
+ * and the task ended ten steps later on "I reached the maximum number of steps
+ * without finishing" with everything it had found thrown away. Measured on an
+ * 8,255-file workspace: three steps took ten minutes and had not answered yet.
+ * A search does not need a model to decide that it is a search.
+ *
+ * Deliberately narrow, like resolveDirectPluginCall: one line, short, starting
+ * with a search verb, and containing nothing that asks for reasoning or a change.
+ * Anything else takes the full loop. Getting this wrong in the safe direction
+ * costs a slower answer; getting it wrong the other way would return search hits
+ * to someone who asked for an explanation, so the exclusion list is broad.
+ */
+const SEARCH_INTENT = /^(?:please\s+)?(?:search(?:\s+for)?|find|locate|look\s+for|grep\s+for|where\s+(?:is|are|'s|does|do)|show\s+me\s+where)\s+(.+?)[\s?.!]*$/i;
+const NOT_JUST_A_SEARCH = /\b(?:why|how|explain|describe|summari[sz]e|review|compare|fix|change|refactor|rewrite|write|create|add|remove|delete|rename|implement|update|edit|modify|run|install|build|deploy|test|debug|and\s+(?:then|also))\b/i;
+const MAX_DIRECT_SEARCH_CHARS = 160;
+const DIRECT_SEARCH_TOP = 8;
+
+function resolveDirectSearch(task) {
+    const text = String(task || '').trim();
+    if (!text || text.length > MAX_DIRECT_SEARCH_CHARS || /\n/.test(text)) return null;
+    const match = SEARCH_INTENT.exec(text);
+    if (!match) return null;
+    if (NOT_JUST_A_SEARCH.test(text)) return null;
+    // "where the login is handled" searches better without its leading glue.
+    const query = match[1].replace(/^(?:where|the\s+code\s+(?:that|for))\s+/i, '').trim();
+    return query.length >= 2 ? { query } : null;
+}
+
+/**
+ * One sentence on which pillars shaped these results, built from what the
+ * pipeline reports rather than assumed. Claiming a pillar that did not apply
+ * would make a degraded search look like a full one.
+ */
+function describePillars({ contextExpert = true, graphify = false, openspec = false } = {}) {
+    const found = contextExpert
+        ? 'Found by Context Expert'
+        : 'Found by a plain text scan (Context Expert has not indexed this workspace; run Sync Repository)';
+    const ranked = graphify
+        ? 'ranked with the Graphify knowledge graph'
+        : 'not ranked by Graphify (no graph for this workspace yet, or none of these files are in it; build it in Graph Studio)';
+    const tagged = openspec
+        ? 'tagged with the OpenSpec specs that cover them'
+        : 'not tagged by OpenSpec (no specs in this workspace)';
+    return `${found}, ${ranked}, ${tagged}.`;
+}
+
+function formatSearchAnswer(query, hits, workspaceName, pillars = {}) {
+    // The pipeline has already deduplicated, filtered and ranked these.
+    const unique = (Array.isArray(hits) ? hits : []).filter(hitPath).slice(0, DIRECT_SEARCH_TOP);
+    if (!unique.length) {
+        return `No matches for **${query}** in ${workspaceName}. Try different keywords, or ask a question in Chat and the agent will investigate.`;
+    }
+    const lines = unique.map((hit, i) => {
+        const line = hitLine(hit);
+        const ref = `${chipPath(hitPath(hit))}${line ? `:${line}` : ''}`;
+        const preview = hitPreview(hit);
+        const specs = hit?.specFlag?.covered && hit.specFlag.specs?.length ? ` (spec: ${hit.specFlag.specs.join(', ')})` : '';
+        return `${i + 1}. \`${ref}\`${specs}${preview ? `\n   ${preview}` : ''}`;
+    });
+    return [
+        `Top ${unique.length} match${unique.length === 1 ? '' : 'es'} for **${query}** in ${workspaceName}:`,
+        '',
+        ...lines,
+        '',
+        `_${describePillars(pillars)}_`,
+        '',
+        'Click a file to open it in your editor. For an explanation, ask a follow-up such as "explain how the first one works".'
+    ].join('\n');
+}
+
+/**
+ * Files the agent has actually looked at, so running out of steps can report
+ * them instead of discarding them. Only paths and lines, never content: this
+ * exists to point the user somewhere, not to rebuild the transcript.
+ */
+function collectEvidence(evidence, toolName, params, result) {
+    if (!evidence || result?.error) return;
+    if (toolName === 'readFile' && params?.filePath) {
+        evidence.set(String(params.filePath), { path: String(params.filePath), line: null, via: 'read' });
+        return;
+    }
+    if (toolName === 'searchCode') {
+        const hits = Array.isArray(result) ? result : (Array.isArray(result?.results) ? result.results : []);
+        for (const hit of hits.filter(hitPath).slice(0, 5)) {
+            const key = hitPath(hit);
+            if (!evidence.has(key)) evidence.set(key, { path: key, line: hitLine(hit), via: 'search' });
+        }
+    }
+}
+
+const MAX_STEPS_FALLBACK = 'I reached the maximum number of steps without finishing. Please try breaking the task into smaller parts.';
+
 const COMPACT_PROMPT_CHARS = 5000;
 const COMPACT_TOP_K = 3;
 
@@ -159,7 +362,9 @@ Rules:
 - Before editing: impactOf(file). No tests covering → say so.
 - Multi-file features: specPropose → specValidate → specArchive.
 - Check specDrift first to avoid re-implementing documented work.
-- Be concise. One tool call per turn.
+- Be concise.
+- You may emit SEVERAL read-only calls in one turn (readFile, listFiles, searchCode, graphify*, specDrift, specValidate) and they run together. Prefer this to asking for files one at a time.
+- Emit only ONE call per turn when it changes anything (writeFile, applyPatch, specPropose, specArchive, executeCommand): each needs separate approval.
 `;
     }
 
@@ -289,6 +494,83 @@ Rules:
         return { name, plugin };
     }
 
+    /** Run a plain search without a model round-trip, emitting the usual events. */
+    async runSearchDirectly({ query }, { taskId, onStep, metadata }) {
+        const params = { query, project: metadata.projectId, top: 20 };
+        logger.info('agent_search_routed_directly', { taskId, query });
+
+        const emit = (event) => {
+            this.recordTaskEvent(taskId, event);
+            if (onStep) onStep(event);
+        };
+
+        // The same pipeline as the Search view: Context Expert retrieves,
+        // Graphify reranks by structure, OpenSpec marks spec coverage. Calling
+        // searchCode here instead would be Context Expert alone, and the same
+        // query would rank differently in Chat than in Search.
+        emit({ type: 'tool_start', taskId, tool: 'search', params, routed: 'direct' });
+        try {
+            // Required lazily: SearchPipeline -> ToolBox is already loaded here,
+            // and keeping it lazy keeps the engine's import graph acyclic.
+            const { search } = require('./SearchPipeline');
+            const { results: hits, pillars } = await search({ query, project: metadata.projectId, top: params.top });
+            logger.info('agent_search_completed', { taskId, hits: hits.length, pillars });
+            emit({ type: 'tool_end', taskId, tool: 'search', result: hits.slice(0, DIRECT_SEARCH_TOP) });
+            const workspaceName = String(metadata.projectId).split(/[\\/]/).filter(Boolean).pop() || 'this workspace';
+            const answer = formatSearchAnswer(query, hits, workspaceName, pillars);
+            this.recordTask(taskId, { status: 'completed', finalAnswer: answer });
+            // Recorded, not emitted: RestController sends final_answer from the
+            // returned value (see runPluginDirectly).
+            this.recordTaskEvent(taskId, { type: 'final_answer', taskId, answer });
+            return answer;
+        } catch (err) {
+            logger.error('agent_search_direct_failed', err, { taskId });
+            this.recordTask(taskId, { status: 'error', error: err.message });
+            emit({ type: 'error', taskId, message: err.message });
+            return null;
+        }
+    }
+
+    /**
+     * The loop ran out of steps. Answer from what was gathered rather than
+     * throwing it away.
+     *
+     * This used to return a fixed "try breaking the task into smaller parts",
+     * discarding every file the agent had read and every search it had run.
+     * After ten steps of real work the user got nothing they could act on. Now:
+     * one last model turn with tools forbidden, and if that fails, a plain list
+     * of the files that were examined, which is always worth more than a shrug.
+     */
+    async answerFromEvidence({ conversation, evidence, metadata, topK, taskId }) {
+        conversation.addNote(
+            `You have used all ${this.maxIterations} steps. Do NOT call any tool. `
+            + 'Answer the original task now using only the tool results above, naming the files and lines that matter. '
+            + 'If they are not enough to answer fully, say what is still missing.'
+        );
+        try {
+            const raw = await contextEngine.ask(conversation.render(), { project: metadata.projectId, topK });
+            const response = stripCliNoise(raw?.output).trim();
+            const stillCallingTools = extractToolCalls(response).total > 0;
+            if (!raw?.partial && hasSubstantiveAnswer(response) && !stillCallingTools) {
+                logger.info('agent_max_iterations_synthesised', { taskId, chars: response.length });
+                return `${response}\n\n---\n_Stopped after ${this.maxIterations} steps. This answer is based on what was found up to that point._`;
+            }
+        } catch (err) {
+            logger.warn('agent_max_iterations_synthesis_failed', { taskId, reason: err.message });
+        }
+
+        if (!evidence.size) return MAX_STEPS_FALLBACK;
+        const files = [...evidence.values()].slice(0, 10)
+            .map((item) => `- \`${chipPath(item.path)}${item.line ? `:${item.line}` : ''}\``);
+        return [
+            `I ran out of steps (${this.maxIterations}) before finishing. These are the files I examined, which are the best place to look:`,
+            '',
+            ...files,
+            '',
+            'Ask a narrower follow-up about one of them, for example "explain the first file".'
+        ].join('\n');
+    }
+
     /** Invoke a named plugin without a model round-trip, emitting the usual events. */
     async runPluginDirectly({ name, plugin }, { taskId, task, onStep, metadata }) {
         const parameters = {};
@@ -340,6 +622,19 @@ Rules:
             error: null
         });
 
+        // A workspace whose folder is gone cannot be worked on, and its stale
+        // index would send every step after files that no longer exist: the
+        // reported "maximum number of steps" on a simple search came from
+        // exactly this. Say so before spending a single step.
+        if (metadata.projectId && path.isAbsolute(metadata.projectId) && !fs.existsSync(metadata.projectId)) {
+            const answer = `The workspace folder **${metadata.projectId}** was not found. It may have been moved or deleted. `
+                + 'Edit its path in Settings, or remove it there, then ask again.';
+            logger.warn('agent_workspace_missing', { taskId, path: metadata.projectId });
+            this.recordTask(taskId, { status: 'completed', finalAnswer: answer });
+            this.recordTaskEvent(taskId, { type: 'final_answer', taskId, answer });
+            return answer;
+        }
+
         // ── Direct plugin routing ────────────────────────────────────────
         // "Run CodeTrooper" names the tool outright. Asking a 9B model to infer
         // which tool that means costs a retrieval, a model round-trip and about
@@ -356,6 +651,15 @@ Rules:
         const routed = this.resolveDirectPluginCall(task);
         if (routed && metadata.projectId) {
             return this.runPluginDirectly(routed, { taskId, task, onStep, metadata });
+        }
+
+        // A plain search runs as a search: one read-only call, no model, no
+        // step budget to run out of. See resolveDirectSearch for why.
+        const search = metadata.projectId && !(metadata.uploadedFiles || []).length
+            ? resolveDirectSearch(task)
+            : null;
+        if (search) {
+            return this.runSearchDirectly(search, { taskId, task, onStep, metadata });
         }
 
         // The workspace's own state, composed from all three tools and scoped to
@@ -456,6 +760,9 @@ Rules:
         // Workspaces this task wrote to, refreshed once when the task ends.
         const touchedWorkspaces = new Set();
         let finalAnswer = '';
+        // What the agent has looked at, kept so running out of steps can
+        // still point somewhere. See answerFromEvidence.
+        const evidence = new Map();
 
         logger.info('agent_loop_started', { taskPreview: task.substring(0, 50) });
 
@@ -560,8 +867,129 @@ Rules:
             // server" because errors.ts:118 classifies every TypeError as a
             // connection fault. Every agent task needing a tool died there. The
             // plain-text delimiter never triggers native mode, so the loop works.
-            const toolCallMatch = response.match(/TOOL_CALL\s*(\{[\s\S]*?\})\s*(?:\n|$)/)
-                || response.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+            const extracted = extractToolCalls(response);
+            const descriptorFor = (name) => (
+                toolBox.plugins && typeof toolBox.plugins.get === 'function'
+                    ? toolBox.plugins.get(name)
+                    : null
+            );
+
+            // A block the model wrote and we could not parse is reported, never
+            // discarded. Being told about a malformed call is what lets a model
+            // correct it; silence is what made the original bug invisible.
+            // A malformed call is an ERROR the task must surface, not a note to
+            // file away. The first version of this change filtered malformed
+            // blocks out silently; with no valid call left, the loop fell
+            // through to "no tool call" and returned the raw broken text as the
+            // final answer. That is a new silent failure introduced inside the
+            // fix for silent failures, and AgentReasoningEngine.test.js caught
+            // it. The pre-existing contract is: emit an error, record it, and
+            // let the model try again.
+            if (extracted.malformed.length) {
+                const reason = extracted.malformed[0].reason;
+                logger.error('agent_tool_call_malformed', new Error(reason), {
+                    taskId, iteration, count: extracted.malformed.length,
+                    userAction: 'agent_tool_call', severity: 'high'
+                });
+
+                const event = { type: 'error', taskId, message: reason };
+                this.recordTaskEvent(taskId, event);
+                if (onStep) onStep(event);
+                this.recordTask(taskId, { status: 'error', error: reason });
+                conversation.addNote(`Error: ${reason}`);
+
+                // Only when nothing else survived. If some calls parsed, run
+                // them — one bad block must not discard the good ones.
+                if (!extracted.calls.length) {
+                    if (iteration < this.maxIterations) continue;
+                    finalAnswer = `The model produced an unparseable tool call: ${reason}`;
+                    break;
+                }
+            }
+
+            if (extracted.total > extracted.calls.length) {
+                const deferred = extracted.total - extracted.calls.length;
+                logger.info('agent_tool_calls_capped', { taskId, iteration, deferred });
+                conversation.addNote(
+                    `Only the first ${extracted.calls.length} tool calls were run; `
+                    + `${deferred} were not. Re-request them if you still need them.`
+                );
+            }
+
+            // ─── PARALLEL READ-ONLY BATCH ──────────────────────────────────
+            //
+            // Only when EVERY call in the turn is read-only. Reads cannot
+            // conflict with each other, so running them together is safe by
+            // construction and the approval gate is not involved at all.
+            //
+            // Anything requiring consent falls through to the single-call path
+            // below, unchanged. Approvals must arrive one at a time and in a
+            // predictable order, or a user cannot tell what they are approving
+            // — so a batch containing a write is never parallelised.
+            const allReadOnly = extracted.calls.length > 1
+                && extracted.calls.every(({ call }) => !requiresApproval(call.name, descriptorFor(call.name) || {}));
+
+            if (allReadOnly) {
+                logger.info('agent_parallel_tools', {
+                    taskId, iteration, count: extracted.calls.length,
+                    tools: extracted.calls.map(({ call }) => call.name)
+                });
+
+                for (const { call } of extracted.calls) {
+                    const startEvent = { type: 'tool_start', taskId, tool: call.name, params: call.parameters };
+                    this.recordTaskEvent(taskId, startEvent);
+                    if (onStep) onStep(startEvent);
+                }
+
+                // allSettled, not all: one failing read must not discard the
+                // results of the others — that is the defect being fixed.
+                const settled = await Promise.allSettled(
+                    extracted.calls.map(({ call }) => toolBox.callTool(call.name, call.parameters))
+                );
+
+                // Recorded in CALL order, after every one has settled — never
+                // in completion order. ConversationBuffer.addToolResult
+                // appends, so completion order would reorder the transcript
+                // between runs and show the model a different history for
+                // identical work.
+                settled.forEach((outcome, i) => {
+                    const { call } = extracted.calls[i];
+                    const result = outcome.status === 'fulfilled'
+                        ? outcome.value
+                        : { error: outcome.reason?.message || 'tool failed' };
+
+                    conversation.addToolResult(call.name, result);
+                    collectEvidence(evidence, call.name, call.parameters, result);
+                    const endEvent = { type: 'tool_end', taskId, tool: call.name, result };
+                    this.recordTaskEvent(taskId, endEvent);
+                    if (onStep) onStep(endEvent);
+                });
+
+                continue;
+            }
+            // ───────────────────────────────────────────────────────────────
+
+            // Single-call path, unchanged. `toolCallMatch` keeps its original
+            // shape so the error handler below still reports the tool name.
+            //
+            // Only the first call runs this turn, because the batch contains
+            // something needing approval. The REST MUST BE ANNOUNCED: dropping
+            // them quietly is the original defect wearing different clothes,
+            // and it would be a poor joke to reintroduce it inside its own fix.
+            if (extracted.calls.length > 1) {
+                const deferred = extracted.calls.slice(1).map(({ call }) => call.name);
+                logger.info('agent_tool_calls_deferred', {
+                    taskId, iteration, ran: extracted.calls[0].call.name, deferred
+                });
+                conversation.addNote(
+                    `Only ${extracted.calls[0].call.name} ran this turn: a call that changes something `
+                    + 'needs its own approval, so calls are not batched with it. '
+                    + `Not run: ${deferred.join(', ')}. Re-request them next turn.`
+                );
+            }
+
+            const first = extracted.calls[0];
+            const toolCallMatch = first ? [null, first.raw] : null;
 
             if (toolCallMatch) {
                 try {
@@ -721,6 +1149,7 @@ Rules:
                     // Clipped on arrival: a large file read must not be re-sent in
                     // full on every remaining iteration.
                     conversation.addToolResult(toolCall.name, result);
+                    collectEvidence(evidence, toolCall.name, toolCall.parameters, result);
 
 
                     // An accepted write makes the ctx index and the graph stale the
@@ -764,8 +1193,16 @@ Rules:
         // reached a conclusion — including a specific diagnosis of why it could not
         // answer — has said something more useful than "try smaller parts".
         if (iteration >= this.maxIterations && !finalAnswer) {
-            finalAnswer = "I reached the maximum number of steps without finishing. Please try breaking the task into smaller parts.";
-            logger.warn('agent_max_iterations_reached', { maxIterations: this.maxIterations });
+            logger.warn('agent_max_iterations_reached', { maxIterations: this.maxIterations, evidence: evidence.size });
+            finalAnswer = await this.answerFromEvidence({ conversation, evidence, metadata, topK, taskId });
+            if (this.isCancelled(taskId)) {
+                const event = { type: 'task_cancelled', taskId, message: 'Task cancelled.' };
+                this.recordTaskEvent(taskId, event);
+                if (onStep) onStep(event);
+                this.recordTask(taskId, { status: 'cancelled' });
+                this.cancelledTasks.delete(taskId);
+                return null;
+            }
         }
 
         this.recordTask(taskId, { status: 'completed', finalAnswer });
@@ -841,3 +1278,13 @@ function repairJSON(raw) {
 }
 
 module.exports = new AgentReasoningEngine();
+
+// Test seams. The engine is a singleton, so the pure helpers are attached here
+// rather than exported separately — the same pattern as McpClients.reset().
+// extractToolCalls is where the dropped-call bug lived, so it is tested
+// directly rather than only through a full agent run.
+module.exports.extractToolCalls = extractToolCalls;
+module.exports.MAX_PARALLEL_TOOL_CALLS = MAX_PARALLEL_TOOL_CALLS;
+module.exports.resolveDirectSearch = resolveDirectSearch;
+module.exports.formatSearchAnswer = formatSearchAnswer;
+module.exports.MAX_STEPS_FALLBACK = MAX_STEPS_FALLBACK;

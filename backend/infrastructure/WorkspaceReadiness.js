@@ -13,11 +13,15 @@
  *   stale     — a layer is behind the source; answers may miss recent work
  *   building  — a refresh is in flight; wait rather than re-ask
  *   unindexed — nothing has been built yet; answers will be poor
+ *   missing   — the workspace folder is gone (moved or deleted); nothing it
+ *               returns can be opened, and indexing will not bring it back
  *
  * Exports:
  *   forWorkspace(projectPath) → readiness report
  *   summarize(report)         → one-line human string
  */
+
+const fs = require('fs');
 
 const graphifyService = require('./GraphifyService');
 const queueService = require('../core/QueueService');
@@ -25,7 +29,18 @@ const logger = require('./Logger');
 const specDrift = require('../stardust/SpecDrift');
 
 // Ordered worst-to-best so the overall verdict is the weakest layer.
-const SEVERITY = ['unindexed', 'building', 'stale', 'ready'];
+const SEVERITY = ['missing', 'unindexed', 'building', 'stale', 'ready'];
+
+/**
+ * A registered workspace whose folder no longer exists.
+ *
+ * Reported as "unindexed: Run Sync Repository" before, which was the wrong
+ * advice: syncing a folder that is not there cannot help. Meanwhile Context
+ * Expert kept its old index, so searches returned files that could not be
+ * opened and the agent spent every step failing to read them.
+ */
+const MISSING_ACTION = 'The workspace folder was not found. It may have been moved or deleted: '
+    + 'edit its path in Settings, or remove it there.';
 
 function weakest(states) {
     return states.reduce(
@@ -121,6 +136,19 @@ function forWorkspace(projectPath, { withCoverage = false } = {}) {
     if (!projectPath) {
         return { path: null, state: 'unindexed', layers: {}, reason: 'no workspace selected' };
     }
+    if (!fs.existsSync(projectPath)) {
+        // Same shape as every other report: clients read layers.graph and
+        // layers.index unconditionally.
+        const gone = { state: 'missing', detail: 'workspace folder not found' };
+        return {
+            path: projectPath,
+            state: 'missing',
+            trustworthy: false,
+            layers: { graph: gone, index: gone },
+            action: MISSING_ACTION,
+            coverage: null
+        };
+    }
 
     const layers = {
         graph: graphLayer(projectPath),
@@ -158,7 +186,8 @@ function summarize(report) {
         ready: 'ready',
         stale: 'stale — answers may miss recent changes',
         building: 'refreshing',
-        unindexed: 'not indexed yet'
+        unindexed: 'not indexed yet',
+        missing: 'folder not found'
     };
     return labels[report.state] || report.state;
 }

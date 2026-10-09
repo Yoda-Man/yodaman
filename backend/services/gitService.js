@@ -1,5 +1,6 @@
 const path = require('path');
-const simpleGit = require('simple-git');
+// simple-git 4 exports the factory by name; v3's module itself was callable.
+const { simpleGit } = require('simple-git');
 
 function gitFor(workspacePath) {
     return simpleGit({ baseDir: resolveWorkspacePath(workspacePath), trimmed: false });

@@ -1,309 +1,164 @@
-import { useEffect, useRef, useState } from 'react'
-import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search, SlidersHorizontal, Flame, X, ExternalLink, MessageSquare, Copy, Crosshair, Glasses, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
 import { api } from '../api/api'
+import { arrangeConstellation } from '../holocron/forceLayout'
+import { buildModel, visibleNodes, searchNodes, heatValues, timeAgo } from '../holocron/graphModel'
+import { createConstellation } from '../holocron/scene'
+// The bundled plugin manifest is the one version source; it was hardcoded
+// here as v0.5.1 and drifted from every release after it.
+import holocronManifest from '../../plugins/plugin.json'
 
-const COMMUNITY_COLORS = [
-  '#38bdf8', '#a78bfa', '#34d399', '#fb7185', '#fbbf24',
-  '#22d3ee', '#c084fc', '#4ade80', '#f97316', '#60a5fa',
-  '#e879f9', '#facc15'
-]
+const NODE_LIMITS = [500, 1500, 4000]
+const DEFAULT_LIMIT = 1500
+const glass = 'border border-white/10 bg-slate-950/70 shadow-2xl backdrop-blur-xl'
 
-function nodeKind(node) {
-  const path = node.sourceFile || node.label || ''
-  const extension = path.includes('.') ? path.split('.').pop().toUpperCase() : ''
-  if (extension && extension.length <= 10) return extension
-  return String(node.fileType || 'symbol').replaceAll('_', ' ')
+function Toggle({ label, checked, onChange, disabled, hint }) {
+  return (
+    <label className={`flex items-center justify-between gap-4 py-1.5 text-xs ${disabled ? 'opacity-40' : 'cursor-pointer'}`} title={hint}>
+      <span className="text-slate-200">{label}</span>
+      <button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}
+        className={`relative h-5 w-9 rounded-full transition-colors ${checked ? 'bg-cyan-400' : 'bg-slate-700'}`}>
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${checked ? 'left-[18px]' : 'left-0.5'}`} />
+      </button>
+    </label>
+  )
 }
 
-function nodeDescription(node, connections = 0) {
-  const kind = nodeKind(node)
-  const location = [node.sourceFile, node.sourceLocation].filter(Boolean).join(' · ')
-  return {
-    title: node.label || node.id,
-    kind,
-    location: location || 'Graphify knowledge graph node',
-    summary: `${kind} node in architecture cluster ${node.community ?? 'unknown'}, connected to ${connections} ${connections === 1 ? 'relationship' : 'relationships'}.`
-  }
+function Stat({ label, value }) {
+  return <div className="flex items-baseline gap-1.5"><span className="text-[10px] uppercase tracking-widest text-slate-500">{label}</span><span className="text-xs font-bold text-slate-100">{value}</span></div>
 }
 
-function disposeObject(object) {
-  object?.geometry?.dispose?.()
-  if (Array.isArray(object?.material)) object.material.forEach(material => material.dispose?.())
-  else object?.material?.dispose?.()
-}
-
+/**
+ * Holocron: the workspace as a navigable constellation.
+ *
+ * The scene lives in holocron/scene.js and the data rules in
+ * holocron/graphModel.js; this component owns the chrome around them:
+ * search, filters, the cluster legend, node detail, and VR.
+ */
 export default function HolocronVrModal({ project, diagnostics, onClose }) {
   const mountRef = useRef(null)
   const labelsRef = useRef(null)
-  const tooltipRef = useRef(null)
-  const rendererRef = useRef(null)
+  const sceneRef = useRef(null)
+  const searchRef = useRef(null)
+
+  const [limit, setLimit] = useState(DEFAULT_LIMIT)
+  const [model, setModel] = useState(null)
+  const [layout, setLayout] = useState(null)
   const [status, setStatus] = useState('Mapping workspace constellation…')
   const [error, setError] = useState('')
   const [vrSupported, setVrSupported] = useState(false)
   const [session, setSession] = useState(null)
-  const [selectedNode, setSelectedNode] = useState(null)
-  const [communities, setCommunities] = useState([])
+  const [focus, setFocus] = useState(null)
+  const [hover, setHover] = useState(null)
+  const [query, setQuery] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filters, setFilters] = useState({ hideTests: false, hideDocs: false, hideThirdParty: true, languages: new Set(), recentOnly: false })
+  const [heatOn, setHeatOn] = useState(false)
+  const [heat, setHeat] = useState(null)
+  const [preview, setPreview] = useState(null)
 
+  // ── Load, lay out, and build the scene ───────────────────────────────
   useEffect(() => {
     let disposed = false
-    let frame = 0
-    let removeResize
-    let controls
-    let renderer
-    let scene
-    const mount = mountRef.current
-    const labelsLayer = labelsRef.current
-    const tooltip = tooltipRef.current
-
     async function start() {
       try {
-        const graph = await api.mapGraphify(project.path, 500)
+        setStatus('Mapping workspace constellation…')
+        const graph = await api.mapGraphify(project.path, limit, { rank: 'degree' })
         if (disposed) return
+        const next = buildModel(graph)
 
-        renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
-        rendererRef.current = renderer
-        renderer.xr.enabled = true
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-        renderer.setSize(mount.clientWidth, mount.clientHeight)
-        renderer.outputEncoding = THREE.sRGBEncoding
-        mount.appendChild(renderer.domElement)
-
-        scene = new THREE.Scene()
-        scene.background = new THREE.Color(0x02040c)
-        scene.fog = new THREE.FogExp2(0x02040c, 0.018)
-
-        const camera = new THREE.PerspectiveCamera(58, mount.clientWidth / mount.clientHeight, 0.1, 220)
-        camera.position.set(0, 5, 34)
-        controls = new OrbitControls(camera, renderer.domElement)
-        controls.enableDamping = true
-        controls.dampingFactor = 0.06
-        controls.minDistance = 5
-        controls.maxDistance = 85
-        controls.autoRotate = true
-        controls.autoRotateSpeed = 0.22
-
-        const nodes = graph.nodes || []
-        const links = graph.links || []
-        const nodeIndex = new Map(nodes.map((node, index) => [node.id, index]))
-        const degrees = new Uint16Array(nodes.length)
-        links.forEach(link => {
-          const source = nodeIndex.get(link.source)
-          const target = nodeIndex.get(link.target)
-          if (source !== undefined) degrees[source]++
-          if (target !== undefined) degrees[target]++
-        })
-
-        const grouped = new Map()
-        nodes.forEach((node, index) => {
-          const key = String(node.community ?? 'unknown')
-          if (!grouped.has(key)) grouped.set(key, [])
-          grouped.get(key).push(index)
-        })
-        const groups = [...grouped.entries()].sort((a, b) => b[1].length - a[1].length)
-        const communityCss = new Map(groups.map(([key], index) => [key, COMMUNITY_COLORS[index % COMMUNITY_COLORS.length]]))
-        const communityColor = new Map(groups.map(([key]) => [key, new THREE.Color(communityCss.get(key))]))
-        setCommunities(groups.slice(0, 6).map(([key, members], index) => ({
-          key,
-          count: members.length,
-          color: COMMUNITY_COLORS[index % COMMUNITY_COLORS.length]
-        })))
-
-        const positions = new Array(nodes.length)
-        const goldenAngle = Math.PI * (3 - Math.sqrt(5))
-        groups.forEach(([_key, members], groupIndex) => {
-          const groupAngle = groupIndex * goldenAngle
-          const groupRadius = groupIndex === 0 ? 0 : 5.2 + Math.sqrt(groupIndex) * 3.1
-          const center = new THREE.Vector3(
-            Math.cos(groupAngle) * groupRadius,
-            Math.sin(groupAngle * 1.7) * Math.min(7, groupRadius * 0.42),
-            Math.sin(groupAngle) * groupRadius * 0.62
-          )
-          members.forEach((nodePosition, memberIndex) => {
-            const localAngle = memberIndex * goldenAngle
-            const localRadius = 0.7 + Math.sqrt(memberIndex) * 0.66
-            positions[nodePosition] = new THREE.Vector3(
-              center.x + Math.cos(localAngle) * localRadius,
-              center.y + Math.sin(localAngle * 1.31) * localRadius * 0.7,
-              center.z + Math.sin(localAngle) * localRadius * 0.58
-            )
-          })
-        })
-
-        const geometry = new THREE.SphereGeometry(1, 14, 10)
-        const material = new THREE.MeshBasicMaterial({ vertexColors: true })
-        const mesh = new THREE.InstancedMesh(geometry, material, nodes.length)
-        const matrix = new THREE.Matrix4()
-        const nodeScales = new Float32Array(nodes.length)
-        nodes.forEach((node, index) => {
-          const scale = Math.min(0.7, 0.17 + Math.sqrt(degrees[index]) * 0.075)
-          nodeScales[index] = scale
-          matrix.makeScale(scale, scale, scale)
-          matrix.setPosition(positions[index])
-          mesh.setMatrixAt(index, matrix)
-          mesh.setColorAt(index, communityColor.get(String(node.community ?? 'unknown')))
-        })
-        mesh.instanceMatrix.needsUpdate = true
-        mesh.instanceColor.needsUpdate = true
-        scene.add(mesh)
-
-        const haloMaterial = new THREE.MeshBasicMaterial({
-          vertexColors: true,
-          transparent: true,
-          opacity: 0.16,
-          side: THREE.BackSide,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending
-        })
-        const halos = new THREE.InstancedMesh(geometry, haloMaterial, nodes.length)
-        nodes.forEach((node, index) => {
-          const scale = nodeScales[index] * 1.9
-          matrix.makeScale(scale, scale, scale)
-          matrix.setPosition(positions[index])
-          halos.setMatrixAt(index, matrix)
-          halos.setColorAt(index, communityColor.get(String(node.community ?? 'unknown')))
-        })
-        halos.instanceMatrix.needsUpdate = true
-        halos.instanceColor.needsUpdate = true
-        scene.add(halos)
-
-        const edgePositions = []
-        const edgeColors = []
-        links.forEach(link => {
-          const sourceIndex = nodeIndex.get(link.source)
-          const targetIndex = nodeIndex.get(link.target)
-          if (sourceIndex === undefined || targetIndex === undefined) return
-          edgePositions.push(...positions[sourceIndex].toArray(), ...positions[targetIndex].toArray())
-          const sourceColor = communityColor.get(String(nodes[sourceIndex].community ?? 'unknown'))
-          const targetColor = communityColor.get(String(nodes[targetIndex].community ?? 'unknown'))
-          edgeColors.push(...sourceColor.toArray(), ...targetColor.toArray())
-        })
-        const edgeGeometry = new THREE.BufferGeometry()
-        edgeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3))
-        edgeGeometry.setAttribute('color', new THREE.Float32BufferAttribute(edgeColors, 3))
-        const lines = new THREE.LineSegments(edgeGeometry, new THREE.LineBasicMaterial({
-          vertexColors: true,
-          transparent: true,
-          opacity: 0.2,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending
-        }))
-        scene.add(lines)
-
-        const starPositions = new Float32Array(900 * 3)
-        for (let i = 0; i < starPositions.length; i += 3) {
-          const radius = 35 + Math.random() * 65
-          const theta = Math.random() * Math.PI * 2
-          const phi = Math.acos(2 * Math.random() - 1)
-          starPositions[i] = radius * Math.sin(phi) * Math.cos(theta)
-          starPositions[i + 1] = radius * Math.cos(phi)
-          starPositions[i + 2] = radius * Math.sin(phi) * Math.sin(theta)
+        setStatus('Arranging constellation…')
+        const groups = next.clusters.map((cluster) => [cluster.key, cluster.members])
+        const nodeIndex = new Map(next.nodes.map((node) => [node.id, node.index]))
+        const arranged = await arrangeConstellation({ nodes: next.nodes, links: graph.links || [], nodeIndex, groups })
+        if (disposed) return
+        if (arranged.engine === 'fallback' && next.nodes.length > 1) {
+          // Degraded, not broken: worth knowing about, never worth failing over.
+          console.warn(`[Holocron] basic layout: ${arranged.reason}`)
+          api.reportClientError({ message: `Holocron layout engine unavailable: ${arranged.reason}`, userAction: 'holocron_layout', component: 'HolocronVrModal', severity: 'medium', context: { project: project.path, nodes: next.nodes.length } })
         }
-        const starsGeometry = new THREE.BufferGeometry()
-        starsGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3))
-        const stars = new THREE.Points(starsGeometry, new THREE.PointsMaterial({ color: 0x64748b, size: 0.055, transparent: true, opacity: 0.6 }))
-        scene.add(stars)
 
-        const importantNodes = nodes
-          .map((node, index) => ({ node, index, degree: degrees[index] }))
-          .sort((a, b) => b.degree - a.degree)
-          .slice(0, Math.min(18, nodes.length))
-        const labels = importantNodes.map(({ node, index }) => {
-          const label = document.createElement('div')
-          label.className = 'absolute -translate-x-1/2 rounded-md border border-white/10 bg-slate-950/75 px-2 py-1 text-[10px] font-semibold text-slate-100 shadow-lg backdrop-blur-md'
-          label.textContent = node.label || node.id
-          label.style.borderColor = communityCss.get(String(node.community ?? 'unknown'))
-          label.style.whiteSpace = 'nowrap'
-          labelsLayer.appendChild(label)
-          return { element: label, index }
+        sceneRef.current = createConstellation({
+          mount: mountRef.current,
+          labelsLayer: labelsRef.current,
+          model: next,
+          positions: arranged.positions,
+          onHover: (index, event) => setHover(index >= 0 && event ? { index, x: event.offsetX, y: event.offsetY } : null),
+          onSelect: (index) => setFocus(index >= 0 ? index : null)
         })
-
-        const raycaster = new THREE.Raycaster()
-        const pointer = new THREE.Vector2()
-        let hoveredIndex = -1
-        const updatePointer = event => {
-          const rect = renderer.domElement.getBoundingClientRect()
-          pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-          pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
-          raycaster.setFromCamera(pointer, camera)
-          const hit = raycaster.intersectObject(mesh, false)[0]
-          hoveredIndex = hit?.instanceId ?? -1
-          renderer.domElement.style.cursor = hoveredIndex >= 0 ? 'pointer' : 'grab'
-          if (hoveredIndex < 0) {
-            tooltip.style.opacity = '0'
-            return
-          }
-          const detail = nodeDescription(nodes[hoveredIndex], degrees[hoveredIndex])
-          const title = document.createElement('strong')
-          const meta = document.createElement('span')
-          title.textContent = detail.title
-          meta.textContent = `${detail.kind} · ${degrees[hoveredIndex]} connections`
-          tooltip.replaceChildren(title, meta)
-          tooltip.style.left = `${event.clientX - rect.left + 14}px`
-          tooltip.style.top = `${event.clientY - rect.top + 14}px`
-          tooltip.style.opacity = '1'
-        }
-        const selectHovered = () => {
-          if (hoveredIndex < 0) return
-          controls.autoRotate = false
-          controls.target.copy(positions[hoveredIndex])
-          setSelectedNode({ ...nodeDescription(nodes[hoveredIndex], degrees[hoveredIndex]), color: communityCss.get(String(nodes[hoveredIndex].community ?? 'unknown')) })
-        }
-        renderer.domElement.addEventListener('pointermove', updatePointer)
-        renderer.domElement.addEventListener('pointerleave', () => { tooltip.style.opacity = '0' })
-        renderer.domElement.addEventListener('click', selectHovered)
-
-        const resize = () => {
-          if (!mount.clientWidth || !mount.clientHeight) return
-          camera.aspect = mount.clientWidth / mount.clientHeight
-          camera.updateProjectionMatrix()
-          renderer.setSize(mount.clientWidth, mount.clientHeight)
-        }
-        window.addEventListener('resize', resize)
-        removeResize = () => window.removeEventListener('resize', resize)
-
-        const projected = new THREE.Vector3()
-        let renderCount = 0
-        renderer.setAnimationLoop(() => {
-          controls.update()
-          stars.rotation.y += 0.00008
-          if (renderCount++ % 2 === 0) {
-            labels.forEach(({ element, index }) => {
-              projected.copy(positions[index]).project(camera)
-              const visible = projected.z < 1 && Math.abs(projected.x) < 1.05 && Math.abs(projected.y) < 1.05
-              element.style.display = visible ? 'block' : 'none'
-              if (visible) {
-                element.style.left = `${(projected.x * 0.5 + 0.5) * mount.clientWidth}px`
-                element.style.top = `${(-projected.y * 0.5 + 0.5) * mount.clientHeight - 18}px`
-              }
-            })
-          }
-          renderer.render(scene, camera)
-        })
-        frame = requestAnimationFrame(resize)
-
+        setModel(next)
+        setLayout(arranged)
+        setStatus('')
         const supported = Boolean(navigator.xr) && await navigator.xr.isSessionSupported('immersive-vr').catch(() => false)
-        setVrSupported(supported)
-        const shown = nodes.length === graph.totalNodes ? `${nodes.length} nodes` : `${nodes.length} of ${graph.totalNodes || nodes.length} nodes`
-        setStatus(`${shown} · ${links.length} relationships · ${groups.length} architecture clusters${supported ? ' · headset ready' : ' · desktop mode'}`)
+        if (!disposed) setVrSupported(supported)
       } catch (err) {
-        setError(`Could not start Holocron VR: ${err.message}`)
+        setError(`Could not start Holocron: ${err.message}`)
         api.reportClientError({ message: err.message, stack: err.stack, userAction: 'render_holocron_vr', component: 'HolocronVrModal', severity: 'high', context: { project: project.path, diagnostics } })
       }
     }
-
+    setModel(null)
+    setFocus(null)
     start()
     return () => {
       disposed = true
-      removeResize?.()
-      cancelAnimationFrame(frame)
-      renderer?.setAnimationLoop(null)
-      renderer?.domElement?.remove()
-      labelsLayer?.replaceChildren()
-      scene?.traverse(disposeObject)
-      renderer?.dispose()
+      sceneRef.current?.dispose()
+      sceneRef.current = null
     }
+  }, [project.path, limit])
+
+  // Recent changes for the heatmap; optional, since not every workspace is a git repo.
+  useEffect(() => {
+    let cancelled = false
+    api.gitHeatmap(project.path).then((data) => { if (!cancelled) setHeat(data?.files || []) }).catch(() => { if (!cancelled) setHeat([]) })
+    return () => { cancelled = true }
   }, [project.path])
+
+  const heatInfo = useMemo(() => (model && heat ? heatValues(model, heat) : null), [model, heat])
+  const hasHeat = Boolean(heatInfo?.heat.some((value) => value > 0))
+  const visible = useMemo(() => (model ? visibleNodes(model, filters, heatInfo?.heat) : null), [model, filters, heatInfo])
+  const shown = visible ? visible.reduce((sum, v) => sum + v, 0) : 0
+
+  useEffect(() => { if (visible) sceneRef.current?.setVisible(visible) }, [visible])
+  useEffect(() => { sceneRef.current?.setHeat(heatOn && hasHeat ? heatInfo.heat : null) }, [heatOn, hasHeat, heatInfo])
+  useEffect(() => {
+    sceneRef.current?.setFocus(focus)
+    setPreview(null)
+    const node = focus !== null ? model?.nodes[focus] : null
+    if (!node?.file) return undefined
+    let cancelled = false
+    api.previewFile(project.path, node.file, node.line)
+      .then((data) => { if (!cancelled) setPreview(data) })
+      .catch((err) => { if (!cancelled) setPreview({ error: err.message }) })
+    return () => { cancelled = true }
+  }, [focus, model, project.path])
+
+  const results = useMemo(() => (model ? searchNodes(model, query).filter((n) => visible?.[n.index]) : []), [model, query, visible])
+
+  function select(index) {
+    setFocus(index)
+    sceneRef.current?.flyTo(index)
+    setQuery('')
+  }
+
+  // ── Keyboard: / or ⌘K search, R reset, Esc clear ─────────────────────
+  useEffect(() => {
+    const onKey = (event) => {
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target?.tagName)
+      if ((event.key === 'k' && (event.metaKey || event.ctrlKey)) || (event.key === '/' && !typing)) {
+        event.preventDefault()
+        searchRef.current?.focus()
+      } else if (event.key === 'Escape') {
+        if (query) setQuery('')
+        else if (focus !== null) setFocus(null)
+        else if (filtersOpen) setFiltersOpen(false)
+      } else if (!typing && (event.key === 'r' || event.key === 'R')) {
+        setFocus(null)
+        sceneRef.current?.resetCamera()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [query, focus, filtersOpen])
 
   async function toggleVr() {
     try {
@@ -313,41 +168,179 @@ export default function HolocronVrModal({ project, diagnostics, onClose }) {
       }
       setStatus('Requesting headset permission…')
       const next = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] })
-      next.addEventListener('end', () => { setSession(null); setStatus('VR session ended · desktop constellation active') })
-      await rendererRef.current.xr.setSession(next)
+      next.addEventListener('end', () => { setSession(null); setStatus('') })
+      await sceneRef.current.renderer.xr.setSession(next)
       setSession(next)
-      setStatus('Headset connected · immersive constellation active')
+      setStatus('Headset connected')
     } catch (err) {
       setError(`Headset connection failed: ${err.message}. Confirm the headset is awake, connected, and WebXR permission is allowed.`)
       api.reportClientError({ message: err.message, stack: err.stack, userAction: 'enter_immersive_vr', component: 'HolocronVrModal', severity: 'high', context: { project: project.path, diagnostics } })
     }
   }
 
-  return <div className="starfield fixed inset-0 z-[100] flex flex-col bg-[#02040c] text-slate-100">
-    <header className="relative z-30 flex items-center justify-between border-b border-cyan-300/10 bg-slate-950/90 px-5 py-3 backdrop-blur-xl">
-      <div><div className="font-black tracking-tight">Holocron VR <span className="ml-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-cyan-200">v0.5.1</span></div><div className="max-w-[48vw] truncate text-xs text-slate-400">{project.path}</div></div>
-      <div className="flex items-center gap-3">
-        <span role="status" className="max-w-[42vw] text-right text-xs text-cyan-200">{error || status}</span>
-        <button type="button" onClick={toggleVr} disabled={!vrSupported && !session} className="saber rounded-lg bg-cyan-400 px-4 py-2 text-xs font-black text-slate-950 shadow-[0_0_24px_rgba(34,211,238,.24)] disabled:bg-slate-700 disabled:text-slate-400 disabled:shadow-none">{session ? 'Exit VR' : vrSupported ? 'Enter VR' : 'No headset detected'}</button>
-        <button type="button" onClick={onClose} className="rounded-lg border border-white/15 px-4 py-2 text-xs font-black hover:bg-white/10">Close</button>
+  function askAgent(node) {
+    const where = node.file ? ` (${node.file}${node.line ? `:${node.line}` : ''})` : ''
+    window.dispatchEvent(new CustomEvent('yodaman:ask-agent', {
+      detail: { project, prompt: `Explain ${node.label}${where}: what it does, what depends on it, and what would break if it changed.` }
+    }))
+    onClose()
+  }
+
+  const node = focus !== null && model ? model.nodes[focus] : null
+  const hovered = hover && model ? model.nodes[hover.index] : null
+  const toggleLanguage = (language) => setFilters((f) => {
+    const languages = new Set(f.languages)
+    if (languages.has(language)) languages.delete(language)
+    else languages.add(language)
+    return { ...f, languages }
+  })
+  const activeFilters = [filters.hideTests, filters.hideDocs, filters.hideThirdParty, filters.recentOnly].filter(Boolean).length + filters.languages.size
+
+  return <div className="fixed inset-0 z-[100] flex flex-col bg-[#02030a] text-slate-100">
+    {/* ── Top bar ── */}
+    <header className="relative z-30 flex items-center gap-4 border-b border-white/5 bg-[#02030a]/80 px-5 py-2.5 backdrop-blur-xl">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="text-sm font-black tracking-tight">Holocron <span className="ml-1 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-cyan-200">v{holocronManifest.version}</span></div>
+        <div className="flex items-center gap-1.5 truncate text-xs text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{project.name || project.path}</div>
+      </div>
+      {model ? <div className="hidden items-center gap-5 xl:flex">
+        <Stat label="Nodes" value={model.nodes.length < model.totalNodes ? `${model.nodes.length.toLocaleString()} of ${model.totalNodes.toLocaleString()}` : model.nodes.length.toLocaleString()} />
+        <Stat label="Edges" value={(model.edges.length / 2).toLocaleString()} />
+        <Stat label="Clusters" value={model.clusters.length} />
+        {layout ? <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${layout.engine === 'wasm' ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : 'border-amber-400/30 bg-amber-400/10 text-amber-200'}`} title={layout.engine === 'wasm' ? `Force-directed layout by the WASM engine in ${layout.ms} ms` : `Basic layout: ${layout.reason}`}>{layout.engine === 'wasm' ? 'Force layout' : 'Basic layout'}</span> : null}
+      </div> : null}
+
+      <div className="relative mx-auto w-full max-w-md">
+        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && results[0]) select(results[0].index) }}
+          placeholder="Search files and symbols…" aria-label="Search the constellation"
+          className="w-full rounded-lg border border-white/10 bg-white/[0.04] py-1.5 pl-8 pr-12 text-xs text-slate-100 placeholder-slate-500 focus:border-cyan-400/50 focus:outline-none" />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-white/10 px-1 text-[9px] text-slate-500">⌘K</span>
+        {query && <div className={`absolute left-0 right-0 top-full mt-1 overflow-hidden rounded-lg ${glass}`}>
+          {results.length ? results.map((r) => (
+            <button key={r.index} type="button" onClick={() => select(r.index)} className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-white/5">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: model.clusters[r.cluster].color }} />
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-100">{r.label}</span>
+              <span className="truncate text-[10px] text-slate-500">{r.file}</span>
+            </button>
+          )) : <div className="px-3 py-2 text-xs text-slate-500">No match on screen</div>}
+        </div>}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => setFiltersOpen((o) => !o)} className={`relative rounded-lg border px-2.5 py-1.5 ${filtersOpen ? 'border-cyan-400/50 bg-cyan-400/10 text-cyan-200' : 'border-white/10 text-slate-300 hover:bg-white/5'}`} title="Filters" aria-label="Filters">
+          <SlidersHorizontal size={14} />
+          {activeFilters ? <span className="absolute -right-1 -top-1 rounded-full bg-cyan-400 px-1 text-[9px] font-black text-slate-950">{activeFilters}</span> : null}
+        </button>
+        <button type="button" onClick={() => setHeatOn((on) => !on)} disabled={!hasHeat} className={`rounded-lg border px-2.5 py-1.5 disabled:opacity-30 ${heatOn ? 'border-amber-400/50 bg-amber-400/10 text-amber-200' : 'border-white/10 text-slate-300 hover:bg-white/5'}`} title={hasHeat ? 'Colour by changes in the last 30 days' : 'No git changes in the last 30 days'} aria-label="Change heatmap"><Flame size={14} /></button>
+        <select value={limit} onChange={(e) => setLimit(Number(e.target.value))} className="rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-xs text-slate-300" aria-label="Maximum nodes" title="How many of the most connected nodes to show">
+          {NODE_LIMITS.map((n) => <option key={n} value={n}>{n.toLocaleString()} nodes</option>)}
+        </select>
+        <button type="button" onClick={toggleVr} disabled={!vrSupported && !session} className="saber flex items-center gap-1.5 rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-black text-slate-950 disabled:bg-slate-800 disabled:text-slate-500" title={vrSupported ? 'Enter the constellation in a headset' : 'No WebXR headset detected'}><Glasses size={14} />{session ? 'Exit VR' : 'VR'}</button>
+        <button type="button" onClick={onClose} className="rounded-lg border border-white/10 p-1.5 text-slate-300 hover:bg-white/10" aria-label="Close Holocron"><X size={16} /></button>
       </div>
     </header>
-    {error ? <div className="relative z-30 border-b border-rose-400/30 bg-rose-500/10 px-5 py-3 text-sm text-rose-100">{error}</div> : null}
+    {error ? <div className="relative z-30 border-b border-rose-400/30 bg-rose-500/10 px-5 py-2 text-sm text-rose-100">{error}</div> : null}
+
+    {/* ── Constellation ── */}
     <div ref={mountRef} className="relative min-h-0 flex-1 overflow-hidden">
       <div ref={labelsRef} className="pointer-events-none absolute inset-0 z-10 overflow-hidden" />
-      <div ref={tooltipRef} className="pointer-events-none absolute z-20 grid max-w-xs gap-1 rounded-lg border border-white/15 bg-slate-950/90 px-3 py-2 text-xs opacity-0 shadow-2xl backdrop-blur-xl transition-opacity [&_span]:text-[10px] [&_span]:text-slate-400" />
-      <div className="pointer-events-none absolute left-5 top-5 z-20 rounded-xl border border-white/10 bg-slate-950/70 p-3 shadow-xl backdrop-blur-xl">
-        <div className="mb-2 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Architecture clusters</div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">{communities.map(community => <div key={community.key} className="flex items-center gap-2 text-[10px] text-slate-300"><span className="h-2 w-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ background: community.color, color: community.color }} /><span>Cluster {community.key}</span><span className="text-slate-500">{community.count}</span></div>)}</div>
-      </div>
-      <div className="pointer-events-none absolute bottom-5 left-5 z-20 rounded-lg border border-white/10 bg-slate-950/65 px-3 py-2 text-[10px] text-slate-400 backdrop-blur-xl">Drag to orbit · scroll to zoom · click a node to inspect</div>
-      {selectedNode ? <aside className="absolute bottom-5 right-5 z-20 w-80 rounded-xl border bg-slate-950/90 p-4 shadow-2xl backdrop-blur-xl" style={{ borderColor: selectedNode.color }}>
-        <button type="button" onClick={() => setSelectedNode(null)} className="absolute right-3 top-3 text-slate-500 hover:text-white" aria-label="Close node details">×</button>
-        <div className="mb-1 text-[9px] font-black uppercase tracking-[0.2em]" style={{ color: selectedNode.color }}>{selectedNode.kind}</div>
-        <h2 className="pr-6 text-base font-black text-white">{selectedNode.title}</h2>
-        <p className="mt-1 break-all text-[10px] leading-4 text-slate-400">{selectedNode.location}</p>
-        <p className="mt-3 border-t border-white/10 pt-3 text-xs leading-5 text-slate-300">{selectedNode.summary}</p>
+      {status ? <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"><div className={`rounded-xl px-5 py-3 text-sm text-cyan-100 ${glass}`} role="status">{status}</div></div> : null}
+
+      {hovered && hover.index !== focus ? <div className={`pointer-events-none absolute z-20 rounded-lg px-3 py-2 ${glass}`} style={{ left: hover.x + 14, top: hover.y + 14 }}>
+        <div className="text-xs font-bold text-white">{hovered.label}</div>
+        <div className="text-[10px] text-slate-400">{hovered.language} · {hovered.degree} connections{heatInfo?.changes[hovered.index] ? ` · changed ${timeAgo(heatInfo.changes[hovered.index].last)}` : ''}</div>
+      </div> : null}
+
+      {/* Cluster legend */}
+      {model ? <div className={`absolute left-4 top-4 z-20 w-60 rounded-xl p-3 ${glass}`}>
+        <div className="mb-2 flex items-center justify-between text-[9px] font-black uppercase tracking-[0.2em] text-slate-400"><span>Clusters</span><span className="tracking-normal text-slate-500">{shown.toLocaleString()} of {model.nodes.length.toLocaleString()} shown</span></div>
+        <div className="space-y-0.5">{model.clusters.filter((c) => visible?.[c.hub]).slice(0, 9).map((c) => (
+          <button key={c.key} type="button" onClick={() => select(c.hub)} className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-[11px] text-slate-300 hover:bg-white/5" title={`Fly to ${c.name}`}>
+            <span className="h-2 w-2 shrink-0 rounded-full shadow-[0_0_8px_currentColor]" style={{ background: c.color, color: c.color }} />
+            <span className="min-w-0 flex-1 truncate">{c.name}</span>
+            <span className="text-slate-500">{c.members.length}</span>
+          </button>
+        ))}</div>
+        {heatOn && hasHeat ? <div className="mt-3 border-t border-white/10 pt-2"><div className="mb-1 text-[9px] uppercase tracking-widest text-slate-500">Changes, last 30 days</div><div className="h-1.5 rounded-full bg-gradient-to-r from-blue-900 via-amber-500 to-red-500" /></div> : null}
+      </div> : null}
+
+      {/* Filters */}
+      {filtersOpen && model ? <div className={`absolute right-4 top-4 z-30 w-72 rounded-xl p-4 ${glass}`}>
+        <div className="mb-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Visibility</div>
+        <Toggle label="Hide tests" checked={filters.hideTests} onChange={(v) => setFilters((f) => ({ ...f, hideTests: v }))} />
+        <Toggle label="Hide docs" checked={filters.hideDocs} onChange={(v) => setFilters((f) => ({ ...f, hideDocs: v }))} />
+        <Toggle label="Hide third-party" checked={filters.hideThirdParty} onChange={(v) => setFilters((f) => ({ ...f, hideThirdParty: v }))} />
+        <Toggle label="Recent changes only" checked={filters.recentOnly} disabled={!hasHeat} hint={hasHeat ? 'Files changed in the last 30 days' : 'No git changes in the last 30 days'} onChange={(v) => setFilters((f) => ({ ...f, recentOnly: v }))} />
+        <div className="mb-2 mt-3 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Language</div>
+        <div className="flex flex-wrap gap-1.5">{model.languages.slice(0, 12).map(({ language, count }) => (
+          <button key={language} type="button" onClick={() => toggleLanguage(language)} className={`rounded-md border px-2 py-1 text-[10px] ${filters.languages.has(language) ? 'border-cyan-400/60 bg-cyan-400/15 text-cyan-100' : 'border-white/10 text-slate-300 hover:bg-white/5'}`}>{language} <span className="text-slate-500">{count}</span></button>
+        ))}</div>
+        <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-2 text-[11px] text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />Showing {shown.toLocaleString()} of {model.nodes.length.toLocaleString()}</div>
+      </div> : null}
+
+      {/* Node detail */}
+      {node ? <aside className={`absolute bottom-4 right-4 top-4 z-20 flex w-[380px] flex-col overflow-hidden rounded-xl ${glass}`} style={{ borderColor: `${model.clusters[node.cluster].color}55` }}>
+        <div className="border-b border-white/10 p-4">
+          <div className="flex items-start gap-3">
+            <span className="mt-1 h-3 w-3 shrink-0 rounded-full shadow-[0_0_12px_currentColor]" style={{ background: model.clusters[node.cluster].color, color: model.clusters[node.cluster].color }} />
+            <div className="min-w-0 flex-1">
+              <h2 className="break-words text-base font-black text-white">{node.label}</h2>
+              {node.file ? <button type="button" onClick={() => navigator.clipboard?.writeText(node.file)} className="mt-0.5 flex max-w-full items-center gap-1 text-left text-[11px] text-slate-400 hover:text-slate-200" title="Copy path"><span className="truncate">{node.file}{node.line ? `:${node.line}` : ''}</span><Copy size={11} className="shrink-0" /></button> : null}
+            </div>
+            <button type="button" onClick={() => setFocus(null)} className="text-slate-500 hover:text-white" aria-label="Close details"><X size={16} /></button>
+          </div>
+          <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+            {[['Links', node.degree], ['Uses', model.outgoing[node.index].length], ['Used by', model.incoming[node.index].length], ['Changes', heatInfo?.changes[node.index]?.count ?? 0]].map(([k, v]) => (
+              <div key={k} className="rounded-lg bg-white/[0.04] px-1 py-1.5"><div className="text-sm font-black text-white">{v}</div><div className="text-[9px] uppercase tracking-widest text-slate-500">{k}</div></div>
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+            <span className="rounded-md bg-cyan-400/10 px-2 py-0.5 text-cyan-200">{node.language}</span>
+            <span className="rounded-md bg-white/5 px-2 py-0.5 text-slate-300">{node.kind}</span>
+            <span className="rounded-md bg-white/5 px-2 py-0.5 text-slate-300">{model.clusters[node.cluster].name}</span>
+            {heatInfo?.changes[node.index] ? <span className="rounded-md bg-amber-400/10 px-2 py-0.5 text-amber-200">changed {timeAgo(heatInfo.changes[node.index].last)}</span> : null}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => askAgent(node)} className="flex items-center justify-center gap-1.5 rounded-lg border border-white/15 py-2 text-xs font-bold hover:bg-white/5"><MessageSquare size={13} />Ask Agent</button>
+            <button type="button" disabled={!node.file} onClick={() => api.openInEditor(project.path, node.file, node.line).catch((err) => setError(`Could not open ${node.file}: ${err.message}`))} className="flex items-center justify-center gap-1.5 rounded-lg border border-cyan-400/40 bg-cyan-400/10 py-2 text-xs font-bold text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-40"><ExternalLink size={13} />Open in editor</button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          {[['Uses', model.outgoing[node.index], ArrowUpRight], ['Used by', model.incoming[node.index], ArrowDownLeft]].map(([title, list, Icon]) => list.length ? (
+            <div key={title}>
+              <div className="mb-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">{title} ({list.length})</div>
+              {list.slice(0, 8).map((i) => (
+                <button key={i} type="button" onClick={() => select(i)} className="flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-white/5">
+                  <Icon size={11} className="shrink-0 text-slate-500" />
+                  <span className="min-w-0 flex-1 truncate text-xs text-slate-200">{model.nodes[i].label}</span>
+                  <span className="max-w-[45%] truncate text-[10px] text-slate-500">{model.nodes[i].file}</span>
+                </button>
+              ))}
+              {list.length > 8 ? <div className="px-1 text-[10px] text-slate-500">+ {list.length - 8} more</div> : null}
+            </div>
+          ) : null)}
+          {node.file ? <div>
+            <div className="mb-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Code</div>
+            {preview?.lines ? <pre className="overflow-x-auto rounded-lg border border-white/10 bg-black/40 p-2 font-mono text-[10px] leading-4 text-slate-300">{preview.lines.map((text, i) => <div key={i} className="flex gap-3"><span className="w-8 shrink-0 select-none text-right text-slate-600">{preview.startLine + i}</span><span className="whitespace-pre">{text}</span></div>)}</pre>
+              : <div className="text-[11px] text-slate-500">{preview?.error ? `No preview: ${preview.error}` : 'Loading…'}</div>}
+          </div> : null}
+        </div>
       </aside> : null}
+
+      {/* Controls */}
+      <div className={`pointer-events-none absolute bottom-4 left-4 z-20 rounded-xl px-3 py-2 text-[10px] text-slate-400 ${glass}`}>
+        <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5">
+          <span className="text-slate-200">Drag</span><span>orbit</span>
+          <span className="text-slate-200">Right-drag</span><span>pan</span>
+          <span className="text-slate-200">Scroll</span><span>zoom</span>
+          <span className="text-slate-200">Click</span><span>inspect</span>
+          <span className="text-slate-200">/ or ⌘K</span><span>search</span>
+          <span className="text-slate-200">R</span><span>reset camera</span>
+        </div>
+      </div>
+      <button type="button" onClick={() => { setFocus(null); sceneRef.current?.resetCamera() }} className={`absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] text-slate-300 hover:text-white ${glass}`}><Crosshair size={12} />Reset view</button>
     </div>
   </div>
 }

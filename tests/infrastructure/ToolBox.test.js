@@ -106,7 +106,7 @@ describe('ToolBox', () => {
         }
     });
 
-    test('searchCode falls back to filesystem search when ctx JSON search fails', async () => {
+    test('contextExpertSearch falls back to filesystem search when ctx JSON search fails', async () => {
         const originalExecuteJson = contextEngine.executeJson;
         const searchFile = path.join(tempDir, 'menu-controller.js');
         fs.writeFileSync(searchFile, 'export function publishMenu() { return "menu"; }\n', 'utf8');
@@ -115,7 +115,7 @@ describe('ToolBox', () => {
         });
 
         try {
-            const results = await toolBox.searchCode({ query: 'menu', project: tempDir, top: 5 });
+            const results = await toolBox.contextExpertSearch({ query: 'menu', project: tempDir, top: 5 });
 
             expect(results.length).toBeGreaterThan(0);
             expect(results[0]).toEqual(expect.objectContaining({
@@ -130,7 +130,7 @@ describe('ToolBox', () => {
         }
     });
 
-    test('searchCode falls back when ctx returns a non-search JSON object', async () => {
+    test('contextExpertSearch falls back when ctx returns a non-search JSON object', async () => {
         const originalExecuteJson = contextEngine.executeJson;
         const searchFile = path.join(tempDir, 'menu-service.js');
         fs.writeFileSync(searchFile, 'export const menuService = { publish: true };\n', 'utf8');
@@ -139,7 +139,7 @@ describe('ToolBox', () => {
         }));
 
         try {
-            const results = await toolBox.searchCode({ query: 'menuService', project: tempDir, top: 5 });
+            const results = await toolBox.contextExpertSearch({ query: 'menuService', project: tempDir, top: 5 });
 
             expect(results).toEqual(expect.arrayContaining([
                 expect.objectContaining({
@@ -154,14 +154,14 @@ describe('ToolBox', () => {
         }
     });
 
-    test('searchCode falls back to literal search when ctx returns no matches', async () => {
+    test('contextExpertSearch falls back to literal search when ctx returns no matches', async () => {
         const originalExecuteJson = contextEngine.executeJson;
         const searchFile = path.join(tempDir, 'plugin-registry.js');
         fs.writeFileSync(searchFile, 'export const plugins = new Map();\n', 'utf8');
         contextEngine.executeJson = jest.fn(async () => []);
 
         try {
-            const results = await toolBox.searchCode({ query: 'plugins', project: tempDir, top: 5 });
+            const results = await toolBox.contextExpertSearch({ query: 'plugins', project: tempDir, top: 5 });
 
             expect(results).toEqual(expect.arrayContaining([
                 expect.objectContaining({
@@ -188,5 +188,18 @@ describe('ToolBox', () => {
 
         expect(resultPaths).toContain(publicFile);
         expect(resultPaths).not.toContain(secretFile);
+    });
+
+    test('filesystem fallback hits have the same shape as Context Expert hits', () => {
+        // Clients (MCP, the Search view) read filePath and the line span. The
+        // fallback omitted them, so a slow ctx changed the response shape.
+        fs.writeFileSync(path.join(tempDir, 'menu.js'), 'line one\nconst menu = 1;\n', 'utf8');
+        const [hit] = toolBox.searchCodeFilesystem({ query: 'menu', project: tempDir, top: 1 });
+        expect(hit).toEqual(expect.objectContaining({
+            filePath: expect.any(String),
+            lineStart: expect.any(Number),
+            lineEnd: expect.any(Number)
+        }));
+        expect(hit.lineStart).toBeGreaterThan(0);
     });
 });

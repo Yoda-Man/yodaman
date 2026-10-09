@@ -12,9 +12,8 @@ const specDrift = require('../../stardust/SpecDrift');
 const stardustWrapper = require('../../stardust/StardustWrapper');
 const stardustLive = require('../../stardust/StardustLive');
 const graphFacts = require('../../infrastructure/GraphFacts');
-const graphRanker = require('../../infrastructure/GraphRanker');
 const impactAnalyzer = require('../../infrastructure/ImpactAnalyzer');
-const toolBox = require('../../infrastructure/ToolBox');
+const searchPipeline = require('../../core/SearchPipeline');
 const logger = require('../../infrastructure/Logger');
 const { jsonError } = require('../support/http');
 
@@ -582,13 +581,15 @@ router.get('/stardust/compose', async (req, res) => {
         // participate: the hits come back carrying Graphify's ranking signal, so
         // this column is Context Expert output already blended with structure.
         try {
+            // Through the shared pipeline, with this file as the active file so
+            // proximity counts. This hand-assembled Context Expert + Graphify
+            // and skipped OpenSpec; now it is the same search as everywhere else.
             const needle = path.basename(relativeFile).replace(/\.[^.]+$/, '');
-            const raw = await toolBox.searchCode({ query: needle, project: projectRoot, top: 8 });
-            const ranked = graphRanker.rerank(projectRoot, Array.isArray(raw) ? raw : [], {
-                activeFile: relativeFile,
+            const { results: ranked, graphRanked } = await searchPipeline.search({
+                query: needle, project: projectRoot, mode: 'code', top: 8, activeFile: relativeFile, requestId: req.id
             });
             result.contextExpert.available = ranked.length > 0;
-            result.contextExpert.graphRanked = ranked.some(hit => hit && hit.graphSignal);
+            result.contextExpert.graphRanked = graphRanked;
             result.contextExpert.neighbours = ranked
                 .map(hit => ({
                     file: toRepoRelative(projectRoot, hit?.metadata?.path || hit?.path || hit?.file || ''),

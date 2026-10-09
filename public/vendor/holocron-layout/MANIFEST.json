@@ -1,0 +1,22 @@
+{
+  "generatedBy": "scripts/sync-holocron-layout.js",
+  "holocronVersion": "0.5.8",
+  "holocronCommit": "a8d8a21",
+  "files": [
+    {
+      "file": "layout_engine.mjs",
+      "bytes": 11883,
+      "sha256": "6d8b367c8362b984eb1a107cec65decbb7d3c9d50e3fa70eb76cd1dab8c23702"
+    },
+    {
+      "file": "layout_engine.wasm",
+      "bytes": 21084,
+      "sha256": "8db30a98d79e235f3dfae4d0551581b2174c1d7e53987264a643c55f6ad43c2e"
+    },
+    {
+      "file": "bindLayoutEngine.js",
+      "bytes": 1830,
+      "sha256": "efd42bf8128c61cbfcd9a75db82d949d850a55a5b050aacc29e2cc00472d12d3"
+    }
+  ]
+}

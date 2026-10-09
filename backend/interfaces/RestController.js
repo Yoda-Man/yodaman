@@ -16,7 +16,8 @@ const originPolicy = require('../infrastructure/OriginPolicy');
 const logger = require('../infrastructure/Logger');
 const {
     getConfigPath,
-    validateIndexableDirectory
+    validateIndexableDirectory,
+    validateWorkspaceCandidate
 } = require('./support/workspaces');
 const graphifyService = require('../infrastructure/GraphifyService');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
@@ -257,10 +258,6 @@ function saveConfig() {
     fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
 }
 
-function projectNameForPath(dirPath) {
-    return path.basename(dirPath) || dirPath;
-}
-
 function isGeneratedTempWorkspace(dirPath) {
     const resolved = path.resolve(String(dirPath || ''));
     const relativeToTmp = path.relative(os.tmpdir(), resolved);
@@ -268,18 +265,25 @@ function isGeneratedTempWorkspace(dirPath) {
     return insideTmp && /^yodaman-(graph-studio|graphify-service|graph-doctor|docs|audit-test|test)-/.test(path.basename(resolved));
 }
 
+/**
+ * Remove the Context Expert index registered for exactly this path.
+ *
+ * This used to try the folder name as a fallback, and folder names are not
+ * unique: removing a Documents/yodaman workspace ran `ctx remove yodaman`, the
+ * index of a different folder. A path ctx does not hold has nothing to remove.
+ */
 async function removeFromCtxIndex(dirPath) {
-    const candidates = Array.from(new Set([dirPath, projectNameForPath(dirPath)]));
-    for (const candidate of candidates) {
-        try {
-            await contextEngine.execute(['remove', candidate]);
-            logger.info('ctx_project_removed', { path: dirPath, target: candidate });
-            return true;
-        } catch (err) {
-            logger.warn('ctx_project_remove_failed', { path: dirPath, target: candidate, error: err.message });
-        }
+    const name = await contextEngine.projectName(dirPath, { exact: true });
+    if (!name) return false;
+    try {
+        await contextEngine.execute(['remove', name]);
+        contextEngine.forgetProjects();
+        logger.info('ctx_project_removed', { path: dirPath, target: name });
+        return true;
+    } catch (err) {
+        logger.warn('ctx_project_remove_failed', { path: dirPath, target: name, error: err.message });
+        return false;
     }
-    return false;
 }
 
 function resolveProjectPath(projectId) {
@@ -320,8 +324,10 @@ function formatSearchResult(result, index) {
 }
 
 async function buildLocalAskFallbackAnswer({ question, projectPath, graphInsights, cause }) {
+    // The shared pipeline, so even the fallback answer is ranked and tagged.
     const searchResults = projectPath
-        ? await toolBox.searchCode({ query: question, project: projectPath, top: 5 }).catch(() => [])
+        ? await require('../core/SearchPipeline').search({ query: question, project: projectPath, top: 5 })
+            .then((out) => out.results).catch(() => [])
         : [];
     const snippets = searchResults.slice(0, 5).map(formatSearchResult).join('\n\n');
     return [
@@ -342,7 +348,11 @@ router.get('/projects', async (req, res) => {
     try {
         const cliData = await contextEngine.executeJson(['list']);
         const cliProjects = cliData.projects.map(p => ({
-            name: p.name,
+            // The folder name, as everywhere else. ctx's own name is an index
+            // key, made unique per folder (ContextEngine.indexNameFor), so it
+            // can read "yodaman-bbc91a"; that is not what a person calls it.
+            name: path.basename(p.path) || p.name,
+            indexName: p.name,
             path: p.path,
             id: p.id || p.path,
             // ctx reports these as fileCount/chunkCount. Reading p.files and
@@ -378,8 +388,9 @@ router.post('/projects', (req, res) => {
     let resolvedPath;
     try {
         resolvedPath = resolveUserPath(req.body?.path);
+        validateWorkspaceCandidate(resolvedPath);
     } catch (err) {
-        return jsonError(res, err.status || 400, err.message, 'invalid_path');
+        return jsonError(res, err.status || 400, err.message, err.code || 'invalid_path');
     }
 
     loadConfig();
@@ -567,6 +578,9 @@ router.post('/ask', async (req, res) => {
 
 // Git routes — see routes/gitRoutes.js
 router.use(require('./routes/gitRoutes'));
+
+// Open a workspace file in the user's editor. See routes/editorRoutes.js.
+router.use(require('./routes/editorRoutes'));
 router.post('/agent/task', async (req, res) => {
     let task;
     let projectId;
@@ -1108,6 +1122,16 @@ router.put('/settings', (req, res) => {
             return jsonError(res, 400, `Invalid executable names: ${invalid.join(', ')}`, 'invalid_settings');
         }
         updates.allowedCommands = req.body.allowedCommands;
+    }
+    // The editor setting names a program the runtime will start, so it can only
+    // be changed from this computer, and only to something that can launch.
+    if (req.body.editorCommand !== undefined) {
+        if (!isLocalRequest(req)) {
+            return jsonError(res, 403, 'The editor can only be changed from this computer', 'editor_local_only');
+        }
+        const problem = require('../infrastructure/EditorLauncher').validateSetting(req.body.editorCommand);
+        if (problem) return jsonError(res, 400, problem, 'invalid_settings');
+        updates.editorCommand = req.body.editorCommand === 'system' ? '' : String(req.body.editorCommand || '').trim();
     }
     if (Object.keys(updates).length === 0) return jsonError(res, 400, 'No valid settings provided', 'invalid_settings');
     settings.save(updates);

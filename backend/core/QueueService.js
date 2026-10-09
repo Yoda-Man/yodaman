@@ -1,3 +1,4 @@
+const fs = require('fs');
 const contextEngine = require('../infrastructure/ContextEngine');
 const logger = require('../infrastructure/Logger');
 const graphifyService = require('../infrastructure/GraphifyService');
@@ -45,15 +46,24 @@ class QueueService {
         this.isProcessing = true;
         const targetDir = this.queue.shift();
 
+        // A workspace whose folder is gone has nothing to index, and the graph
+        // build that follows indexing would recreate the folder. Readiness
+        // reports it as missing instead.
+        if (!fs.existsSync(targetDir)) {
+            logger.warn('index_skipped_workspace_missing', { path: targetDir });
+            this.isProcessing = false;
+            this.processNext();
+            return;
+        }
+
         logger.info('queue_index_started', { path: targetDir });
         logger.info('index_started', { path: targetDir });
         
         try {
-            // Using spawn from the ContextEngine (which I should add a method for if needed, or use execute)
-            // Actually, spawn is for streaming. I'll use contextEngine.spawn if I add it.
-            // Let's ensure ContextEngine has spawn or just use execute for simplicity if we don't need real-time logs.
-            // Wait, original used spawn for streaming logs.
+            // spawn, not ContextEngine.execute: indexing streams progress lines
+            // that are logged as they arrive.
             const { spawn } = require('child_process');
+            const name = await contextEngine.indexNameFor(targetDir);
             // Never index our own generated output. ctx indexes whatever is in
             // the workspace, and graphify-out/ is Graphify's AST cache — written
             // by us. Left in, those hash-named blobs dominate results: a search
@@ -71,8 +81,11 @@ class QueueService {
             // no-op that looked like success — including "Sync Repository" in
             // the UI and the remediation the runbook gives support for a stale
             // workspace, which is why stale workspaces stayed stale.
+            //
+            // --name: a unique name per workspace. See ContextEngine.indexNameFor;
+            // without it a second folder with the same name could never be indexed.
             this.activeProcess = spawn(contextEngine.binary, [
-                'index', targetDir, '--force', '--ignore', INDEX_IGNORE_PATTERNS
+                'index', targetDir, '--name', name, '--force', '--ignore', INDEX_IGNORE_PATTERNS
             ]);
             let stderr = '';
 
@@ -107,7 +120,8 @@ class QueueService {
             this.activeProcess.on('close', (code) => {
                 logger.info('queue_index_finished', { path: targetDir, exitCode: code });
                 if (code === 0) {
-                    logger.info('index_completed', { path: targetDir, exitCode: code });
+                    logger.info('index_completed', { path: targetDir, exitCode: code, name });
+                    contextEngine.forgetProjects();
                     graphifyService.build(targetDir, { update: true }).catch((err) => {
                         logger.error('graphify_build_failed', err, { path: targetDir });
                     });

@@ -26,11 +26,9 @@ module.exports = [
             'apps/*/node_modules/**',
             'website/**',
             'graphify-out/**',
-            // Minified Holocron VR bundles (VRViewer.js is 33 KB across 4 lines).
-            // Both are load-bearing and referenced only as strings — see the
-            // header comment in UIPanel.js — so they are kept but not linted.
-            'frontend/UIPanel.js',
-            'frontend/VRViewer.js',
+            // Holocron's compiled layout engine (Emscripten output), vendored
+            // from the Holocron repo by scripts/sync-holocron-layout.js.
+            'public/vendor/**',
             // Synthetic inputs for the CodeTrooper plugin tests. Their unused
             // variables and dead code are the thing under test.
             'tests/fixtures/**'

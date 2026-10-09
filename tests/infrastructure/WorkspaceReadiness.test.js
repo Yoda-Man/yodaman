@@ -3,7 +3,18 @@ const queueService = require('../../backend/core/QueueService');
 const readiness = require('../../backend/infrastructure/WorkspaceReadiness');
 const specDrift = require('../../backend/stardust/SpecDrift');
 
-const PROJECT = '/workspace/demo';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+// Real folders: readiness now checks the workspace exists, and a made-up path
+// is (correctly) reported as missing. See MissingWorkspace.test.js.
+const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-readiness-'));
+const PROJECT = path.join(ROOT, 'demo');
+const TWO = path.join(ROOT, 'two');
+const OTHER = path.join(ROOT, 'other');
+for (const dir of [PROJECT, TWO, OTHER]) fs.mkdirSync(dir);
+afterAll(() => fs.rmSync(ROOT, { recursive: true, force: true }));
 
 describe('WorkspaceReadiness', () => {
     const originalFreshness = graphifyService.freshness;
@@ -62,7 +73,7 @@ describe('WorkspaceReadiness', () => {
     });
 
     test('another workspace being queued does not degrade this one', () => {
-        setQueue({ isProcessing: false, queue: ['/workspace/other'], active: null });
+        setQueue({ isProcessing: false, queue: [OTHER], active: null });
         expect(readiness.forWorkspace(PROJECT).state).toBe('ready');
     });
 
@@ -90,13 +101,13 @@ describe('WorkspaceReadiness', () => {
     describe('across many workspaces', () => {
         test('overall is the weakest workspace', () => {
             setGraph({ graphExists: true, stale: false });
-            const allReady = readiness.forWorkspaces([PROJECT, '/workspace/two']);
+            const allReady = readiness.forWorkspaces([PROJECT, TWO]);
             expect(allReady.overall).toBe('ready');
             expect(allReady.trustworthy).toBe(true);
             expect(allReady.workspaces).toHaveLength(2);
 
-            setQueue({ isProcessing: false, queue: ['/workspace/two'], active: null });
-            const oneBuilding = readiness.forWorkspaces([PROJECT, '/workspace/two']);
+            setQueue({ isProcessing: false, queue: [TWO], active: null });
+            const oneBuilding = readiness.forWorkspaces([PROJECT, TWO]);
             expect(oneBuilding.overall).toBe('building');
             expect(oneBuilding.trustworthy).toBe(false);
         });
@@ -138,7 +149,7 @@ describe('WorkspaceReadiness', () => {
             // the list. One at a time is the budget this fits in.
             setDrift({ available: true, covered: false, undocumentedCount: 4, undocumented: [] });
 
-            const list = readiness.forWorkspaces([PROJECT, '/workspace/other']);
+            const list = readiness.forWorkspaces([PROJECT, OTHER]);
 
             expect(specDrift.detectDrift).not.toHaveBeenCalled();
             expect(list.workspaces.every((w) => w.coverage === null)).toBe(true);

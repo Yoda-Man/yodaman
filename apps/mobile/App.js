@@ -20,7 +20,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -28,6 +27,10 @@ import {
   TextInput,
   View
 } from 'react-native';
+// react-native's own SafeAreaView is deprecated and slated for removal. The
+// context package was already a dependency and is what Expo ships with; it also
+// reports correct insets on notched devices, which the built-in one does not.
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { createYodaManClient } from './src/api/yodamanClient';
 import { colors, fonts, radius, readout, statusColor } from './theme';
 import {
@@ -301,6 +304,10 @@ export default function App() {
     : 'no project';
 
   return (
+    // SafeAreaProvider is required by react-native-safe-area-context: without
+    // it useSafeAreaInsets returns undefined and SafeAreaView renders with no
+    // inset at all, which looks fine on a simulator and wrong on a notched phone.
+    <SafeAreaProvider>
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bgPrimary} />
 
@@ -453,6 +460,7 @@ export default function App() {
         </View>
       ) : null}
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

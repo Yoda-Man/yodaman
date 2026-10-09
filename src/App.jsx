@@ -28,8 +28,15 @@ export default function App() {
   useEffect(() => {
     fetchProjects()
     const openVr = event => setVrLaunch(event.detail)
+    // Holocron's "Ask Agent": close the viewer and bring Chat forward; the
+    // chat tab pre-fills the question itself (see AgentChatTab).
+    const askAgent = () => { setVrLaunch(null); setActiveTab('chat') }
     window.addEventListener('yodaman:view-in-vr', openVr)
-    return () => window.removeEventListener('yodaman:view-in-vr', openVr)
+    window.addEventListener('yodaman:ask-agent', askAgent)
+    return () => {
+      window.removeEventListener('yodaman:view-in-vr', openVr)
+      window.removeEventListener('yodaman:ask-agent', askAgent)
+    }
   }, [])
 
 

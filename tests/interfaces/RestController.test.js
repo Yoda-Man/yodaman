@@ -403,8 +403,11 @@ describe('RestController Integration', () => {
         const originalQuery = graphifyService.query;
         const originalReadReport = graphifyService.readReport;
         const originalSaveResult = graphifyService.saveResult;
-        const originalSearchCode = require('../../backend/infrastructure/ToolBox').searchCode;
+        const originalSearch = require('../../backend/infrastructure/ToolBox').contextExpertSearch;
         const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-rest-chat-workspace-'));
+        // The fallback searches through the pipeline, which only returns files
+        // that exist; the hit has to be real.
+        fs.writeFileSync(path.join(workspace, 'menu.js'), 'function publishMenu() {}\n');
 
         try {
             fs.writeFileSync(configPath(), JSON.stringify({
@@ -427,7 +430,7 @@ describe('RestController Integration', () => {
                 '- MenuScreen()'
             ].join('\n'));
             graphifyService.saveResult = jest.fn(async () => ({ skipped: true }));
-            require('../../backend/infrastructure/ToolBox').searchCode = jest.fn(async () => [
+            require('../../backend/infrastructure/ToolBox').contextExpertSearch = jest.fn(async () => [
                 {
                     content: 'function publishMenu() {}',
                     score: 0.9,
@@ -458,7 +461,7 @@ describe('RestController Integration', () => {
             graphifyService.query = originalQuery;
             graphifyService.readReport = originalReadReport;
             graphifyService.saveResult = originalSaveResult;
-            require('../../backend/infrastructure/ToolBox').searchCode = originalSearchCode;
+            require('../../backend/infrastructure/ToolBox').contextExpertSearch = originalSearch;
             router.loadConfig();
             fs.rmSync(workspace, { recursive: true, force: true });
         }
@@ -521,6 +524,71 @@ describe('RestController Integration', () => {
             }
             router.loadConfig();
             fs.rmSync(tempWorkspace, { recursive: true, force: true });
+        }
+    });
+
+    test('POST /projects refuses a folder that does not exist, or is generated output', async () => {
+        // A generated folder registered as a workspace is watched like one:
+        // seven .yodaman-doc-chunks "workspaces" exhausted the runtime's file
+        // descriptors. A missing folder has nothing to index.
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-register-'));
+        const chunks = path.join(root, '.yodaman-doc-chunks');
+        fs.mkdirSync(chunks);
+        const before = fs.readFileSync(configPath(), 'utf8');
+        try {
+            const generated = await invoke('post', '/projects', { body: { path: chunks } });
+            expect(generated.statusCode).toBe(400);
+            expect(generated.payload.code).toBe('workspace_generated');
+
+            const missing = await invoke('post', '/projects', { body: { path: path.join(root, 'nope') } });
+            expect(missing.statusCode).toBe(404);
+            expect(missing.payload.code).toBe('workspace_missing');
+
+            expect(fs.readFileSync(configPath(), 'utf8')).toBe(before);
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('DELETE /projects removes only the index registered for that exact path', async () => {
+        // It used to fall back to the folder name, so removing Documents/yodaman
+        // ran `ctx remove yodaman`: the index of a different folder.
+        const originalExecute = contextEngine.execute;
+        const originalExecuteJson = contextEngine.executeJson;
+        const removed = [];
+        contextEngine.forgetProjects();
+        contextEngine.executeJson = jest.fn(async () => ({
+            projects: [{ name: 'yodaman', path: path.join(os.tmpdir(), 'elsewhere', 'yodaman') }]
+        }));
+        contextEngine.execute = jest.fn(async (args) => { removed.push(args); return { output: '', code: 0 }; });
+        try {
+            const target = path.join(os.tmpdir(), 'mine', 'yodaman');
+            const response = await invoke('delete', '/projects', { body: { path: target } });
+            expect(response.payload.ctxRemoved).toBe(false);
+            expect(removed).toEqual([]);
+        } finally {
+            contextEngine.execute = originalExecute;
+            contextEngine.executeJson = originalExecuteJson;
+            contextEngine.forgetProjects();
+        }
+    });
+
+    test('GET /projects names a workspace by its folder, not by its index key', async () => {
+        // Index names are made unique per folder ("yodaman-bbc91a") so two
+        // folders called yodaman can both be indexed. The UI showed that key
+        // as the workspace name; it must show the folder.
+        const originalExecuteJson = contextEngine.executeJson;
+        const workspace = path.join(os.tmpdir(), 'somewhere', 'yodaman');
+        contextEngine.executeJson = jest.fn(async () => ({
+            projects: [{ name: 'yodaman-bbc91a', path: workspace, id: workspace }]
+        }));
+        try {
+            const response = await invoke('get', '/projects');
+            const project = response.payload.find(p => p.path === workspace);
+            expect(project.name).toBe('yodaman');
+            expect(project.indexName).toBe('yodaman-bbc91a');
+        } finally {
+            contextEngine.executeJson = originalExecuteJson;
         }
     });
 
@@ -795,6 +863,85 @@ describe('RestController Integration', () => {
             expect(response.payload).toEqual(expect.objectContaining({
                 code: 'graphify_report_missing'
             }));
+        });
+
+        test('GET /graphify/build/status never reports an orphaned running build', async () => {
+            // The freeze the user hit: a `running` status left on disk by a
+            // build that died (runtime killed, request abandoned, child process
+            // timed out) was returned verbatim by this endpoint, because it
+            // called readBuildStatus() raw while /graphify/status went through
+            // the reconciliation in summarizeBuildStatus(). Graph Studio polls
+            // THIS one, saw state 'running' with no job behind it, and sat on
+            // "Graph build in progress" until the stale window expired.
+            fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [], links: [] }));
+            graphifyService.writeBuildStatus(workspace, {
+                state: 'running',
+                message: 'Graphify build running',
+                startedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString()
+            });
+            // Age it past any window a real build could occupy. writeBuildStatus
+            // stamps updatedAt with now, so it has to be rewritten by hand —
+            // this is the exact on-disk shape a killed runtime leaves behind.
+            const statusFile = graphifyService.buildStatusPath(workspace);
+            const orphaned = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+            orphaned.updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+            fs.writeFileSync(statusFile, JSON.stringify(orphaned));
+
+            const response = await invoke('get', '/graphify/build/status', {
+                query: { path: workspace }
+            });
+
+            expect(response.statusCode).toBe(200);
+            // No job was ever started in this test, so there is nothing that
+            // could legitimately be running.
+            expect(response.payload.job).toBeNull();
+            expect(response.payload.build.state).not.toBe('running');
+            expect(response.payload.build.staleRunning).toBe(true);
+        });
+
+        test('GET /graphify/build/status and GET /graphify/status agree on the build state', async () => {
+            // The two endpoints reported the same field from different code
+            // paths, and only one of them reconciled. Whatever they do, they
+            // must not contradict each other — a UI reading both cannot show a
+            // coherent state if they disagree.
+            fs.writeFileSync(path.join(workspace, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [], links: [] }));
+            graphifyService.writeBuildStatus(workspace, {
+                state: 'running',
+                message: 'Graphify build running',
+                startedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString()
+            });
+            const statusFile = graphifyService.buildStatusPath(workspace);
+            const orphaned = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+            orphaned.updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+            fs.writeFileSync(statusFile, JSON.stringify(orphaned));
+
+            const buildStatus = await invoke('get', '/graphify/build/status', { query: { path: workspace } });
+            const graphStatus = await invoke('get', '/graphify/status', { query: { path: workspace } });
+
+            expect(buildStatus.payload.build.state).toBe(graphStatus.payload.build.state);
+        });
+
+        test('remembers a bounded number of build jobs, oldest dropped first', async () => {
+            // 0.5.7 shipped this cap as dead code: an edit replaced the wrong
+            // line, so the function called itself and the real call site never
+            // used it. Lint reported it only as a warning (now an error). This
+            // asserts the bound itself, so the leak cannot quietly return.
+            const graphifyRoutes = require('../../backend/interfaces/routes/graphifyRoutes');
+            const originalBuild = graphifyService.build;
+            graphifyService.build = jest.fn(async () => ({ build: { state: 'succeeded' } }));
+            try {
+                const max = graphifyRoutes.MAX_REMEMBERED_BUILD_JOBS;
+                for (let i = 0; i < max + 15; i += 1) {
+                    const queued = await invoke('post', '/graphify/build', { body: { path: workspace } });
+                    expect(queued.statusCode).toBe(202);
+                    // Let the job finish so the next request starts a new one.
+                    await new Promise(resolve => setImmediate(resolve));
+                }
+                expect(graphifyRoutes.rememberedBuildJobCount()).toBe(max);
+                expect(graphifyService.build).toHaveBeenCalledTimes(max + 15);
+            } finally {
+                graphifyService.build = originalBuild;
+            }
         });
 
         test('POST /graphify/build queues a build and exposes job status', async () => {

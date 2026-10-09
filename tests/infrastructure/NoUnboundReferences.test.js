@@ -54,7 +54,7 @@ function sourceFiles(directory, collected = []) {
 }
 
 // Generated bundles are single enormous lines of mangled names; parsing them for
-// hand-written mistakes tells you nothing. frontend/VRViewer.js is one of these.
+// hand-written mistakes tells you nothing (Emscripten output, vendored bundles).
 function isGeneratedBundle(source) {
     const lines = source.split('\n');
     return lines.some(line => line.length > 2000);

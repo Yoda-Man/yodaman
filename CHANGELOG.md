@@ -2,6 +2,207 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Holocron, rebuilt toward its design vision.** The in-app viewer now lays the
+  workspace out with Holocron's WebAssembly force engine, in a worker so large
+  graphs never freeze the screen, and falls back to the previous spiral layout
+  if the engine cannot run. The viewer says which layout it used.
+  - Distinct, named cluster systems with glowing hubs and spokes; bloom,
+    depth-faded starfield, labels for clusters and the biggest hubs.
+  - Search (`/` or `⌘K`) that flies the camera to a file or symbol.
+  - Click a node: its neighbourhood lights up and the rest dims. A detail panel
+    shows its path, language, cluster, what it uses and what uses it (each
+    clickable), changes in the last 30 days, a code preview, **Open in editor**
+    (your editor, at the line) and **Ask Agent** (pre-fills Chat; never sends).
+  - Filters: hide tests, docs or third-party code (including minified
+    bundles), languages, recent changes only. A git change heatmap.
+  - 500, 1,500 or 4,000 nodes, sampled by connectivity instead of file order.
+    Measured at 4,000 nodes and 8,036 edges: 75 fps.
+- `GET /api/graphify/map?rank=degree`, the most connected nodes first.
+- `GET /api/editor/preview`, a read-only window of a workspace file, with the
+  same containment rules as opening a file.
+
+### Fixed
+- **WebAssembly was blocked by the page's security policy.** `script-src`
+  now includes `'wasm-unsafe-eval'`, which allows compiling WebAssembly and
+  nothing else; JavaScript `eval` stays forbidden, and a test holds both.
+
+### Removed
+- `frontend/VRViewer.js` and `frontend/UIPanel.js`: compiled copies of an old
+  Holocron viewer that nothing loaded (the plugin host only logs UI
+  registrations). Their minified symbols also showed up in YodaMan's own graph.
+
+## [0.5.8] - 2026-10-08
+
+### Fixed
+- **A simple search no longer ends in "I reached the maximum number of
+  steps".** Typed into Chat, "find where user login is handled" ran the full
+  ten-step agent loop; on a large workspace each step took two to three
+  minutes, and when the steps ran out everything found was thrown away. Plain
+  searches now go straight to the search pipeline (seconds, not minutes), and
+  an agent task that runs out of steps answers from what it gathered, or lists
+  the files it examined.
+- **Files open in your own editor.** File links were hardcoded `vscode://`
+  URLs, which opened VS Code whatever your default was. The runtime now opens
+  files with your system's default app for that file type, at the right line.
+  Search results gained an **Open** button (the icon that looked like one only
+  expanded the snippet), and show the real file path instead of "Source File".
+- **A moved or deleted workspace says so.** Its old index kept answering, so
+  searches returned files that no longer existed and the agent spent every step
+  failing to read them. Readiness now reports **Folder not found** with what to
+  do, search returns a clear error, and the agent stops before its first step.
+- **Two folders with the same name can both be indexed.** A second workspace
+  named like an indexed one (for example two `yodaman` folders) failed every
+  Sync with `UNIQUE constraint failed: projects.name`, so Context Expert could
+  never index it. Each workspace now gets a unique index name, and an unindexed
+  workspace is never searched as a different project that shares its name.
+- **Search results are listed once.** Unified search asked Context Expert twice
+  and every hit appeared twice.
+- **Search no longer writes into your repositories.** Every search ran a docs
+  preprocessor that wrote chunk files into the workspace (6,903 in one) and
+  rewrote a `config.json` inside it. The chunks were on the index-ignore list,
+  so they were never searched; the "docs search" was the code search again,
+  which is also why every result appeared twice. Each search is now one Context
+  Expert query, and documentation is a filter on its results. Existing
+  `.yodaman-doc-chunks` folders are safe to delete; `yodaman uninstall` lists them.
+- **A deleted workspace is no longer brought back.** Indexing and graph builds
+  created `<workspace>/graphify-out` with `mkdir -p`, recreating a deleted
+  folder as an empty shell that then looked healthy. Both now skip it.
+- **Removing a workspace removes only its own index.** Removal fell back to the
+  folder name, so removing one `yodaman` workspace deleted the index of another.
+- **Generated folders cannot be registered as workspaces**, and a folder must
+  exist to be added. Seven chunk folders registered as workspaces exhausted the
+  runtime's file descriptors, so ctx failed to start with `EBADF`.
+- **Search results have one shape.** When ctx was slow, the text-scan fallback
+  returned hits without `filePath` or line numbers, so clients such as MCP saw
+  a different shape depending on timing.
+- **Security: 8 advisories cleared** in production dependencies (3 critical,
+  1 high, 4 moderate), including `simple-git` 3 to 4, whose CommonJS export
+  changed shape.
+- **The graph build job cap actually works.** 0.5.7 shipped it as dead code (a
+  function that called itself, never called by anything).
+- **OpenSpec failures are reported once.** A process that could not start was
+  logged twice, the second time after the caller had moved on.
+
+### Added
+- **Settings > Open files in.** System default, any detected editor, or a
+  command template for any editor (`idea --line {line} {file}`). Run without a
+  shell; changeable only from this computer. Also `YODAMAN_EDITOR_COMMAND`.
+- **Search reports its pillars.** Every result says whether Context Expert,
+  Graphify and OpenSpec actually contributed, so a degraded search (no graph
+  yet, no specs, a text scan instead of the index) never looks like a full one.
+
+### Changed
+- **One search pipeline.** Context Expert retrieval, Graphify ranking and
+  OpenSpec tagging now live in `backend/core/SearchPipeline.js`, and every
+  search goes through it: Search, Chat, the agent's `searchCode` tool, Trace,
+  docs search, Stardust Compose and the ask fallback. Before, six entry points
+  used five different subsets of the three. An architecture test fails the
+  build if code searches around the pipeline.
+- **Lint fails on warnings.** The dead build-job cap was visible only as a lint
+  warning.
+- **Dead code removed:** `backend/utils/queryClassifier.js`, left behind by the
+  removed code/docs mode toggle, and `backend/utils/docPreprocessor.js`. A new test fails the build when a module is
+  used only by its own tests.
+- **README** rewritten, with a new Stardust Trace screenshot.
+
+### Holocron VR 0.5.8
+- Fixed a buffer overrun in the WASM layout engine that turned unclustered
+  layouts into NaN, fixed its export bindings, and the engine is now executed in
+  CI rather than only compiled. The viewer still lays out in JavaScript; the
+  engine is not yet wired in.
+
+### Notes
+- No migration is needed. A workspace that never indexed because of a name
+  clash will index on its next Sync.
+
+## [0.5.7] - 2026-09-27
+
+### Fixed
+- **Graph Studio no longer freezes on large workspaces.** Opening the view on a
+  big project sat on "Graph build in progress" forever, while no `graphify`
+  process was running at all. Small projects were unaffected, which is why it
+  went unnoticed. Four separate faults combined:
+
+  - **A read triggered a write.** `map()` — the 90-node preview the view loads
+    on open — began with `ensureGraph()`, which rebuilt the entire graph
+    whenever any source file was newer than `graph.json`. On a workspace here
+    with 8,255 files and a 208 MB `graph.json`, asking for 90 nodes ran a full
+    rebuild inside the HTTP request and took **106 seconds**. A build's first
+    act is writing `state: 'running'`, so merely *looking* at a large graph told
+    the UI a build was in progress. `map()` is now read-only.
+  - **A stale graph counted as no graph.** `ensureGraph()` rebuilt whenever the
+    graph was stale, so on an actively-edited project every query, explain, path
+    and impact call was a full rebuild in disguise. It now builds only when
+    there is genuinely no graph, and reports staleness so you can decide when to
+    pay for a rebuild.
+  - **An orphaned `running` status was reported as live.**
+    `GET /api/graphify/build/status` returned the on-disk status verbatim while
+    `GET /api/graphify/status` reconciled it, so the two contradicted each
+    other — and Graph Studio polls the first. A `running` left behind by a build
+    that died pinned the view for the full stale window. Both endpoints now
+    reconcile, and that window is derived from the build timeout (about 11
+    minutes) instead of an unrelated flat 30.
+  - **Polling stopped on the previous build's result.** The poll loop treated
+    the on-disk status as terminal, but at the first poll that is still the
+    *last* build's outcome — the new one has not written `running` yet. A
+    rebuild was declared finished about two seconds after it began and the real
+    build carried on unwatched. The job is now authoritative.
+
+- **A build stopped by the timeout says so.** A killed child leaves `stderr`
+  empty, so the failure surfaced as `Command failed: graphify update ...`, which
+  reads as the tool rejecting your project rather than as YodaMan stopping it.
+  It now names the timeout and points at `YODAMAN_GRAPHIFY_TIMEOUT_MS`.
+
+- **`tests/interfaces/CliCommands.test.js`** no longer fails when the desktop
+  app is running. It asserted nothing was listening on port 3090 without first
+  checking whether something already was — reporting your own app as a leak.
+
+### Notes
+- No migration is needed. No index or graph schema changed; existing graphs and
+  indexes stay valid.
+- If a workspace is still showing a phantom build, it clears itself now; you can
+  also delete `graphify-out/yodaman-build-status.json` to reset it immediately.
+- Workspaces above Graphify's 25,000-node HTML limit still cannot render the
+  Mind Map or Canvas — that limit is Graphify's. Graph Studio now says so and
+  offers Map Preview and Report, instead of showing a spinner.
+
+## [0.5.6] - 2026-09-02
+
+### Added
+- **`yodaman setup`** — installs Context Expert, Graphify and OpenSpec in one
+  command, reusing the install commands `yodaman doctor` already printed.
+  Ollama is never installed automatically: it is a system service, so the
+  command prints it and leaves the decision to you. Only unambiguous single
+  commands are ever executed — two of the Ollama hints are prose, and running
+  them would have run `brew install ollama or download from ...`.
+- **`yodaman uninstall`** — dry run by default, listing every path it would
+  remove. `openspec/` is never proposed: those are your specs, and they exist
+  nowhere else. A workspace recorded as `/` or your home directory is refused
+  rather than walked.
+- **`yodaman --help` and `--version`.** Both previously fell through the CLI and
+  started the runtime, so asking for help gave you a server.
+- **Homebrew**: `brew install Yoda-Man/yodaman/yodaman`, from a published tap.
+- **`npm run version:bump`** — moves all eleven version references at once, and
+  `--check` (now the first step of `release:verify`) fails the release if any
+  disagree.
+- **Screenshots and a demo GIF in the README**, regenerated by
+  `npm run screenshots` and `npm run screenshots:gif` rather than captured by
+  hand, so they cannot drift from the product.
+- **LICENSE, SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, UPGRADING.md**,
+  and issue/PR templates. MIT had been claimed in four places, including every
+  published npm release, with no licence text behind it.
+
+### Fixed
+- Bare `yodaman` still starts the runtime, as the user manual documents — an
+  early version of the help handling broke this.
+
+### Notes
+- No migration is needed. No index or graph schema changed; existing indexes
+  stay valid.
+
 ## [0.5.5] - 2026-08-29
 
 ### Fixed — the MCP tests never called a tool

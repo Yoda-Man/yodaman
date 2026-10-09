@@ -95,6 +95,38 @@ export const api = {
         return request(url);
     },
 
+    /**
+     * Open a workspace file in the user's own editor, at a line. The runtime
+     * picks the editor (config, else the OS default for that file type); this
+     * replaced hardcoded vscode:// links, which opened VS Code regardless.
+     */
+    async openInEditor(workspace, filePath, line) {
+        return request(`${API_BASE}/editor/open`, jsonOptions('POST', {
+            workspace,
+            path: filePath,
+            ...(line ? { line: Number(line) } : {})
+        }));
+    },
+
+    /** Files changed in the last 30 days: { files: [{ filePath, changeCount, lastChangeDate, authors }] }. */
+    async gitHeatmap(path) {
+        return request(`${API_BASE}/git/heatmap?path=${encodeURIComponent(path)}`);
+    },
+
+    async previewFile(workspace, filePath, line) {
+        const query = new URLSearchParams({ workspace, path: filePath });
+        if (line) query.set('line', String(line));
+        return request(`${API_BASE}/editor/preview?${query}`);
+    },
+
+    async getEditorOptions() {
+        return request(`${API_BASE}/editor/options`);
+    },
+
+    async updateSettings(updates) {
+        return request(`${API_BASE}/settings`, jsonOptions('PUT', updates));
+    },
+
     async getPlugins() {
         return request(`${API_BASE}/plugins`);
     },
@@ -190,8 +222,10 @@ export const api = {
         return request(`${API_BASE}/graphify/affected`, jsonOptions('POST', { path, node, depth, relations }));
     },
 
-    async mapGraphify(path, limit = 80) {
-        return request(`${API_BASE}/graphify/map?path=${encodeURIComponent(path)}&limit=${encodeURIComponent(limit)}`);
+    async mapGraphify(path, limit = 80, { rank } = {}) {
+        const query = new URLSearchParams({ path, limit: String(limit) });
+        if (rank) query.set('rank', rank);
+        return request(`${API_BASE}/graphify/map?${query}`);
     },
 
     async getLogs(limit = 200, filters = {}) {

@@ -245,7 +245,7 @@ class ToolBox {
                 query: { type: 'string', required: true, note: 'natural language or a code fragment' },
                 project,
                 top: { type: 'number', required: false, note: 'max 50, default 10' },
-            }, 'Semantic search across the indexed workspace.'],
+            }, 'Search the workspace: semantic matches, ranked by the knowledge graph, tagged with the specs that cover them.'],
             ['listFiles', { directoryPath: { type: 'string', required: true } }, 'Lists the entries of a directory.'],
             ['impactOf', {
                 file,
@@ -420,7 +420,27 @@ class ToolBox {
         });
     }
 
+    /**
+     * The agent's search tool. It is the full pipeline (Context Expert
+     * retrieval, Graphify ranking, OpenSpec tagging), not ctx alone: the agent
+     * searching mid-task used to get unranked, untagged hits while the Search
+     * view got the blend, for the same query.
+     *
+     * Required lazily: SearchPipeline requires this module.
+     */
     async searchCode({ query, project, top } = {}) {
+        const { search } = require('../core/SearchPipeline');
+        const out = await search({ query, project, top, mode: 'unified' });
+        return out.results;
+    }
+
+    /**
+     * Stage 1 of the search pipeline: raw Context Expert retrieval, with a
+     * filesystem fallback. PRIVATE TO SearchPipeline. Anything else calling it
+     * would be searching with one pillar instead of three;
+     * tests/architecture/SearchPipelineBoundary.test.js fails the build if it does.
+     */
+    async contextExpertSearch({ query, project, top } = {}) {
         const args = ['search', query];
         if (project) {
             // ctx -p takes the indexed project's NAME. This passed the absolute
@@ -429,7 +449,13 @@ class ToolBox {
             // grep below — semantic retrieval was effectively off in exactly the
             // case it is always used. ContextEngine.projectName resolves it.
             const name = await contextEngine.projectName(this.resolveAllowedPath(project));
-            if (name) args.push('-p', name);
+            // Not in the index: search the folder itself rather than every
+            // indexed project, whose hits would all be other workspaces' files.
+            if (!name) {
+                logger.warn('ctx_project_not_indexed', { project, userAction: 'code_search', hint: 'Run Sync Repository to index this workspace.' });
+                return this.searchCodeFilesystem({ query, project, top });
+            }
+            args.push('-p', name);
         }
         if (top) args.push('-k', String(Math.min(Math.max(Number(top) || 10, 1), 50)));
         try {
@@ -566,7 +592,13 @@ class ToolBox {
         const snippet = lines.slice(startLine, endLine).join('\n');
         const exactPathMatch = path.basename(filePath).toLowerCase().includes(needle) ? 0.15 : 0;
 
+        // The same fields a Context Expert hit carries. The fallback used to
+        // omit filePath and the line span, so a client saw two shapes of hit
+        // depending on whether ctx answered in time.
         results.push({
+            filePath,
+            lineStart: lineNumber,
+            lineEnd: lineNumber,
             content: snippet,
             text: snippet,
             snippet,
