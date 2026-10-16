@@ -2,7 +2,7 @@
   "expo": {
     "name": "YodaMan",
     "slug": "yodaman-mobile",
-    "version": "0.5.9",
+    "version": "0.6.0",
     "orientation": "portrait",
     "scheme": "yodaman",
     "userInterfaceStyle": "dark",

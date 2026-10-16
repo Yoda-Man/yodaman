@@ -13,6 +13,7 @@ const { hitPath, hitLine, hitText } = require('../../shared/searchHits');
 const OLLAMA_URL = 'http://127.0.0.1:11434';
 const MAX_HITS = 8;
 const MAX_SNIPPET_CHARS = 700;
+const CACHE_SIZE = 50;
 
 const INSTRUCTIONS = [
     'You summarise code search results for a developer.',
@@ -46,6 +47,16 @@ function localModel() {
     return modelPromise;
 }
 
+// Finished summaries, keyed by model and the exact prompt: the same results
+// (same hits, ranking and spec tags) give the same answer without the model.
+// Oldest first, so the first key is the one to drop.
+const cache = new Map();
+function remember(key, text) {
+    cache.delete(key);
+    cache.set(key, text);
+    if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value);
+}
+
 /**
  * Stream the summary as text pieces.
  *
@@ -57,6 +68,15 @@ function localModel() {
  */
 async function* summarize({ query, results, signal, fetchImpl = fetch }) {
     const model = await localModel();
+    const prompt = buildPrompt(query, results);
+    const key = `${model}\n${prompt}`;
+    if (cache.has(key)) {
+        const text = cache.get(key);
+        remember(key, text);
+        yield text;
+        return;
+    }
+
     const response = await fetchImpl(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         signal,
@@ -68,7 +88,7 @@ async function* summarize({ query, results, signal, fetchImpl = fetch }) {
             options: { temperature: 0.2 },
             messages: [
                 { role: 'system', content: INSTRUCTIONS },
-                { role: 'user', content: buildPrompt(query, results) }
+                { role: 'user', content: prompt }
             ]
         })
     });
@@ -77,6 +97,8 @@ async function* summarize({ query, results, signal, fetchImpl = fetch }) {
     // Ollama streams one JSON object per line; a network chunk can end mid-line.
     const decoder = new TextDecoder();
     let buffer = '';
+    let written = '';
+    let finished = false;
     for await (const chunk of response.body) {
         buffer += decoder.decode(chunk, { stream: true });
         let end;
@@ -86,9 +108,15 @@ async function* summarize({ query, results, signal, fetchImpl = fetch }) {
             if (!line) continue;
             const message = JSON.parse(line);
             if (message.error) throw new Error(message.error);
-            if (message.message?.content) yield message.message.content;
+            if (message.message?.content) {
+                written += message.message.content;
+                yield message.message.content;
+            }
+            if (message.done) finished = true;
         }
     }
+    // Only a summary the model said it finished is kept, never a cut-off one.
+    if (finished && written) remember(key, written);
 }
 
-module.exports = { summarize, buildPrompt, localModel, MAX_HITS };
+module.exports = { summarize, buildPrompt, localModel, MAX_HITS, CACHE_SIZE };

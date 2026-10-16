@@ -59,13 +59,37 @@ describe('SearchWindow component contract', () => {
 });
 
 describe('the AI summary panel', () => {
-    function renderSummary(summary) {
+    function renderSummary(summary, props = {}) {
         require('../helpers/browserStub').installBrowserStub();
         const React = require('react');
         const { renderToStaticMarkup } = require('react-dom/server');
         const { SearchSummary } = require('../../src/components/SearchWindow');
-        return renderToStaticMarkup(React.createElement(SearchSummary, { summary }));
+        return renderToStaticMarkup(React.createElement(SearchSummary, { summary, ...props }));
     }
+
+    test('each citation of a real result links to it; others stay plain text', () => {
+        const html = renderSummary({ state: 'done', text: 'Ranked here [1][2], tagged there [9].' }, { resultCount: 2 });
+        expect(html).toContain('aria-label="Go to result 1"');
+        expect(html).toContain('aria-label="Go to result 2"');
+        expect(html).not.toContain('Go to result 9');
+        expect(html).toContain('tagged there [9].');
+    });
+
+    test('clicking a citation asks for that result', () => {
+        require('../helpers/browserStub').installBrowserStub();
+        const { SearchSummary } = require('../../src/components/SearchWindow');
+        const cited = [];
+        const tree = SearchSummary({ summary: { state: 'done', text: 'See [2].' }, resultCount: 3, onCite: (n) => cited.push(n) });
+        const buttons = [];
+        (function walk(node) {
+            if (!node || typeof node !== 'object') return;
+            if (Array.isArray(node)) return node.forEach(walk);
+            if (node.type === 'button') buttons.push(node);
+            walk(node.props?.children);
+        })(tree);
+        buttons.find((b) => b.props['aria-label'] === 'Go to result 2').props.onClick();
+        expect(cited).toEqual([2]);
+    });
 
     test('says it summarises these results, with the local model that wrote it', () => {
         const html = renderSummary({ state: 'done', text: 'Ranked in the pipeline [1].', model: 'qwen3.5:9b' });

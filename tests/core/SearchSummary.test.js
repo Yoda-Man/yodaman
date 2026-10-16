@@ -80,6 +80,16 @@ describe('streaming the answer', () => {
         expect(body.messages[0].content).toMatch(/only the numbered search results/);
     });
 
+    test('the caller\'s abort signal reaches the request to Ollama', async () => {
+        // Checked live: aborting this request ends Ollama's generation at once
+        // (its log shows the request closing the second the client left).
+        const { summarize } = fresh();
+        const { fetchImpl, calls } = ollama(['{"done":true}\n']);
+        const stop = new AbortController();
+        await collect(summarize({ query: 'q', results: HITS, fetchImpl, signal: stop.signal }));
+        expect(calls[0].init.signal).toBe(stop.signal);
+    });
+
     test('a model error mid-stream is raised, not swallowed', async () => {
         const { summarize } = fresh();
         const { fetchImpl } = ollama(['{"message":{"content":"Part"}}\n{"error":"model unloaded"}\n']);
@@ -100,5 +110,59 @@ describe('streaming the answer', () => {
         // And a good answer is remembered: ctx is not asked for every search.
         await localModel();
         expect(contextEngine.executeJson).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('the summary cache', () => {
+    const DONE = ['{"message":{"content":"Answer [1]."}}\n', '{"done":true}\n'];
+
+    test('the same results give the same summary without asking the model again', async () => {
+        const { summarize } = fresh();
+        const first = ollama(DONE);
+        expect(await collect(summarize({ query: 'q', results: HITS, fetchImpl: first.fetchImpl }))).toEqual(['Answer [1].']);
+        const again = ollama(DONE);
+        expect(await collect(summarize({ query: 'q', results: HITS, fetchImpl: again.fetchImpl }))).toEqual(['Answer [1].']);
+        expect(again.calls).toHaveLength(0);
+    });
+
+    test('different results, or a different query, ask the model', async () => {
+        const { summarize } = fresh();
+        await collect(summarize({ query: 'q', results: HITS, fetchImpl: ollama(DONE).fetchImpl }));
+        const reranked = ollama(DONE);
+        await collect(summarize({ query: 'q', results: [HITS[1], HITS[0]], fetchImpl: reranked.fetchImpl }));
+        const reworded = ollama(DONE);
+        await collect(summarize({ query: 'other', results: HITS, fetchImpl: reworded.fetchImpl }));
+        expect(reranked.calls).toHaveLength(1);
+        expect(reworded.calls).toHaveLength(1);
+    });
+
+    test('a summary cut off before the model said done is not kept', async () => {
+        const { summarize } = fresh();
+        await collect(summarize({ query: 'q', results: HITS, fetchImpl: ollama(['{"message":{"content":"Half an ans"}}\n']).fetchImpl }));
+        const again = ollama(DONE);
+        expect(await collect(summarize({ query: 'q', results: HITS, fetchImpl: again.fetchImpl }))).toEqual(['Answer [1].']);
+        expect(again.calls).toHaveLength(1);
+    });
+
+    test('a failed summary is not kept', async () => {
+        const { summarize } = fresh();
+        await expect(collect(summarize({ query: 'q', results: HITS, fetchImpl: ollama(['{"error":"boom"}\n']).fetchImpl }))).rejects.toThrow('boom');
+        const again = ollama(DONE);
+        await collect(summarize({ query: 'q', results: HITS, fetchImpl: again.fetchImpl }));
+        expect(again.calls).toHaveLength(1);
+    });
+
+    test('stays bounded: the least recently used summary goes first', async () => {
+        const { summarize, CACHE_SIZE } = fresh();
+        const ask = async (query) => {
+            const call = ollama(DONE);
+            await collect(summarize({ query, results: HITS, fetchImpl: call.fetchImpl }));
+            return call.calls.length;
+        };
+        for (let i = 0; i < CACHE_SIZE; i++) await ask(`q${i}`);
+        expect(await ask('q0')).toBe(0);               // used again, so now the newest
+        expect(await ask('new')).toBe(1);              // one past the limit: drops q1, not q0
+        expect(await ask('q0')).toBe(0);
+        expect(await ask('q1')).toBe(1);
     });
 });

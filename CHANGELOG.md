@@ -10,9 +10,12 @@ All notable changes to **YodaMan** will be documented in this file.
   Expert uses through Ollama, answers the query from those same results only,
   citing them as [1], [2]. It never searches on its own, so the summary rests
   on the full pipeline (Context Expert retrieval, cleaning, Graphify ranking,
-  OpenSpec tags), and nothing leaves your machine. Starting another search
-  stops the model. If the model is unavailable, the results stand and the
-  summary says why.
+  OpenSpec tags), and nothing leaves your machine. Each citation links to the
+  result it names. Starting another search stops the model (checked against
+  Ollama: its generation ends the moment the search is abandoned). Repeating a
+  search with the same results reuses the finished summary instead of running
+  the model again; a summary that was cut off or failed is never reused. If
+  the model is unavailable, the results stand and the summary says why.
 - `GET /api/search/stream`: the Search view's search as server-sent events
   (`results`, then `summary_start`, `summary`, `done`). `GET /api/search` is
   unchanged for MCP, VS Code and mobile, which get no summary: their callers
