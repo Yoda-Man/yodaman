@@ -2,6 +2,22 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.6.0] - 2026-10-16
+
+### Added
+- **An AI summary on every search in the Search view.** Results appear as
+  soon as the pipeline returns them; then your local model, the one Context
+  Expert uses through Ollama, answers the query from those same results only,
+  citing them as [1], [2]. It never searches on its own, so the summary rests
+  on the full pipeline (Context Expert retrieval, cleaning, Graphify ranking,
+  OpenSpec tags), and nothing leaves your machine. Starting another search
+  stops the model. If the model is unavailable, the results stand and the
+  summary says why.
+- `GET /api/search/stream`: the Search view's search as server-sent events
+  (`results`, then `summary_start`, `summary`, `done`). `GET /api/search` is
+  unchanged for MCP, VS Code and mobile, which get no summary: their callers
+  have their own model.
+
 ## [0.5.9] - 2026-10-09
 
 ### Added

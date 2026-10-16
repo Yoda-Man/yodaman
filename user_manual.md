@@ -221,6 +221,7 @@ Nothing listens on a port and nothing leaves the machine. Full details in
 - `GET /api/graphify/map`: Read a compact architecture map summary.
 - `POST /api/graphify/tree`: Generate Graphify's D3 tree artifact.
 - `GET /api/search`: Run unified Stardust-powered search across code and docs. Accepts `query`, `project`, `top` (default 15), `activeFile`. Returns merged results with `_source` provenance (`code`|`docs`), `specFlag` annotations, and `graphRank` scores with the four-signal breakdown.
+- `GET /api/search/stream`: The Search view's search, as server-sent events. Same query parameters. Sends `results` (the same body as `GET /api/search`) as soon as the pipeline finishes, then `summary_start` (`model`), `summary` text pieces, and `done`. The summary is written by the local model Context Expert uses, from those results only, citing them as [1], [2]. A failed summary sends `summary_error` and leaves the results standing; a failed search sends `search_error`.
 - `POST /api/ask`: Ask a question.
 - `GET /api/status`: Read Context Expert status.
 - `GET /api/desktop/diagnostics`: Read runtime, task, host, and plugin diagnostics.

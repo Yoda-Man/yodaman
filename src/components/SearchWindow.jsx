@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Search, FileCode, Hash, ExternalLink, Loader2, ChevronUp, ChevronDown } from 'lucide-react'
+import { Search, FileCode, Hash, ExternalLink, Loader2, ChevronUp, ChevronDown, Sparkles } from 'lucide-react'
 import { api } from '../api/api'
 
 // One reader for both hit shapes, shared with the pipeline and the agent.
@@ -14,6 +14,8 @@ export default function SearchWindow({ selectedProject, searchRequest, onSearchi
     const [hasSearched, setHasSearched] = useState(false)
     const [expandedResults, setExpandedResults] = useState({})
     const [openError, setOpenError] = useState('')
+    // { state: 'writing' | 'done' | 'error', text, model, error }, or null when there is nothing to summarise.
+    const [summary, setSummary] = useState(null)
 
     // Opens the hit in the user's own editor, at its line. Search results had
     // no open action before: the icon that looked like one only expanded the
@@ -33,40 +35,63 @@ export default function SearchWindow({ selectedProject, searchRequest, onSearchi
         const query = String(searchRequest?.query || '').trim()
         if (!query || !searchRequest?.id) return
 
-        let active = true
-
         setIsSearching(true)
         onSearchingChange?.(true)
         setHasSearched(true)
         setError('')
+        setResults([])
+        setSummary(null)
 
-        api.search(query, selectedProject?.path || selectedProject?.name).then(data => {
-            if (!active) return
-            setResults(data.isText ? [] : (Array.isArray(data) ? data : (data.results || [])))
-        }).catch(err => {
-            if (!active) return
-            console.error('Search failed:', err)
-            setResults([])
-            setError(err.message || 'Search failed')
-            api.reportClientError({
-                message: err.message || 'Search failed',
-                stack: err.stack,
-                userAction: 'code_search',
-                component: 'SearchWindow',
-                severity: 'high',
-                context: {
-                    query,
-                    project: selectedProject?.path || selectedProject?.name
-                }
-            })
-        }).finally(() => {
-            if (!active) return
+        const project = selectedProject?.path || selectedProject?.name
+        const source = new EventSource(api.searchStreamUrl(query, project))
+        const read = (event) => JSON.parse(event.data)
+        let finished = false
+        let gotResults = false
+        const searchDone = () => {
             setIsSearching(false)
             onSearchingChange?.(false)
+        }
+        const fail = (message) => {
+            setResults([])
+            setError(message)
+            searchDone()
+            api.reportClientError({ message, userAction: 'code_search', component: 'SearchWindow', severity: 'high', context: { query, project } })
+        }
+
+        source.addEventListener('results', (event) => {
+            gotResults = true
+            setResults(read(event).results || [])
+            searchDone()
         })
+        source.addEventListener('summary_start', (event) => setSummary({ state: 'writing', text: '', model: read(event).model }))
+        source.addEventListener('summary', (event) => {
+            const { text } = read(event)
+            setSummary((current) => ({ ...current, text: (current?.text || '') + text }))
+        })
+        source.addEventListener('summary_error', (event) => setSummary((current) => ({ ...current, state: 'error', error: read(event).error })))
+        source.addEventListener('search_error', (event) => {
+            finished = true
+            source.close()
+            fail(read(event).error || 'Search failed')
+        })
+        source.addEventListener('done', () => {
+            finished = true
+            source.close()
+            setSummary((current) => (current && current.state === 'writing' ? { ...current, state: 'done' } : current))
+        })
+        // A dropped connection. EventSource would reconnect and run the search
+        // again, so stop it and say what happened instead.
+        source.onerror = () => {
+            if (finished) return
+            finished = true
+            source.close()
+            if (!gotResults) fail('Search could not reach the runtime')
+            else setSummary((current) => (current && current.state === 'writing' ? { ...current, state: 'error', error: 'The connection closed before the summary finished' } : current))
+        }
 
         return () => {
-            active = false
+            finished = true
+            source.close()
             onSearchingChange?.(false)
         }
     }, [searchRequest?.id])
@@ -95,6 +120,8 @@ export default function SearchWindow({ selectedProject, searchRequest, onSearchi
                         </div>
                     )}
 
+                    {summary ? <SearchSummary summary={summary} /> : null}
+
                     {results.map((result, idx) => (
                         <SearchResultCard
                             key={idx}
@@ -106,6 +133,26 @@ export default function SearchWindow({ selectedProject, searchRequest, onSearchi
                     ))}
                 </div>
             </div>
+        </div>
+    )
+}
+
+/**
+ * The local model's answer, drawn only from the results below it. Exported
+ * for tests. [n] refers to the nth result card.
+ */
+export function SearchSummary({ summary }) {
+    return (
+        <div className="glass-panel border-indigo-400/20 p-5" aria-live="polite">
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-300">
+                <Sparkles size={12} />
+                AI summary of these results
+                {summary.model ? <span className="normal-case tracking-normal text-slate-500">· {summary.model}, on this machine</span> : null}
+                {summary.state === 'writing' ? <Loader2 size={12} className="animate-spin text-slate-500" /> : null}
+            </div>
+            {summary.text ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{summary.text}</p> : null}
+            {summary.state === 'writing' && !summary.text ? <p className="text-sm text-slate-500">Reading the results…</p> : null}
+            {summary.state === 'error' ? <p className="mt-1 text-xs text-amber-200">Summary unavailable: {summary.error}</p> : null}
         </div>
     )
 }

@@ -88,11 +88,12 @@ export const api = {
         return request(`${API_BASE}/reindex`, jsonOptions('POST', { path }));
     },
 
-    async search(query, project) {
-        const url = new URL(`${API_BASE}/search`, window.location.origin);
+    /** The Search view's stream: results, then the local model's summary of them (EventSource). */
+    searchStreamUrl(query, project) {
+        const url = new URL(`${API_BASE}/search/stream`, window.location.origin);
         url.searchParams.append('query', query);
         if (project) url.searchParams.append('project', project);
-        return request(url);
+        return url.toString();
     },
 
     /**

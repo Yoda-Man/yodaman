@@ -57,3 +57,30 @@ describe('SearchWindow component contract', () => {
         expect(text).not.toContain('Search for functions, variables, or patterns...');
     });
 });
+
+describe('the AI summary panel', () => {
+    function renderSummary(summary) {
+        require('../helpers/browserStub').installBrowserStub();
+        const React = require('react');
+        const { renderToStaticMarkup } = require('react-dom/server');
+        const { SearchSummary } = require('../../src/components/SearchWindow');
+        return renderToStaticMarkup(React.createElement(SearchSummary, { summary }));
+    }
+
+    test('says it summarises these results, with the local model that wrote it', () => {
+        const html = renderSummary({ state: 'done', text: 'Ranked in the pipeline [1].', model: 'qwen3.5:9b' });
+        expect(html).toContain('AI summary of these results');
+        expect(html).toContain('qwen3.5:9b, on this machine');
+        expect(html).toContain('Ranked in the pipeline [1].');
+    });
+
+    test('shows it is working before the first words arrive', () => {
+        expect(renderSummary({ state: 'writing', text: '', model: 'm' })).toContain('Reading the results');
+    });
+
+    test('a failure is said plainly, under whatever was written', () => {
+        const html = renderSummary({ state: 'error', text: 'Partial', error: 'connect ECONNREFUSED' });
+        expect(html).toContain('Partial');
+        expect(html).toContain('Summary unavailable: connect ECONNREFUSED');
+    });
+});

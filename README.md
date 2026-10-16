@@ -98,6 +98,12 @@ step was skipped and how to enable it; a partial search never looks like a full
 one. The pipeline lives in one module, and an architecture test fails the build
 if any code searches around it.
 
+In the Search view, results appear as soon as the pipeline returns them, and
+an **AI summary** follows. Your local model (the one Context Expert uses, via
+Ollama) answers the query from those same results only, citing them as [1],
+[2]. It never searches on its own, and nothing leaves your machine. If the
+model is unavailable, the results stand and the summary says why.
+
 ## Install
 
 **Homebrew** (macOS and Linux):
