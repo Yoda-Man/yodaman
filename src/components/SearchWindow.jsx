@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Search, FileCode, Hash, ExternalLink, Loader2, ChevronUp, ChevronDown } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Search, FileCode, Hash, ExternalLink, Loader2, ChevronUp, ChevronDown, Sparkles } from 'lucide-react'
 import { api } from '../api/api'
 
 // One reader for both hit shapes, shared with the pipeline and the agent.
@@ -14,6 +14,9 @@ export default function SearchWindow({ selectedProject, searchRequest, onSearchi
     const [hasSearched, setHasSearched] = useState(false)
     const [expandedResults, setExpandedResults] = useState({})
     const [openError, setOpenError] = useState('')
+    const resultsRef = useRef(null)
+    // { state: 'writing' | 'done' | 'error', text, model, error }, or null when there is nothing to summarise.
+    const [summary, setSummary] = useState(null)
 
     // Opens the hit in the user's own editor, at its line. Search results had
     // no open action before: the icon that looked like one only expanded the
@@ -33,40 +36,63 @@ export default function SearchWindow({ selectedProject, searchRequest, onSearchi
         const query = String(searchRequest?.query || '').trim()
         if (!query || !searchRequest?.id) return
 
-        let active = true
-
         setIsSearching(true)
         onSearchingChange?.(true)
         setHasSearched(true)
         setError('')
+        setResults([])
+        setSummary(null)
 
-        api.search(query, selectedProject?.path || selectedProject?.name).then(data => {
-            if (!active) return
-            setResults(data.isText ? [] : (Array.isArray(data) ? data : (data.results || [])))
-        }).catch(err => {
-            if (!active) return
-            console.error('Search failed:', err)
-            setResults([])
-            setError(err.message || 'Search failed')
-            api.reportClientError({
-                message: err.message || 'Search failed',
-                stack: err.stack,
-                userAction: 'code_search',
-                component: 'SearchWindow',
-                severity: 'high',
-                context: {
-                    query,
-                    project: selectedProject?.path || selectedProject?.name
-                }
-            })
-        }).finally(() => {
-            if (!active) return
+        const project = selectedProject?.path || selectedProject?.name
+        const source = new EventSource(api.searchStreamUrl(query, project))
+        const read = (event) => JSON.parse(event.data)
+        let finished = false
+        let gotResults = false
+        const searchDone = () => {
             setIsSearching(false)
             onSearchingChange?.(false)
+        }
+        const fail = (message) => {
+            setResults([])
+            setError(message)
+            searchDone()
+            api.reportClientError({ message, userAction: 'code_search', component: 'SearchWindow', severity: 'high', context: { query, project } })
+        }
+
+        source.addEventListener('results', (event) => {
+            gotResults = true
+            setResults(read(event).results || [])
+            searchDone()
         })
+        source.addEventListener('summary_start', (event) => setSummary({ state: 'writing', text: '', model: read(event).model }))
+        source.addEventListener('summary', (event) => {
+            const { text } = read(event)
+            setSummary((current) => ({ ...current, text: (current?.text || '') + text }))
+        })
+        source.addEventListener('summary_error', (event) => setSummary((current) => ({ ...current, state: 'error', error: read(event).error })))
+        source.addEventListener('search_error', (event) => {
+            finished = true
+            source.close()
+            fail(read(event).error || 'Search failed')
+        })
+        source.addEventListener('done', () => {
+            finished = true
+            source.close()
+            setSummary((current) => (current && current.state === 'writing' ? { ...current, state: 'done' } : current))
+        })
+        // A dropped connection. EventSource would reconnect and run the search
+        // again, so stop it and say what happened instead.
+        source.onerror = () => {
+            if (finished) return
+            finished = true
+            source.close()
+            if (!gotResults) fail('Search could not reach the runtime')
+            else setSummary((current) => (current && current.state === 'writing' ? { ...current, state: 'error', error: 'The connection closed before the summary finished' } : current))
+        }
 
         return () => {
-            active = false
+            finished = true
+            source.close()
             onSearchingChange?.(false)
         }
     }, [searchRequest?.id])
@@ -74,7 +100,7 @@ export default function SearchWindow({ selectedProject, searchRequest, onSearchi
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Results Area */}
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            <div ref={resultsRef} className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                 <div className="max-w-4xl mx-auto space-y-6">
                     {isSearching && <div className="flex items-center justify-center gap-3 py-20 text-sm text-indigo-300"><Loader2 size={18} className="animate-spin" />Searching {selectedProject?.name}…</div>}
                     {error && <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</div>}
@@ -95,17 +121,60 @@ export default function SearchWindow({ selectedProject, searchRequest, onSearchi
                         </div>
                     )}
 
+                    {summary ? <SearchSummary summary={summary} resultCount={results.length} onCite={(n) => scrollToResult(resultsRef.current, n)} /> : null}
+
                     {results.map((result, idx) => (
-                        <SearchResultCard
-                            key={idx}
-                            result={result}
-                            expanded={expandedResults[idx] || false}
-                            onToggle={() => setExpandedResults(prev => ({ ...prev, [idx]: !prev[idx] }))}
-                            onOpen={openResult}
-                        />
+                        <div key={idx} id={`search-result-${idx + 1}`}>
+                            <SearchResultCard
+                                result={result}
+                                expanded={expandedResults[idx] || false}
+                                onToggle={() => setExpandedResults(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                onOpen={openResult}
+                            />
+                        </div>
                     ))}
                 </div>
             </div>
+        </div>
+    )
+}
+
+/**
+ * Scroll the results list, and only it, to result n. scrollIntoView also
+ * scrolled the page itself, pushing the app's header off screen.
+ */
+function scrollToResult(list, n) {
+    const card = list?.querySelector(`#search-result-${n}`)
+    if (!card) return
+    const top = list.scrollTop + card.getBoundingClientRect().top - list.getBoundingClientRect().top - 16
+    list.scrollTo({ top, behavior: 'smooth' })
+}
+
+/** Summary text with each [n] that names a result turned into a link to it. */
+function withCitations(text, resultCount, onCite) {
+    return text.split(/(\[\d+\])/).map((part, i) => {
+        const n = Number(/^\[(\d+)\]$/.exec(part)?.[1])
+        if (!n || n > resultCount) return part
+        return <button key={i} type="button" onClick={() => onCite?.(n)} className="font-bold text-indigo-300 hover:text-white hover:underline" aria-label={`Go to result ${n}`}>{part}</button>
+    })
+}
+
+/**
+ * The local model's answer, drawn only from the results below it. Exported
+ * for tests. [n] refers to the nth result card, and links to it.
+ */
+export function SearchSummary({ summary, resultCount = 0, onCite }) {
+    return (
+        <div className="glass-panel border-indigo-400/20 p-5" aria-live="polite">
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-300">
+                <Sparkles size={12} />
+                AI summary of these results
+                {summary.model ? <span className="normal-case tracking-normal text-slate-500">· {summary.model}, on this machine</span> : null}
+                {summary.state === 'writing' ? <Loader2 size={12} className="animate-spin text-slate-500" /> : null}
+            </div>
+            {summary.text ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{withCitations(summary.text, resultCount, onCite)}</p> : null}
+            {summary.state === 'writing' && !summary.text ? <p className="text-sm text-slate-500">Reading the results…</p> : null}
+            {summary.state === 'error' ? <p className="mt-1 text-xs text-amber-200">Summary unavailable: {summary.error}</p> : null}
         </div>
     )
 }

@@ -1,6 +1,6 @@
 # YodaMan Architecture Overview
 
-This document describes the architecture of YodaMan v0.5.9, a local-first workspace intelligence platform for developers.
+This document describes the architecture of YodaMan v0.6.0, a local-first workspace intelligence platform for developers.
 
 > **Before deleting any file listed here:** a significant part of this system is
 > wired up at runtime rather than through imports — plugins are `require()`d from
@@ -295,7 +295,7 @@ Support modules under `backend/interfaces/support/`:
 |--------|------|---------|
 | **fileUploadService** | `fileUploadService.js` | File upload handling with Multer. Validates file types and size (5 MB max), stores temp files with TTL-based cleanup (1 hour), manages task-file associations. Accepted extensions: `.dart`, `.js`, `.ts`, `.json`, `.yaml`, `.md`, `.log`, `.txt`. |
 | **gitService** | `gitService.js` | Git operations via simple-git. Provides history, commit details, branch listing, heatmap data, and file context with workspace-path safety validation. All paths are validated to ensure they resolve within the workspace. |
-| **searchRouter** | `searchRouter.js` | HTTP endpoints for search (`/api/search`, `/code`, `/docs`). Each calls `SearchPipeline.search` with a retrieval mode and shapes the response; it holds no search logic of its own. |
+| **searchRouter** | `searchRouter.js` | HTTP endpoints for search (`/api/search`, `/code`, `/docs`, `/stream`). Each calls `SearchPipeline.search` with a retrieval mode and shapes the response; it holds no search logic of its own. `/stream` then hands the same results to `SearchSummary`, which has the local model summarise them. |
 
 ### 3. Core Layer (`backend/core/`)
 

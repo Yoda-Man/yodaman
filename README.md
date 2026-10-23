@@ -2,7 +2,7 @@
 
 **Local-first code intelligence that understands your workspace the way you do: what the code says, how it fits together, and what it was meant to do.**
 
-![Version](https://img.shields.io/badge/Version-0.5.9-gold) ![License](https://img.shields.io/badge/License-MIT-green) ![Node](https://img.shields.io/badge/Node-22%2B-339933) ![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
+![Version](https://img.shields.io/badge/Version-0.6.0-gold) ![License](https://img.shields.io/badge/License-MIT-green) ![Node](https://img.shields.io/badge/Node-22%2B-339933) ![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
 
 YodaMan combines three tools into one search and one agent:
 
@@ -97,6 +97,12 @@ graph yet, or no specs, results still come back and YodaMan tells you which
 step was skipped and how to enable it; a partial search never looks like a full
 one. The pipeline lives in one module, and an architecture test fails the build
 if any code searches around it.
+
+In the Search view, results appear as soon as the pipeline returns them, and
+an **AI summary** follows. Your local model (the one Context Expert uses, via
+Ollama) answers the query from those same results only, citing them as [1],
+[2]. It never searches on its own, and nothing leaves your machine. If the
+model is unavailable, the results stand and the summary says why.
 
 ## Install
 
