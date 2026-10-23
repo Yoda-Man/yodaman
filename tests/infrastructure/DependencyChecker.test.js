@@ -8,17 +8,14 @@ describe('DependencyChecker service registry', () => {
             .toEqual(['ctx', 'graphify', 'ollama', 'openspec']);
     });
 
-    test('ctx installs the package that actually exists on npm', () => {
-        // The registry has @contextexpert/cli; @context-expert/cli is a 404, so
-        // every install hint and the self-heal command silently pointed at a
-        // package that could never be installed.
+    test('ctx installs YodaMan\'s fork, with its native build steps allowed', () => {
+        // The original @contextexpert/cli crashes on start after a fresh
+        // install (OpenTelemetry api 1.10, 2026-10-20) and is unmaintained.
+        // (Before that, @context-expert/cli was a 404 every hint pointed at.)
         const ctx = dependencyChecker.SERVICES.ctx;
 
-        expect(ctx.installUrl).toContain('@contextexpert/cli');
-        expect(ctx.installUrl).not.toContain('@context-expert/cli');
-        for (const platform of ['darwin', 'linux', 'win32']) {
-            expect(ctx.installHint[platform]).toBe('npm install -g @contextexpert/cli');
-        }
+        expect(ctx.installUrl).toMatch(/^npm install -g yodaman-ctx --allow-scripts=\S*better-sqlite3\S*tree-sitter/);
+        for (const platform of ['darwin', 'linux', 'win32']) expect(ctx.installHint[platform]).toBe(ctx.installUrl);
     });
 
     test('openspec is locatable and installable on every platform', () => {
@@ -61,11 +58,18 @@ describe('Health self-heal coverage', () => {
         'utf8'
     );
 
-    test('POST /health/install can repair openspec', () => {
-        // The switch statement became a declarative installer table when the
-        // endpoint was hardened; assert the capability, not the control flow.
-        expect(restControllerSource).toContain('openspec:');
-        expect(restControllerSource).toContain("'@fission-ai/openspec@latest'");
+    test('install commands live in one place: Repair holds none of its own', () => {
+        // POST /api/health/install kept its own installer table, a second copy
+        // of what DependencyChecker.SERVICES says; Repair replaced it and reads
+        // the commands through SetupPlanner.
+        expect(restControllerSource).not.toMatch(/'install',\s*'-g'|npm install -g/);
+        expect(restControllerSource).toContain('setupPlanner.runSetupPlan(');
+    });
+
+    test('Repair runs its commands without a shell', () => {
+        const code = restControllerSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        expect(code).toContain('execFileAsync(bin, args');
+        expect(code).not.toMatch(/\bexec\(|promisify\(exec\)/);
     });
 
     test('no self-heal installer pipes a remote script into a shell', () => {

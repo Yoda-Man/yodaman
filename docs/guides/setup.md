@@ -20,7 +20,7 @@ needs no model download and no AI service.
 
 | Install | Unlocks | Cost |
 | --- | --- | --- |
-| **Context Expert** — `npm install -g @contextexpert/cli` | Semantic code search, and the retrieval behind agent answers | Small |
+| **Context Expert** — `npm install -g yodaman-ctx` | Semantic code search, and the retrieval behind agent answers | Small |
 | **Ollama** + a model | Chat and agent tasks, and Graphify's optional full semantic extraction | **Several GB** for the model. See [Choosing a model](../../README.md#choosing-a-model). |
 
 Ollama is genuinely optional for the graph: extraction defaults to a local
@@ -66,7 +66,7 @@ YodaMan stores local workspace configuration in `config.json` at the root of the
 - **watchedDirectories**: A list of absolute paths that YodaMan will monitor for changes.
 - **removedDirectories**: A local tombstone list for workspaces deleted from YodaMan so they are not re-added from stale index metadata.
 
-YodaMan 0.6.0 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
+YodaMan 0.6.1 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
 
 Check Graphify graph health across configured workspaces:
 

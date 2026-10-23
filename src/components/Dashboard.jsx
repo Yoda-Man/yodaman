@@ -246,7 +246,8 @@ export default function Dashboard() {
             if (data.llm?.provider === 'ollama') {
                 data.llm.model = data.llm.model || 'Ollama'
             }
-            setStatus({ ...data, ctxInstalled: true })
+            // A missing ctx still answers 200, with ok: false; it is not installed.
+            setStatus({ ...data, ctxInstalled: data.ok !== false })
         } catch (_) {
             // Status endpoint may fail if ctx is unresponsive;
             // health endpoint is the reliable fallback.
@@ -446,8 +447,8 @@ export default function Dashboard() {
                         ) : null}
                         <div className="pt-4 border-t border-white/5 flex justify-between items-center">
                             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Context Expert</span>
-                            <span className="text-[10px] font-mono font-bold uppercase">
-                                {status.ctxInstalled ? `✓ ${status.ctxVersion || ''}` : '✓ Checking...'}
+                            <span className={`text-[10px] font-mono font-bold uppercase ${status.ctxInstalled ? '' : 'text-red-400'}`}>
+                                {status.ctxInstalled ? `✓ ${status.ctxVersion || ''}` : '✗ Not installed: see Repair below'}
                             </span>
                         </div>
                     </div>
@@ -570,7 +571,7 @@ export default function Dashboard() {
                             <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Dependency status &amp; runtime diagnostics</p>
                         </div>
                     </div>
-                    <HealthDashboard />
+                    <HealthDashboard onRepaired={fetchStatus} />
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                         <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
                             <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">PID</div>

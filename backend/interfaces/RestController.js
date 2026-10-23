@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
+const execFileAsync = require('util').promisify(execFile);
 
 // Infrastructure Layer
 const contextEngine = require('../infrastructure/ContextEngine');
@@ -22,6 +23,7 @@ const {
 } = require('./support/workspaces');
 const graphifyService = require('../infrastructure/GraphifyService');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
+const setupPlanner = require('../infrastructure/SetupPlanner');
 const ollamaConfig = require('../infrastructure/OllamaConfig');
 const dependencyDoctor = require('../infrastructure/DependencyDoctor');
 const workspaceReadiness = require('../infrastructure/WorkspaceReadiness');
@@ -909,7 +911,7 @@ router.get('/status', async (req, res) => {
             llm: { model: 'Not Available', provider: 'none' },
             ok: false,
             error: err.message,
-            hint: 'Install ctx: npm install -g @contextexpert/cli'
+            hint: `Context Expert is not working. Use Repair on the Dashboard, or run: ${dependencyChecker.SERVICES.ctx.installUrl}`
         });
     }
 });
@@ -1144,6 +1146,68 @@ router.put('/settings', (req, res) => {
     const toolBox = require('../infrastructure/ToolBox');
     toolBox.loadPluginPermissions();
     res.json(settings.getAll());
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+//  REPAIR — the Dashboard's one-click `yodaman setup`
+// ─────────────────────────────────────────────────────────────────────────
+
+/** What is missing, and what Repair would install (nothing runs here). */
+router.get('/setup/plan', async (req, res) => {
+    try {
+        res.json(setupPlanner.buildSetupPlan({ checks: await dependencyChecker.checkAll() }));
+    } catch (err) {
+        jsonError(res, 500, err.message, 'setup_plan_failed');
+    }
+});
+
+/**
+ * Install what is missing, the way `yodaman setup` does: only the user-space
+ * packages (ctx, Graphify, OpenSpec) by their fixed commands, never a system
+ * service and never sudo, then check again.
+ *
+ * Installing software is a privileged action, so it is off until
+ * `allowSelfHealInstall` is turned on in Settings, only from this computer,
+ * and one at a time. The commands come from DependencyChecker.SERVICES, never
+ * from the request, and run without a shell. This replaced
+ * POST /api/health/install, which once piped a downloaded script into sh.
+ */
+async function repair(app) {
+    const plan = setupPlanner.buildSetupPlan({ checks: await dependencyChecker.checkAll() });
+    const { failed, stillMissing, after } = await setupPlanner.runSetupPlan(plan, {
+        // SetupPlanner only passes single commands (no pipes, `or`, sudo), so
+        // splitting on spaces gives the argv; nothing goes through a shell.
+        run: (command) => {
+            const [bin, ...args] = command.split(/\s+/);
+            return execFileAsync(bin, args, { timeout: 10 * 60 * 1000 });
+        },
+        checkAll: () => {
+            dependencyChecker.resetCtxModelCache?.();
+            return dependencyChecker.checkAll();
+        }
+    });
+    // So the Dashboard's health shows the repair without a restart.
+    const healthState = app?.get('healthState');
+    if (healthState) for (const step of plan.automatic) healthState[step.name] = dependencyChecker.healthEntry(after[step.name]);
+    logger.info('setup_repair_finished', { installed: plan.automatic.map((s) => s.name), failed: failed.map((f) => f.name), stillMissing });
+    return { installed: plan.automatic, manual: plan.manual, failed, stillMissing };
+}
+
+let repairing = null;
+router.post('/setup/repair', async (req, res) => {
+    const settings = require('../infrastructure/SettingsProvider');
+    if (!settings.get('allowSelfHealInstall')) {
+        return jsonError(res, 403, 'Repair is turned off. Turn on "Repair can install missing tools" in Settings, or run the command yourself.', 'self_heal_install_disabled');
+    }
+    if (!isLocalRequest(req)) return jsonError(res, 403, 'Repairs can only be started from this computer', 'repair_local_only');
+    if (repairing) return jsonError(res, 409, 'A repair is already running', 'repair_running');
+    repairing = repair(req.app).finally(() => { repairing = null; });
+    try {
+        res.json(await repairing);
+    } catch (err) {
+        logger.error('setup_repair_failed', err);
+        jsonError(res, 500, err.message, 'setup_repair_failed');
+    }
 });
 
 router.loadConfig = loadConfig;
@@ -1384,83 +1448,6 @@ router.get('/readiness', (req, res) => {
         logger.error('readiness_check_failed', err, { requestId: req.id });
         return jsonError(res, 500, err.message, 'readiness_failed');
     }
-});
-
-/**
- * Installers for POST /api/health/install.
- *
- * Every entry is an argv array executed with execFile — never a shell string.
- * The previous implementation ran `execFile('/bin/sh', ['-c', script])` where the
- * script for Ollama was `curl -fsSL https://ollama.com/install.sh | sh`, i.e. an
- * unauthenticated endpoint that downloaded and executed a remote script. That
- * path is gone: Ollama now installs through the platform package manager, and if
- * none is available the caller is told to install it manually.
- *
- * `manual` is returned when no safe automated path exists on this platform.
- */
-const SELF_HEAL_INSTALLERS = {
-    ollama: () => {
-        if (process.platform === 'darwin') return { argv: ['brew', ['install', 'ollama']], needs: 'brew' };
-        if (process.platform === 'win32') return { argv: ['winget', ['install', 'Ollama.Ollama']], needs: 'winget' };
-        return { manual: 'Install Ollama from https://ollama.com/download' };
-    },
-    ctx: () => ({ argv: ['npm', ['install', '-g', '@contextexpert/cli']], needs: 'npm' }),
-    openspec: () => ({ argv: ['npm', ['install', '-g', '@fission-ai/openspec@latest']], needs: 'npm' })
-};
-
-/**
- * POST /api/health/install — Self-heal a missing dependency.
- *
- * Body: { component: "ollama" | "ctx" | "openspec" }
- *
- * Disabled by default. Installing software is a privileged action, so it now
- * requires `allowSelfHealInstall` to be enabled in Settings rather than being
- * reachable by anything that can reach the port.
- */
-router.post('/health/install', (req, res) => {
-    const settings = require('../infrastructure/SettingsProvider');
-    if (!settings.get('allowSelfHealInstall')) {
-        return jsonError(
-            res,
-            403,
-            'Automatic dependency installation is disabled. Enable "allowSelfHealInstall" in Settings, or install the component manually.',
-            'self_heal_install_disabled'
-        );
-    }
-
-    const { component } = req.body || {};
-    const build = Object.prototype.hasOwnProperty.call(SELF_HEAL_INSTALLERS, component)
-        ? SELF_HEAL_INSTALLERS[component]
-        : null;
-
-    if (!build) {
-        return res.status(400).json({ ok: false, message: `Unknown component: ${component}` });
-    }
-
-    const plan = build();
-    if (plan.manual) {
-        return res.json({ ok: false, component, message: plan.manual });
-    }
-
-    const [bin, args] = plan.argv;
-    logger.info('health_install_started', { component, bin, args });
-
-    return execFile(bin, args, { timeout: 120000 }, (err, stdout) => {
-        if (err) {
-            logger.error('health_install_failed', err, { component, bin });
-            const hint = err.code === 'ENOENT'
-                ? `${plan.needs} is not installed or not on PATH.`
-                : err.message;
-            return res.json({
-                ok: false,
-                component,
-                message: `Installation failed: ${hint}`,
-                stdout: stdout || ''
-            });
-        }
-        logger.info('health_install_completed', { component });
-        return res.json({ ok: true, component, message: `${component} installed. Restart the runtime.` });
-    });
 });
 
 // Stardust routes — see routes/stardustRoutes.js

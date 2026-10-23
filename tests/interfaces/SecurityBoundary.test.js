@@ -133,12 +133,12 @@ describe('API cross-site boundary (live HTTP)', () => {
         expect(res.status).toBe(200);
     });
 
-    // C-2 — the endpoint that used to run `curl … | sh` unauthenticated.
-    test('POST /health/install is disabled unless explicitly enabled', async () => {
-        const res = await fetch(`${baseUrl}/api/health/install`, {
+    // C-2 — installing software stays opt-in. The endpoint that once ran
+    // `curl … | sh` unauthenticated is gone; its successor, Repair, keeps the gate.
+    test('POST /setup/repair is disabled unless explicitly enabled', async () => {
+        const res = await fetch(`${baseUrl}/api/setup/repair`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ component: 'ollama' })
+            headers: { 'Content-Type': 'application/json' }
         });
         expect(res.status).toBe(403);
         expect((await res.json()).code).toBe('self_heal_install_disabled');

@@ -24,11 +24,7 @@ const MAX_PROMPT_CHARS = 120_000;
  */
 class ContextEngine {
     constructor() {
-        // Resolve the full path to 'ctx' using DependencyChecker's
-        // cross-platform search (NVM, Homebrew, which, etc.).
-        // Falls back to bare 'ctx' (system PATH) if not found.
         const resolved = dependencyChecker.which('ctx');
-        this.binary = resolved || 'ctx';
         if (resolved) {
             logger.info('ctx_binary_resolved', { binary: resolved });
         } else {
@@ -37,6 +33,29 @@ class ContextEngine {
 
         /** @type {{ at: number, byPath: Map<string, string> } | null} */
         this._projectCache = null;
+        /** ctx processes still running, so shutdown can stop them. */
+        this._running = new Set();
+    }
+
+    /**
+     * Stop every ctx process this runtime started. Searches run without a
+     * timeout, and when the runtime exited they kept going on their own: a
+     * stopped test runtime left four `ctx search` processes downloading the
+     * same models for over ten minutes.
+     */
+    stopAll() {
+        for (const proc of this._running) proc.kill?.('SIGTERM');
+        this._running.clear();
+    }
+
+    /**
+     * The full path to `ctx` (NVM, Homebrew, ...; bare 'ctx' if none), looked up
+     * on every call rather than once at startup: when nvm removed the Node
+     * version that held ctx, a running YodaMan kept spawning the deleted path,
+     * and reinstalling ctx did not help until it was restarted.
+     */
+    get binary() {
+        return dependencyChecker.which('ctx') || 'ctx';
     }
 
     /**
@@ -192,8 +211,11 @@ class ContextEngine {
      */
     async execute(args = [], { timeoutMs } = {}) {
         return new Promise((resolve, reject) => {
-            logger.info('ctx_execute', { binary: this.binary, args });
-            const proc = spawn(this.binary, args);
+            const binary = this.binary;
+            logger.info('ctx_execute', { binary, args });
+            const proc = spawn(binary, args);
+            this._running.add(proc);
+            proc.on('close', () => this._running.delete(proc));
             let output = '';
             let error = '';
             let settled = false;
@@ -202,7 +224,7 @@ class ContextEngine {
                     if (settled) return;
                     settled = true;
                     proc.kill?.('SIGTERM');
-                    reject(new Error(`${this.binary} command timed out after ${timeoutMs}ms`));
+                    reject(new Error(`${binary} command timed out after ${timeoutMs}ms`));
                 }, Number(timeoutMs))
                 : null;
 
@@ -217,7 +239,7 @@ class ContextEngine {
             proc.stderr.on('data', (data) => error += data.toString());
 
             proc.on('error', (err) => {
-                finish(() => reject(new Error(`Failed to start ${this.binary}: ${err.message}`)));
+                finish(() => reject(new Error(`Failed to start ${binary}: ${err.message}`)));
             });
 
             proc.on('close', (code) => {
