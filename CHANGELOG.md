@@ -2,7 +2,7 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
-## [0.6.1] - 2026-10-23
+## [0.6.1] - 2026-10-24
 
 ### Changed
 - **Context Expert is now YodaMan's own fork, `yodaman-ctx`**
@@ -23,6 +23,11 @@ All notable changes to **YodaMan** will be documented in this file.
   commands.
 
 ### Fixed
+- **Security: 5 advisories cleared** in production dependencies, all
+  published this week: `body-parser` and `multer` denial of service and
+  `zod` memory exhaustion (high), `fast-uri` and `ip-address` (moderate).
+  Fixed within the existing version ranges (`body-parser` 2.4.0, `multer`
+  2.5.0, `zod` 4.6.7, `fast-uri` 3.1.9, `ip-address` 10.7.4).
 - **Settings' security switches could show the wrong position.** They started
   from hard-coded values rather than the saved settings, so after a reload a
   switch could read off while the setting was on. They now load the saved
