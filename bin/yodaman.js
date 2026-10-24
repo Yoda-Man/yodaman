@@ -168,26 +168,18 @@ if (args[0] === 'setup' || args[0] === 'install') {
             console.log('');
         }
 
-        const failed = [];
-        for (const step of plan.automatic) {
-            console.log(`→ ${step.command}`);
-            try {
-                execSync(step.command, { stdio: 'inherit' });
-            } catch (_err) {
-                // Keep going: one failing package manager should not block the
-                // other two. Every failure is reported at the end.
-                failed.push({ name: step.name, command: step.command });
-                console.error(`  ${step.name} failed — see the output above.`);
+        const { failed, stillMissing } = await setupPlanner.runSetupPlan(plan, {
+            run: (command) => {
+                console.log(`→ ${command}`);
+                execSync(command, { stdio: 'inherit' });
+            },
+            checkAll: async () => {
+                console.log('\nVerifying...');
+                dependencyChecker.resetCtxModelCache?.();
+                return dependencyChecker.checkAll();
             }
-        }
-
-        // Re-check rather than trusting the exit codes. A package manager can
-        // exit 0 and still leave nothing on PATH, and "it said it worked" is
-        // not evidence that it did.
-        console.log('\nVerifying...');
-        dependencyChecker.resetCtxModelCache?.();
-        const after = await dependencyChecker.checkAll();
-        const stillMissing = Object.keys(after).filter((n) => !after[n].found);
+        });
+        for (const step of failed) console.error(`  ${step.name} failed — see the output above.`);
 
         if (stillMissing.length === 0) {
             console.log('All dependencies are installed. Run `yodaman` to start.');

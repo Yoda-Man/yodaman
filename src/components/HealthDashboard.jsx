@@ -11,7 +11,8 @@
  *   // Compact mode for sidebar:
  *   <HealthDashboard compact />
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { api } from '../api/api'
 import useHealthCheck from '../hooks/useHealthCheck'
 import HealthIndicator from './HealthIndicator'
 
@@ -34,9 +35,31 @@ const CHECK_LABELS = {
     config:   { label: 'Config',         icon: '⚐', unlocks: 'Which workspaces are watched' },
 }
 
-export default function HealthDashboard({ compact = false }) {
+export default function HealthDashboard({ compact = false, onRepaired }) {
     const { checks, services, _status, loading, error, refresh } = useHealthCheck()
     const [copiedKey, setCopiedKey] = useState(null)
+    // The installs Repair would run (`yodaman setup`); asked only when something is wrong.
+    const [plan, setPlan] = useState(null)
+    const [repair, setRepair] = useState({ state: 'idle' })
+    const degraded = Boolean(checks) && Object.keys(CHECK_LABELS).some(k => checks[k] && checks[k].ok === false)
+
+    useEffect(() => {
+        if (compact || !degraded) return
+        api.getSetupPlan().then(setPlan).catch(() => setPlan(null))
+    }, [compact, degraded])
+
+    const runRepair = async () => {
+        setRepair({ state: 'running' })
+        try {
+            const result = await api.repairSetup()
+            setRepair({ state: result.failed.length || result.stillMissing.some(n => result.installed.some(s => s.name === n)) ? 'partial' : 'done', result })
+        } catch (err) {
+            setRepair({ state: 'failed', error: err.message })
+        }
+        refresh()
+        api.getSetupPlan().then(setPlan).catch(() => setPlan(null))
+        onRepaired?.()
+    }
 
     const copyDetail = (key, text) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -179,6 +202,10 @@ export default function HealthDashboard({ compact = false }) {
                 </table>
             </div>
 
+            {plan?.automatic?.length || repair.state !== 'idle' ? (
+                <RepairPanel plan={plan} repair={repair} onRepair={runRepair} />
+            ) : null}
+
             {!allOk && (
                 <div className="mt-3 p-3 bg-amber-950/20 border border-amber-900/30 rounded-lg text-[10px] text-amber-300">
                     <p className="font-semibold mb-1">Some dependencies need attention</p>
@@ -194,3 +221,38 @@ export default function HealthDashboard({ compact = false }) {
         </div>
     )
 }
+
+/**
+ * One-click `yodaman setup`: installs only the user-space tools (ctx, Graphify,
+ * OpenSpec) by their fixed commands, then re-checks. Exported for tests.
+ */
+export function RepairPanel({ plan, repair, onRepair }) {
+    const steps = plan?.automatic || []
+    const running = repair.state === 'running'
+    return (
+        <div className="mt-3 p-3 rounded-lg border border-indigo-500/30 bg-indigo-950/30 text-[11px]" aria-live="polite">
+            {steps.length ? (
+                <>
+                    <p className="font-semibold text-indigo-200 mb-1">YodaMan can fix this</p>
+                    <ul className="mb-2 space-y-0.5 text-slate-400">
+                        {steps.map(step => (
+                            <li key={step.name}>{CHECK_LABELS[step.name]?.label || step.name}: <code className="text-slate-300">{step.command}</code></li>
+                        ))}
+                    </ul>
+                    <button type="button" onClick={onRepair} disabled={running}
+                        className="rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-indigo-100 hover:bg-indigo-500/30 disabled:opacity-60">
+                        {running ? 'Repairing… this can take a few minutes' : 'Repair'}
+                    </button>
+                </>
+            ) : null}
+            {repair.state === 'done' ? <p className="text-emerald-300">Repaired: {repair.result.installed.map(s => CHECK_LABELS[s.name]?.label || s.name).join(', ')} installed and working.</p> : null}
+            {repair.state === 'partial' ? (
+                <p className="text-amber-300 mt-1">
+                    Repair did not finish{repair.result.failed.length ? `: ${repair.result.failed.map(f => `${f.name} (${f.error})`).join('; ')}` : ''}. Still missing: {repair.result.stillMissing.join(', ') || 'nothing'}. Run <code>yodaman setup</code> in a terminal to see the full output.
+                </p>
+            ) : null}
+            {repair.state === 'failed' ? <p className="text-red-300 mt-1">Repair could not run: {repair.error}</p> : null}
+        </div>
+    )
+}
+

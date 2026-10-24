@@ -211,3 +211,66 @@ describe('ContextEngine', () => {
         });
     });
 });
+
+describe('finding ctx', () => {
+    const dependencyChecker = require('../../backend/infrastructure/DependencyChecker');
+
+    test('follows ctx when it moves, without a restart', () => {
+        // nvm removed the Node version holding ctx while YodaMan ran: the old
+        // path was gone, and reinstalling ctx elsewhere did not help, because
+        // the path had been looked up once at startup.
+        const which = jest.spyOn(dependencyChecker, 'which')
+            .mockReturnValueOnce('/Users/u/.nvm/versions/node/v22.22.2/bin/ctx')
+            .mockReturnValueOnce(null)
+            .mockReturnValueOnce('/Users/u/.nvm/versions/node/v24.22.1/bin/ctx');
+        try {
+            expect(contextEngine.binary).toBe('/Users/u/.nvm/versions/node/v22.22.2/bin/ctx');
+            expect(contextEngine.binary).toBe('ctx');   // gone: the system PATH is the last resort
+            expect(contextEngine.binary).toBe('/Users/u/.nvm/versions/node/v24.22.1/bin/ctx');
+        } finally {
+            which.mockRestore();
+        }
+    });
+});
+
+describe('stopping ctx on shutdown', () => {
+    /** A ctx process that runs until it is told to stop. */
+    function longRunning() {
+        const handlers = {};
+        const proc = {
+            stdout: { on: jest.fn() },
+            stderr: { on: jest.fn() },
+            on: jest.fn((event, cb) => { (handlers[event] ??= []).push(cb); }),
+            kill: jest.fn(() => (handlers.close || []).forEach((cb) => cb(null))),
+            close: () => (handlers.close || []).forEach((cb) => cb(0))
+        };
+        return proc;
+    }
+
+    test('stopAll stops every ctx search still running', async () => {
+        // A stopped runtime left four `ctx search` processes running for over
+        // ten minutes, all downloading the same models.
+        const a = longRunning();
+        const b = longRunning();
+        spawn.mockReturnValueOnce(a).mockReturnValueOnce(b);
+        const first = contextEngine.execute(['search', 'one', '--json']).catch(() => {});
+        const second = contextEngine.execute(['search', 'two', '--json']).catch(() => {});
+
+        contextEngine.stopAll();
+
+        expect(a.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(b.kill).toHaveBeenCalledWith('SIGTERM');
+        await Promise.all([first, second]);
+    });
+
+    test('a finished process is forgotten, so it is never signalled', async () => {
+        const done = longRunning();
+        spawn.mockReturnValueOnce(done);
+        const run = contextEngine.execute(['status', '--json']);
+        done.close();
+        await run.catch(() => {});
+
+        contextEngine.stopAll();
+        expect(done.kill).not.toHaveBeenCalled();
+    });
+});

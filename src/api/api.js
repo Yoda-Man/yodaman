@@ -129,6 +129,10 @@ export const api = {
         return request(`${API_BASE}/editor/options`);
     },
 
+    async getSettings() {
+        return request(`${API_BASE}/settings`);
+    },
+
     async updateSettings(updates) {
         return request(`${API_BASE}/settings`, jsonOptions('PUT', updates));
     },
@@ -139,6 +143,16 @@ export const api = {
 
     async openPlugin(name, project, diagnostics = {}) {
         return request(`${API_BASE}/plugins/${encodeURIComponent(name)}/open`, jsonOptions('POST', { project, diagnostics }));
+    },
+
+    /** What is missing, and what Repair would install. */
+    async getSetupPlan() {
+        return request(`${API_BASE}/setup/plan`);
+    },
+
+    /** Install the missing user-space tools, then re-check (`yodaman setup`). npm can take minutes. */
+    async repairSetup() {
+        return request(`${API_BASE}/setup/repair`, { method: 'POST', timeoutMs: 11 * 60 * 1000 });
     },
 
     async uploadPlugin(file) {

@@ -36,7 +36,7 @@
 
         <h2>1. Setup</h2>
         <p>Install Context Expert, OpenSpec, Graphify, install dependencies, and start the runtime from the project root.</p>
-        <pre><code>npm install -g @contextexpert/cli
+        <pre><code>npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,onnxruntime-node
 npm install -g @fission-ai/openspec@latest
 python3 -m pip install --user graphifyy
 cd yodaman/core
@@ -122,7 +122,7 @@ sh setup.sh</code></pre>
         <h2>8. Troubleshooting</h2>
         <ul>
             <li><strong>Not sure what is missing</strong>: Run <code>yodaman doctor</code> for a full dependency report with per-tool install commands.</li>
-            <li><strong>Context Expert not found</strong>: Install <code>@contextexpert/cli</code> and confirm <code>ctx --version</code> works.</li>
+            <li><strong>Context Expert not found</strong>: Install <code>yodaman-ctx</code> (YodaMan's Context Expert) and confirm <code>ctx --version</code> works.</li>
             <li><strong>Graphify not found</strong>: Install <code>graphifyy</code>, confirm <code>graphify --help</code> works, or set <code>YODAMAN_GRAPHIFY_BIN</code>.</li>
             <li><strong>Graph health warnings</strong>: Run <code>yodaman doctor --graph</code>, then sync the affected workspace if orphaned nodes or missing graphs are reported.</li>
             <li><strong>Runtime unreachable</strong>: Check port <code>3090</code>, restart the managed runtime, or run <code>yodaman</code> from Terminal.</li>

@@ -689,7 +689,7 @@ When Context Expert is unavailable the response degrades gracefully:
   "llm": { "model": "Not Available", "provider": "none" },
   "ok": false,
   "error": "spawn ctx ENOENT",
-  "hint": "Install ctx: npm install -g @contextexpert/cli"
+  "hint": "Context Expert is not working. Use Repair on the Dashboard, or run: npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,onnxruntime-node"
 }
 ```
 

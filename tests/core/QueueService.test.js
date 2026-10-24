@@ -55,8 +55,7 @@ describe('QueueService', () => {
     });
 
     test('uses the configured ContextEngine binary for indexing', async () => {
-        const originalBinary = contextEngine.binary;
-        contextEngine.binary = 'ctx-custom';
+        const binary = jest.spyOn(contextEngine, 'binary', 'get').mockReturnValue('ctx-custom');
         const mockProc = {
             stdout: { on: jest.fn() },
             stderr: { on: jest.fn() },
@@ -73,7 +72,7 @@ describe('QueueService', () => {
                 ['index', CUSTOM, '--name', 'custom', '--force', '--ignore', expect.stringContaining('graphify-out')]
             );
         } finally {
-            contextEngine.binary = originalBinary;
+            binary.mockRestore();
         }
     });
 

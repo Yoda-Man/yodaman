@@ -1,3 +1,11 @@
+> **Fixed in `yodaman-ctx` 1.0.0**, YodaMan's fork of Context Expert
+> (github.com/Yoda-Man/ctx). The cause was not the follow-up message guessed
+> below: Ollama reports a failure mid-stream as a line with `error` and no
+> `message` (`{"error":"EOF"}`, reproduced with Ollama 0.40.9 and qwen3.5:9b),
+> and reading `message.content` on it threw. The fork ends the stream with
+> Ollama's own message and reports only real network failures as connection
+> errors.
+
 # Bug report — `@contextexpert/cli` 1.4.0
 
 **Title:** `ctx ask` exits 1 with "Failed to connect to Ollama server" when the

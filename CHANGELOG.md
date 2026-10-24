@@ -2,6 +2,46 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.6.1] - 2026-10-23
+
+### Changed
+- **Context Expert is now YodaMan's own fork, `yodaman-ctx`**
+  (github.com/Yoda-Man/ctx). The original `@contextexpert/cli` crashes on
+  start after a fresh install since OpenTelemetry api 1.10 (2026-10-20) and is
+  no longer updated. The fork keeps the `ctx` command and the `~/.ctx` index,
+  so nothing is re-indexed; it also fixes the `ctx ask` crash in
+  `docs/upstream/ctx-1.4.0-tool-call-crash.md`. Install hints, `yodaman setup`,
+  `setup.sh` and the docs install it.
+
+### Added
+- **Repair on the Dashboard.** When Context Expert, Graphify or OpenSpec is
+  missing or broken, the System Health panel names the exact command and runs
+  it, then checks again: the same plan as `yodaman setup`. Installing software
+  stays opt-in: turn on "Repair Can Install Missing Tools" in Settings. Only
+  from this computer, one at a time, and without a shell. It replaces
+  `POST /api/health/install`, which kept a second, separate list of install
+  commands.
+
+### Fixed
+- **Settings' security switches could show the wrong position.** They started
+  from hard-coded values rather than the saved settings, so after a reload a
+  switch could read off while the setting was on. They now load the saved
+  settings (disabled until they arrive) and spring back if a change fails to
+  save.
+- **The Dashboard said Context Expert was installed when it was not**, showing
+  "✓ Checking..." forever. It now shows "✗ Not installed".
+- **A broken install counted as installed.** A tool whose version check
+  crashes is now reported as broken, with the error, so setup and Repair
+  reinstall it.
+- **Searches kept running after YodaMan stopped.** Shutting down stopped
+  indexing but not `ctx` searches in progress, which ran on unattended: four
+  of them once spent over ten minutes downloading the same models. Shutdown
+  now stops every `ctx` process the runtime started.
+- **Context Expert stayed unreachable after being reinstalled** until YodaMan
+  restarted: its location was looked up once, at startup. It is now looked up
+  on every call, so nvm removing a Node version (and the `ctx` inside it) is
+  survivable.
+
 ## [0.6.0] - 2026-10-16
 
 ### Added

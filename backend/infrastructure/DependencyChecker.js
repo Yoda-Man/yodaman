@@ -120,6 +120,19 @@ const { execFile, execFileSync } = require('child_process');
 // We search these directories when system PATH doesn't contain the tool
 // (common in Electron bundled apps where PATH is minimal).
 
+/**
+ * Installing Context Expert: YodaMan's maintained fork, `yodaman-ctx`
+ * (github.com/Yoda-Man/ctx). The original @contextexpert/cli crashes on start
+ * after a fresh install since OpenTelemetry api 1.10 (2026-10-20) and is no
+ * longer updated. Same `ctx` command and ~/.ctx index, so nothing is re-indexed.
+ *
+ * --allow-scripts: npm 11.20+ skips dependency install scripts unless they are
+ * approved, and these build ctx's native parts (SQLite, tree-sitter parsers,
+ * ONNX runtime). Older npm ignores the flag and runs them anyway.
+ */
+const CTX_INSTALL = 'npm install -g yodaman-ctx '
+    + '--allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,onnxruntime-node';
+
 const PLATFORM_PATHS = {
     darwin: [
         '/opt/homebrew/bin',                    // Apple Silicon Homebrew
@@ -230,12 +243,8 @@ const SERVICES = {
         executable: 'ctx',
         versionArgs: ['--version'],
         runningCheck: null,
-        installUrl: 'npm install -g @contextexpert/cli',
-        installHint: {
-            darwin: 'npm install -g @contextexpert/cli',
-            linux: 'npm install -g @contextexpert/cli',
-            win32: 'npm install -g @contextexpert/cli',
-        },
+        installUrl: CTX_INSTALL,
+        installHint: { darwin: CTX_INSTALL, linux: CTX_INSTALL, win32: CTX_INSTALL },
     },
     graphify: {
         executable: 'graphify',
@@ -361,28 +370,41 @@ function which(name) {
  *
  * Returns null on failure (non-critical — tool is still reported as found).
  */
+function parseVersion(stdout) {
+    const lines = String(stdout || '').trim().split('\n');
+    // Walk lines from the end — the version is usually the last
+    // substantive line (tools often print tips before the version).
+    for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        // Match any version-like string: "1.2.3", "v1.2.3", "version is 1.2.3",
+        // "ollama version is 0.30.8", "1.2.3-alpha", etc.
+        const m = line.match(/v?(\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?)/);
+        if (m) return m[1];
+    }
+    // Fallback: the last non-empty line as-is
+    const last = lines.filter(l => l.trim()).pop();
+    return last ? last.trim() : null;
+}
+
+/**
+ * Run the tool's version command.
+ *
+ * @returns {Promise<{version: string|null, error: string|null}>} `error` when
+ *   the tool is there but does not run. A broken install used to count as
+ *   installed ("unknown version"), so a repair that left ctx crashing on start
+ *   reported success.
+ */
 function getVersion(binPath, versionArgs) {
     return new Promise((resolve) => {
-        execFile(binPath, versionArgs, { timeout: 10000 }, (err, stdout) => {
-            if (err) { resolve(null); return; }
-
-            const lines = stdout.toString().trim().split('\n');
-
-            // Walk lines from the end — the version is usually the last
-            // substantive line (tools often print tips before the version).
-            for (let i = lines.length - 1; i >= 0; i--) {
-                const line = lines[i].trim();
-                if (!line) continue;
-
-                // Match any version-like string: "1.2.3", "v1.2.3", "version is 1.2.3",
-                // "ollama version is 0.30.8", "1.2.3-alpha", etc.
-                const m = line.match(/v?(\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?)/);
-                if (m) { resolve(m[1]); return; }
+        execFile(binPath, versionArgs, { timeout: 10000 }, (err, stdout, stderr) => {
+            const version = parseVersion(stdout);
+            if (err && !version) {
+                const lines = String(stderr || err.message).split('\n').map(l => l.trim()).filter(Boolean);
+                resolve({ version: null, error: lines.find(l => /error/i.test(l)) || lines[0] || 'exited with an error' });
+                return;
             }
-
-            // Fallback: return the last non-empty line as-is
-            const last = lines.filter(l => l.trim()).pop();
-            resolve(last ? last.trim() : null);
+            resolve({ version, error: null });
         });
     });
 }
@@ -434,7 +456,20 @@ async function locate(name) {
         };
     }
 
-    const version = svc.versionLabel || (await getVersion(binPath, svc.versionArgs));
+    let version = svc.versionLabel;
+    if (!version) {
+        const run = await getVersion(binPath, svc.versionArgs);
+        if (run.error) {
+            // Present but broken counts as missing, so setup and Repair reinstall it.
+            return {
+                found: false, path: binPath, version: null,
+                error: `${name} is installed at ${binPath} but fails to run: ${run.error}`,
+                installUrl: svc.installUrl,
+                installHint: (svc.installHint && svc.installHint[process.platform]) || svc.installUrl,
+            };
+        }
+        version = run.version;
+    }
     return {
         found: true, path: binPath, version,
         error: null,
@@ -652,6 +687,17 @@ function isWeakModel(model) {
     return parseInt(match[1], 10) < 14;
 }
 
+/** A check result as /api/health reports it. Startup and the Dashboard's Repair both use this. */
+function healthEntry(result, { includeRunning = false } = {}) {
+    const version = result.version ? `v${result.version}` : 'unknown version';
+    const running = includeRunning ? (result.running ? ' (running)' : ' (not running)') : '';
+    return {
+        ok: result.found,
+        version: result.version || null,
+        message: result.found ? `${version} at ${result.path}${running}` : result.error
+    };
+}
+
 module.exports = {
-    resetCtxModelCache, locate, check, checkAll, checkRunning, which, detectCtxModel, detectOllamaContext, resetOllamaContextCache,
+    healthEntry, resetCtxModelCache, locate, check, checkAll, checkRunning, which, detectCtxModel, detectOllamaContext, resetOllamaContextCache,
     isWeakModel, SERVICES, PLATFORM_PATHS };

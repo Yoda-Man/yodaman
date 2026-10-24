@@ -135,18 +135,7 @@ async function initialize() {
     for (const dep of CLI_DEPENDENCIES) {
         try {
             const result = await dependencyChecker.check(dep.name);
-            const version = result.version ? `v${result.version}` : 'unknown version';
-            const runningSuffix = dep.includeRunning
-                ? (result.running ? ' (running)' : ' (not running)')
-                : '';
-
-            healthState[dep.name] = {
-                ok: result.found,
-                version: result.version || null,
-                message: result.found
-                    ? `${version} at ${result.path}${runningSuffix}`
-                    : result.error
-            };
+            healthState[dep.name] = dependencyChecker.healthEntry(result, { includeRunning: dep.includeRunning });
 
             if (result.found) {
                 logger.info('startup_dependency_ok', {
@@ -305,6 +294,7 @@ server.listen(PORT, HOST, async () => {
 function gracefulShutdown() {
     logger.info('runtime_shutdown_started');
     queueService.killActive();
+    contextEngine.stopAll();
     watcherService.closeAll();
     process.exit(0);
 }

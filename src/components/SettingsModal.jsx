@@ -46,6 +46,25 @@ function relativeTime(iso) {
     return `${Math.floor(seconds / 86400)} d ago`
 }
 
+// The security switches, in the order Settings shows them.
+const SECURITY_SWITCHES = [
+    { key: 'allowPluginUploads', id: 's-upload', accent: 'accent-indigo-500', title: 'Plugin Uploads', hint: 'Allow users to upload .js and .zip plugins' },
+    { key: 'allowUnrestrictedPlugins', id: 's-unrestricted', accent: 'accent-amber-500', title: 'Unrestricted Plugins', hint: 'Allow plugins with full system access' },
+    { key: 'allowAgentCommands', id: 's-commands', accent: 'accent-rose-500', title: 'Agent Shell Commands', hint: 'Allow agent to run shell commands' },
+    { key: 'allowSelfHealInstall', id: 's-repair', accent: 'accent-amber-500', title: 'Repair Can Install Missing Tools', hint: 'Lets Repair on the Dashboard run the npm and pip installs for Context Expert, Graphify and OpenSpec (never Ollama, never sudo)' },
+    { key: 'requirePairingToken', id: 's-pairing', accent: 'accent-indigo-500', title: 'Require Pairing Token', hint: 'Require token for non-local API access' },
+]
+
+/** Each switch shows the saved setting; until that has loaded it is disabled rather than guessing. */
+export function SecuritySwitches({ values, onToggle }) {
+    return SECURITY_SWITCHES.map(({ key, id, accent, title, hint }) => (
+        <label key={key} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+            <div><div className="font-medium text-slate-200">{title}</div><div className="text-[11px] text-slate-500">{hint}</div></div>
+            <input type="checkbox" id={id} className={`h-4 w-4 ${accent}`} checked={Boolean(values?.[key])} disabled={!values} onChange={e => onToggle(key, e.target.checked)} />
+        </label>
+    ))
+}
+
 export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
     const [newDir, setNewDir] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -55,6 +74,21 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
     const canBrowseFolders = Boolean(window.yodamanDesktop?.pickWorkspaceFolder)
     const [copiedClient, setCopiedClient] = useState(null)
     const [seenClients, setSeenClients] = useState([])
+    const [security, setSecurity] = useState(null)
+
+    useEffect(() => {
+        api.getSettings().then(setSecurity).catch(() => {})
+    }, [])
+
+    // Shows the change at once, and puts the switch back if the save fails.
+    const toggleSecurity = async (key, value) => {
+        setSecurity(current => ({ ...current, [key]: value }))
+        try {
+            await api.updateSettings({ [key]: value })
+        } catch (_err) {
+            setSecurity(current => ({ ...current, [key]: !value }))
+        }
+    }
 
     // Escape closes it. A dialog that traps you until you find the button is
     // the kind of thing people notice only when it is missing.
@@ -335,22 +369,7 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
                     <details className="group">
                         <summary className="text-[10px] font-black uppercase tracking-widest text-slate-500 cursor-pointer hover:text-slate-300 select-none">⚙️ Developer Settings</summary>
                         <div className="mt-4 space-y-4 text-sm" id="dev-settings">
-                            <label className="flex items-center justify-between gap-4 p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                                <div><div className="font-medium text-slate-200">Plugin Uploads</div><div className="text-[11px] text-slate-500">Allow users to upload .js and .zip plugins</div></div>
-                                <input type="checkbox" id="s-upload" className="h-4 w-4 accent-indigo-500" defaultChecked={true} onChange={e => fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({allowPluginUploads:e.target.checked})})} />
-                            </label>
-                            <label className="flex items-center justify-between gap-4 p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                                <div><div className="font-medium text-slate-200">Unrestricted Plugins</div><div className="text-[11px] text-slate-500">Allow plugins with full system access</div></div>
-                                <input type="checkbox" id="s-unrestricted" className="h-4 w-4 accent-amber-500" defaultChecked={false} onChange={e => fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({allowUnrestrictedPlugins:e.target.checked})})} />
-                            </label>
-                            <label className="flex items-center justify-between gap-4 p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                                <div><div className="font-medium text-slate-200">Agent Shell Commands</div><div className="text-[11px] text-slate-500">Allow agent to run shell commands</div></div>
-                                <input type="checkbox" id="s-commands" className="h-4 w-4 accent-rose-500" defaultChecked={false} onChange={e => fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({allowAgentCommands:e.target.checked})})} />
-                            </label>
-                            <label className="flex items-center justify-between gap-4 p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                                <div><div className="font-medium text-slate-200">Require Pairing Token</div><div className="text-[11px] text-slate-500">Require token for non-local API access</div></div>
-                                <input type="checkbox" id="s-pairing" className="h-4 w-4 accent-indigo-500" defaultChecked={true} onChange={e => fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({requirePairingToken:e.target.checked})})} />
-                            </label>
+                            <SecuritySwitches values={security} onToggle={toggleSecurity} />
                         </div>
                     </details>
                     {/* ── Connect other agents (MCP) ──────────────────────────

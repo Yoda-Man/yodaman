@@ -50,7 +50,7 @@ describe('what setup refuses to execute', () => {
     });
 
     it('accepts a single unambiguous command', () => {
-        expect(isRunnableCommand('npm install -g @contextexpert/cli')).toBe(true);
+        expect(isRunnableCommand('npm install -g yodaman-ctx --allow-scripts=better-sqlite3')).toBe(true);
         expect(isRunnableCommand('python3 -m pip install --user graphifyy')).toBe(true);
     });
 
@@ -148,7 +148,7 @@ describe('the printed plan', () => {
     it('shows the exact command before it is run', () => {
         // --dry-run and the real run print the same text, so what a user
         // approves is what executes.
-        expect(text).toContain('npm install -g @contextexpert/cli');
+        expect(text).toContain(require('../../backend/infrastructure/DependencyChecker').SERVICES.ctx.installUrl);
         expect(text).toContain('python3 -m pip install --user graphifyy');
     });
 
@@ -172,5 +172,40 @@ describe('AUTOMATABLE is a deliberate list', () => {
         // Adding it here is the one-line change that would start silently
         // installing a background service. It should require deleting a test.
         expect(AUTOMATABLE.has('ollama')).toBe(false);
+    });
+});
+
+describe('runSetupPlan: the install-and-verify both `yodaman setup` and Repair use', () => {
+    const { runSetupPlan } = require('../../backend/infrastructure/SetupPlanner');
+    const plan = {
+        automatic: [
+            { name: 'ctx', command: 'npm install -g yodaman-ctx' },
+            { name: 'openspec', command: 'npm install -g @fission-ai/openspec' }
+        ],
+        manual: [{ name: 'ollama' }]
+    };
+
+    test('runs every automatic step, in order, and nothing else', async () => {
+        const ran = [];
+        await runSetupPlan(plan, { run: (c) => { ran.push(c); }, checkAll: async () => ({}) });
+        expect(ran).toEqual(['npm install -g yodaman-ctx', 'npm install -g @fission-ai/openspec']);
+    });
+
+    test('one failure does not stop the rest, and is reported', async () => {
+        const ran = [];
+        const result = await runSetupPlan(plan, {
+            run: (c) => { ran.push(c); if (c.includes('yodaman-ctx')) throw new Error('EACCES'); },
+            checkAll: async () => ({ ctx: { found: false }, openspec: { found: true } })
+        });
+        expect(ran).toHaveLength(2);
+        expect(result.failed).toEqual([{ name: 'ctx', command: 'npm install -g yodaman-ctx', error: 'EACCES' }]);
+        expect(result.stillMissing).toEqual(['ctx']);
+    });
+
+    test('trusts the re-check, not the exit code', async () => {
+        // npm exited 0 but nothing landed on PATH.
+        const result = await runSetupPlan(plan, { run: () => {}, checkAll: async () => ({ ctx: { found: false }, openspec: { found: true } }) });
+        expect(result.failed).toEqual([]);
+        expect(result.stillMissing).toEqual(['ctx']);
     });
 });

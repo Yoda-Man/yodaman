@@ -157,4 +157,31 @@ function formatSetupPlan(plan) {
     return lines.join('\n');
 }
 
-module.exports = { buildSetupPlan, formatSetupPlan, commandFor, isRunnableCommand, AUTOMATABLE };
+/**
+ * Run the plan's automatic steps, then check again.
+ *
+ * Shared by `yodaman setup` and the Dashboard's Repair button, so both install
+ * and verify the same way. Keeps going past a failure: one broken package
+ * manager should not block the others. Re-checks rather than trusting exit
+ * codes, because a package manager can exit 0 and leave nothing on PATH.
+ *
+ * @param {object} plan  From buildSetupPlan; only `automatic` is run.
+ * @param {object} io
+ * @param {(command: string) => Promise<void>|void} io.run  Throws on failure.
+ * @param {() => Promise<object>} io.checkAll  DependencyChecker.checkAll.
+ * @returns {Promise<{failed: object[], stillMissing: string[], after: object}>}
+ */
+async function runSetupPlan(plan, { run, checkAll }) {
+    const failed = [];
+    for (const step of plan.automatic) {
+        try {
+            await run(step.command);
+        } catch (err) {
+            failed.push({ name: step.name, command: step.command, error: err.message });
+        }
+    }
+    const after = await checkAll();
+    return { failed, stillMissing: Object.keys(after).filter((name) => !after[name].found), after };
+}
+
+module.exports = { buildSetupPlan, formatSetupPlan, runSetupPlan, commandFor, isRunnableCommand, AUTOMATABLE };
