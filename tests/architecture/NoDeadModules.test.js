@@ -17,7 +17,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const SOURCE_ROOTS = ['backend', 'shared', 'src', 'electron', 'bin', 'scripts', 'plugins'];
-const CONFIG_FILES = ['server.js', 'start.js', 'index.html', 'package.json', 'electron-builder.json', 'vite.config.js'];
+const CONFIG_FILES = ['server.js', 'start.js', 'index.html', 'package.json', 'electron-builder.json', 'vite.config.mjs'];
 const SOURCE = /\.(c?js|mjs|jsx)$/;
 
 function list(rel) {

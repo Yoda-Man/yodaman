@@ -599,7 +599,7 @@ Checks include `node`, `runtime`, `graphify`, `ollama`, `ctx`, `openspec`, and `
   "started": true,
   "uptimeSeconds": 3600,
   "checks": {
-    "node": { "ok": true, "version": "v20.0.0", "message": "v20.0.0 on darwin arm64" },
+    "node": { "ok": true, "version": "v24.11.0", "message": "v24.11.0 on darwin arm64" },
     "runtime": { "ok": true, "version": null, "message": "PID 12345, listening on port 3090" },
     "graphify": { "ok": true, "version": "1.2.0", "message": "ready" },
     "ollama": { "ok": true, "version": "0.1.0", "message": "ready" },

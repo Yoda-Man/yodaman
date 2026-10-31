@@ -2,7 +2,42 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
-## [0.6.1] - 2026-10-23
+## [0.6.2] - 2026-10-30
+
+### Changed
+- **YodaMan now requires Node.js 24 or later** (not 22 or 23), and so do
+  Holocron VR and Lightsaber. `engines`, CI and the README say so. Node 24 can `require()` an ESM-only package, which is what lets the
+  CommonJS backend take the majors below.
+- **Every dependency is on its latest release**, majors included:
+  `electron` 44 to 45, `chokidar` 4 to 6 (ESM-only), `@babel/parser` and
+  `@babel/traverse` 7 to 8 (ESM-only), `three` 0.128 to 0.187 (in YodaMan
+  and in Holocron VR), and `@vscode/vsce` 3 to 4 for packaging the VS Code
+  extension. Minor and patch updates: `@modelcontextprotocol/sdk`,
+  `express`, `ws`, `react`, `react-dom`, `lucide-react`, `vis-network`, `vite`,
+  `@vitejs/plugin-react`, `eslint`, `globals`, `postcss`, `autoprefixer`,
+  `electron-builder`, `jest`, `multer`, `cors`, `concurrently`, `nodemon`.
+- **The Holocron constellation looks the same on three 0.187.** three changed
+  colour management (r152) and light units (r155). The scene keeps the look it
+  was tuned on: colour management off, linear output, and light intensities
+  scaled by PI, as the old shader did. Checked in a browser.
+- `zod`, `babel-jest` and `js-yaml` are now declared. The MCP server and the
+  tests used them, but they were only installed because other packages
+  pulled them in. The unused `esbuild` override is removed.
+- **The mobile companion is on Expo SDK 58** (React Native 0.88, React
+  19.3), checked with `expo-doctor` and on the iOS simulator. React Native
+  0.88 dropped the status bar's Android-only `backgroundColor`, so the app no
+  longer sets it. Critical and high advisories in its build tools
+  (`shell-quote`, `brace-expansion`) are fixed.
+- Holocron VR 0.6.2 ships alongside, on the same dependencies. Three
+  high-severity advisories in its build tools are fixed.
+- npm now records a decision for every dependency install script: the three
+  that only build fallbacks for a prebuilt binary (`@parcel/watcher`,
+  `unrs-resolver`, `electron-winstaller`, which the NSIS Windows build does
+  not use) are denied, so installs no longer end with a review list.
+- `vite.config.js` is `vite.config.mjs`: it uses `import`, and Vite 8.3 warned
+  about that in a CommonJS package.
+
+## [0.6.1] - 2026-10-24
 
 ### Changed
 - **Context Expert is now YodaMan's own fork, `yodaman-ctx`**
@@ -23,6 +58,11 @@ All notable changes to **YodaMan** will be documented in this file.
   commands.
 
 ### Fixed
+- **Security: 5 advisories cleared** in production dependencies, all
+  published this week: `body-parser` and `multer` denial of service and
+  `zod` memory exhaustion (high), `fast-uri` and `ip-address` (moderate).
+  Fixed within the existing version ranges (`body-parser` 2.4.0, `multer`
+  2.5.0, `zod` 4.6.7, `fast-uri` 3.1.9, `ip-address` 10.7.4).
 - **Settings' security switches could show the wrong position.** They started
   from hard-coded values rather than the saved settings, so after a reload a
   switch could read off while the setting was on. They now load the saved

@@ -57,7 +57,7 @@ function installBrowserStub() {
 
     // Stands in for Vite's build-time `import.meta` substitution.
     globalThis.__viteImportMeta__ = { env: { DEV: false, PROD: true, MODE: 'test', BASE_URL: '/' }, url: 'file:///test' };
-    // Vite's `define` substitution — see vite.config.js.
+    // Vite's `define` substitution — see vite.config.mjs.
     globalThis.__APP_VERSION__ = require('../../package.json').version;
 }
 

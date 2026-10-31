@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const parser = require('@babel/parser');
-const traverse = require('@babel/traverse').default;
+const { scan } = require('../helpers/babelScan');
 
 function sourceFiles(directory) {
     return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -32,7 +31,7 @@ const BROWSER_GLOBALS = new Set([
     'navigator', 'parseFloat', 'parseInt', 'performance', 'queueMicrotask',
     'requestAnimationFrame', 'screen', 'sessionStorage', 'setInterval', 'setTimeout',
     'speechSynthesis', 'structuredClone', 'undefined', 'webkitSpeechRecognition', 'window',
-    // Replaced at build time by vite's `define` — see vite.config.js.
+    // Replaced at build time by vite's `define` — see vite.config.mjs.
     '__APP_VERSION__'
 ]);
 
@@ -48,21 +47,10 @@ describe('renderer safety', () => {
     });
 
     test('every JSX component has an in-scope import or declaration', () => {
-        const missing = [];
-
-        sourceFiles(srcDir).forEach(filePath => {
-            const source = fs.readFileSync(filePath, 'utf8');
-            const ast = parser.parse(source, { sourceType: 'module', plugins: ['jsx'] });
-            traverse(ast, {
-                JSXOpeningElement(elementPath) {
-                    const name = elementPath.node.name;
-                    if (name.type !== 'JSXIdentifier' || !/^[A-Z]/.test(name.name)) return;
-                    if (!elementPath.scope.hasBinding(name.name)) {
-                        missing.push(`${path.relative(srcDir, filePath)}:${name.name}`);
-                    }
-                }
-            });
-        });
+        const missing = scan(sourceFiles(srcDir), { sourceType: 'module', plugins: ['jsx'] })
+            .flatMap(({ file, error, unboundJsx }) => (error
+                ? [`${path.relative(srcDir, file)}: unparseable — ${error}`]
+                : unboundJsx.map(name => `${path.relative(srcDir, file)}:${name}`)));
 
         expect(missing).toEqual([]);
     });
@@ -79,21 +67,11 @@ describe('renderer safety', () => {
     // Babel resolves references at every nesting depth, so one unbound-identifier
     // sweep over the file catches both — regardless of casing.
     test('no reference is left unbound', () => {
-        const unbound = [];
-
-        sourceFiles(srcDir).forEach(filePath => {
-            const source = fs.readFileSync(filePath, 'utf8');
-            const ast = parser.parse(source, { sourceType: 'module', plugins: ['jsx'] });
-            traverse(ast, {
-                Program(programPath) {
-                    Object.keys(programPath.scope.globals)
-                        .filter(name => !BROWSER_GLOBALS.has(name))
-                        .forEach(name => {
-                            unbound.push(`${path.relative(srcDir, filePath)}:${name}`);
-                        });
-                }
-            });
-        });
+        const unbound = scan(sourceFiles(srcDir), { sourceType: 'module', plugins: ['jsx'] })
+            .flatMap(({ file, error, globals }) => (error
+                ? [`${path.relative(srcDir, file)}: unparseable — ${error}`]
+                : globals.filter(name => !BROWSER_GLOBALS.has(name))
+                    .map(name => `${path.relative(srcDir, file)}:${name}`)));
 
         expect(unbound).toEqual([]);
     });

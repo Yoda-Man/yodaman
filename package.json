@@ -1,6 +1,6 @@
 {
   "name": "yodaman",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "YodaMan — local-first workspace intelligence. AI agent, semantic search, Graphify knowledge graphs, plugins, VS Code extension, mobile companion.",
   "author": "Marwa Trust Mutemasango <trustaldo@gmail.com>",
   "bin": {
@@ -59,43 +59,45 @@
     "vendor:holocron": "node scripts/sync-holocron-layout.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "chokidar": "^4.0.3",
-    "cors": "^2.8.5",
-    "express": "^5.2.1",
-    "multer": "^2.1.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "chokidar": "^6.0.0",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "multer": "^2.5.0",
     "simple-git": "^4.0.2",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@babel/parser": "^7.29.8",
-    "@babel/traverse": "^7.29.8",
+    "@babel/parser": "^8.0.10",
+    "@babel/traverse": "^8.0.10",
     "@eslint/js": "^10.0.1",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/outfit": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@tailwindcss/postcss": "^4.3.3",
-    "@vitejs/plugin-react": "^6.0.2",
-    "autoprefixer": "^10.4.16",
-    "concurrently": "^10.0.5",
-    "electron": "^44.2.0",
-    "electron-builder": "^26.8.1",
-    "eslint": "^10.8.0",
-    "globals": "^17.9.0",
-    "jest": "^30.4.2",
-    "lucide-react": "^1.41.0",
-    "nodemon": "^3.0.1",
-    "postcss": "^8.4.31",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.6.2",
+    "babel-jest": "^30.5.2",
+    "concurrently": "^10.0.6",
+    "electron": "^45.2.0",
+    "electron-builder": "^26.18.0",
+    "eslint": "^10.14.0",
+    "globals": "^17.13.0",
+    "jest": "^30.5.2",
+    "js-yaml": "^5.5.0",
+    "lucide-react": "^1.65.0",
+    "nodemon": "^3.1.14",
+    "postcss": "^8.5.32",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "sucrase": "^3.35.1",
     "tailwindcss": "^4.3.3",
-    "three": "^0.128.0",
-    "vis-network": "^10.1.2",
-    "vite": "^8.0.13"
+    "three": "^0.187.0",
+    "vis-network": "^10.1.4",
+    "vite": "^8.3.5"
   },
   "overrides": {
-    "esbuild": "^0.25.0",
     "fast-uri": "^3.1.7",
     "qs": "^6.16.0"
   },
@@ -120,7 +122,7 @@
   },
   "homepage": "https://github.com/Yoda-Man/yodaman#readme",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24"
   },
   "jest": {
     "maxWorkers": "50%",
@@ -132,7 +134,7 @@
       "\\.(png|jpe?g|gif|svg|woff2?|ttf|eot)$": "<rootDir>/tests/helpers/styleStub.js"
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!(three)/)"
+      "node_modules/(?!(three|chokidar|readdirp)/)"
     ],
     "modulePathIgnorePatterns": [
       "<rootDir>/release",
@@ -162,5 +164,10 @@
     "setupFiles": [
       "<rootDir>/tests/helpers/isolateData.js"
     ]
+  },
+  "allowScripts": {
+    "electron-winstaller": false,
+    "unrs-resolver": false,
+    "@parcel/watcher": false
   }
 }

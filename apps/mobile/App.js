@@ -309,7 +309,7 @@ export default function App() {
     // inset at all, which looks fine on a simulator and wrong on a notched phone.
     <SafeAreaProvider>
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.bgPrimary} />
+      <StatusBar barStyle="light-content" />
 
       <View style={styles.header}>
         <View style={styles.headerRow}>

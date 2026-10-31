@@ -12,6 +12,12 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },
+  build: {
+    // The largest chunk is the Holocron VR modal, about 660 kB, almost all
+    // three.js. It loads only when Holocron VR is opened, and splitting it
+    // would not make it smaller.
+    chunkSizeWarningLimit: 700,
+  },
   server: {
     port: 5190,
     proxy: {

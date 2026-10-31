@@ -21,7 +21,7 @@ describe('displayed version', () => {
     });
 
     test('vite substitutes the badge from package.json', () => {
-        const viteConfig = fs.readFileSync(path.join(rootDir, 'vite.config.js'), 'utf8');
+        const viteConfig = fs.readFileSync(path.join(rootDir, 'vite.config.mjs'), 'utf8');
 
         expect(viteConfig).toContain('__APP_VERSION__');
         expect(viteConfig).toContain('package.json');
