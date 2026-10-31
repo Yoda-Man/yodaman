@@ -13,8 +13,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const parser = require('@babel/parser');
-const traverse = require('@babel/traverse').default;
+const { scan } = require('../helpers/babelScan');
 
 const rootDir = path.resolve(__dirname, '../..');
 const TREES = ['backend', 'shared', 'electron', 'plugins', 'scripts', 'bin'];
@@ -62,36 +61,18 @@ function isGeneratedBundle(source) {
 
 describe('no unbound references outside the renderer', () => {
     test('every backend identifier resolves to a binding', () => {
-        const unbound = [];
+        const files = TREES
+            .flatMap(tree => sourceFiles(path.join(rootDir, tree)))
+            .filter(filePath => !isGeneratedBundle(fs.readFileSync(filePath, 'utf8')));
 
-        for (const tree of TREES) {
-            for (const filePath of sourceFiles(path.join(rootDir, tree))) {
-                const source = fs.readFileSync(filePath, 'utf8');
-                if (isGeneratedBundle(source)) continue;
-
-                let ast;
-                try {
-                    ast = parser.parse(source, {
-                        sourceType: 'unambiguous',
-                        allowReturnOutsideFunction: true,
-                        plugins: ['jsx']
-                    });
-                } catch (error) {
-                    unbound.push(`${path.relative(rootDir, filePath)}: unparseable — ${error.message.split('\n')[0]}`);
-                    continue;
-                }
-
-                traverse(ast, {
-                    Program(programPath) {
-                        Object.keys(programPath.scope.globals)
-                            .filter(name => !ALLOWED.has(name))
-                            .forEach(name => {
-                                unbound.push(`${path.relative(rootDir, filePath)}: ${name}`);
-                            });
-                    }
-                });
-            }
-        }
+        const unbound = scan(files, {
+            sourceType: 'unambiguous',
+            allowReturnOutsideFunction: true,
+            plugins: ['jsx']
+        }).flatMap(({ file, error, globals }) => (error
+            ? [`${path.relative(rootDir, file)}: unparseable — ${error}`]
+            : globals.filter(name => !ALLOWED.has(name))
+                .map(name => `${path.relative(rootDir, file)}: ${name}`)));
 
         expect(unbound).toEqual([]);
     });

@@ -22,6 +22,9 @@ const babelJest = require('babel-jest').default.createTransformer({});
 
 const SEP = path.sep;
 
+// Keep in step with transformIgnorePatterns in package.json.
+const ESM_ONLY_DEPS = ['three', 'chokidar', 'readdirp']; // readdirp: chokidar's own dependency
+
 function isFrontend(sourcePath) {
     // The test files themselves are CommonJS and rely on babel-jest, even the ones
     // living under tests/frontend/.
@@ -30,7 +33,9 @@ function isFrontend(sourcePath) {
     if (sourcePath.endsWith('.jsx')) return true;                                    // components
     if (sourcePath.includes(`${SEP}src${SEP}`)) return true;                         // frontend modules (ESM)
     if (sourcePath.includes(`${SEP}frontend${SEP}`)) return true;                    // browser helpers (ESM)
-    if (sourcePath.includes(`${SEP}node_modules${SEP}three${SEP}`)) return true;     // ESM-only dep
+    // ESM-only deps. Node 24 loads them with require(esm), but Jest only does so
+    // under --experimental-vm-modules, so the tests compile them to CJS instead.
+    if (ESM_ONLY_DEPS.some((dep) => sourcePath.includes(`${SEP}node_modules${SEP}${dep}${SEP}`))) return true;
     return false;
 }
 

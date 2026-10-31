@@ -29,6 +29,13 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { neighborhood, isReadableLabel } from './graphModel'
 import { vrFit, nextScale, panelContent, drawPanel, VR_RADIUS_M, VR_FOCUS_DISTANCE_M } from './vr'
 
+// Keep the look this scene was tuned on (three r128) on current three: no colour
+// management and linear output (r152 changed both), and legacy light units
+// (r155 made lights physical; the legacy shader multiplied irradiance by PI).
+// Set before any THREE.Color below is built, since colours convert on creation.
+THREE.ColorManagement.enabled = false
+const LEGACY_LIGHT = Math.PI
+
 const BACKGROUND = 0x02030a
 const DIM = 0.1
 const HEAT_COLD = new THREE.Color('#1e3a8a')
@@ -123,6 +130,7 @@ export function createConstellation({ mount, labelsLayer, model, positions, onHo
   // ── Renderer, camera, controls ─────────────────────────────────────────
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
   renderer.xr.enabled = true
+  renderer.outputColorSpace = THREE.LinearSRGBColorSpace
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(mount.clientWidth, mount.clientHeight)
   mount.appendChild(renderer.domElement)
@@ -145,11 +153,13 @@ export function createConstellation({ mount, labelsLayer, model, positions, onHo
   controls.autoRotateSpeed = 0.18
   controls.addEventListener('start', () => { controls.autoRotate = false })
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.55))
-  const key = new THREE.DirectionalLight(0xffffff, 0.9)
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55 * LEGACY_LIGHT))
+  const key = new THREE.DirectionalLight(0xffffff, 0.9 * LEGACY_LIGHT)
   key.position.set(1, 1.4, 1.2)
   scene.add(key)
-  const rim = new THREE.PointLight(0x7dd3fc, 0.8, radius * 6)
+  // decay 0: no inverse-square falloff, only the window out to `distance`,
+  // which is the closest physical match to r128's linear falloff.
+  const rim = new THREE.PointLight(0x7dd3fc, 0.8 * LEGACY_LIGHT, radius * 6, 0)
   camera.add(rim)
   scene.add(camera)
 
@@ -157,8 +167,8 @@ export function createConstellation({ mount, labelsLayer, model, positions, onHo
   const sphere = new THREE.SphereGeometry(1, 24, 16)
   const nodeMaterial = new THREE.MeshStandardMaterial({ roughness: 0.32, metalness: 0.15 })
   const mesh = new THREE.InstancedMesh(sphere, nodeMaterial, count)
-  // three r128 culls an instanced mesh by its base sphere at the origin, so
-  // every node would vanish whenever the origin left the view.
+  // three culls an instanced mesh by a bounding sphere (in r128, the base
+  // sphere at the origin), so nodes would vanish when it left the view.
   mesh.frustumCulled = false
   const matrix = new THREE.Matrix4()
   const color = new THREE.Color()

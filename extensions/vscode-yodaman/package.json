@@ -2,7 +2,7 @@
   "name": "vscode-yodaman",
   "displayName": "YodaMan",
   "description": "Editor-native access to the YodaMan local agent runtime.",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "publisher": "yodaman",
   "license": "MIT",
   "icon": "media/logo.png",
@@ -249,6 +249,9 @@
     "publish": "vsce publish --no-dependencies"
   },
   "devDependencies": {
-    "@vscode/vsce": "^3.9.1"
+    "@vscode/vsce": "^4.1.0"
+  },
+  "allowScripts": {
+    "@vscode/vsce-sign": false
   }
 }
