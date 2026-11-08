@@ -2,6 +2,15 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **The VS Code extension could not start once installed.** It loads core's
+  shared client from outside its own folder, which `vsce` never packaged, so
+  every `.vsix` failed on activation. `vscode:prepublish` now copies the client
+  into the package, and the website's `vscode-yodaman-0.6.4.vsix` is rebuilt
+  with it.
+
 ## [0.6.4] - 2026-11-08
 
 ### Added

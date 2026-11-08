@@ -11,8 +11,8 @@
 class Yodaman < Formula
   desc "Local-first workspace intelligence: semantic search, knowledge graph, spec drift"
   homepage "https://github.com/Yoda-Man/yodaman"
-  url "https://registry.npmjs.org/yodaman/-/yodaman-0.6.3.tgz"
-  sha256 "d5893c27cbe57db807c2445adad37246a5eefecaad94c95956ff0ecaea77234d"
+  url "https://registry.npmjs.org/yodaman/-/yodaman-0.6.4.tgz"
+  sha256 "3a8d629c4bd58093884c9aeb09009bf242d245675becdc6b864746d8c551abf0"
   license "MIT"
 
   depends_on "node"

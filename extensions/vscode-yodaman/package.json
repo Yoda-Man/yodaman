@@ -244,7 +244,7 @@
   },
   "scripts": {
     "lint": "node --check src/extension.js",
-    "vscode:prepublish": "npm run lint",
+    "vscode:prepublish": "npm run lint && node copy-shared.js",
     "package": "vsce package --no-dependencies",
     "publish": "vsce publish --no-dependencies"
   },

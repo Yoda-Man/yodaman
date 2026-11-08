@@ -9,14 +9,21 @@
  *  - `vscode` is provided by the editor at runtime. It is intentionally NOT a
  *    dependency; it is declared as engines.vscode instead. Do not "fix" this by
  *    npm-installing a vscode package.
- *  - It reaches OUT of the extension directory to ../../../shared/yodamanClient,
- *    which is why that file has no in-package importers.
+ *  - It uses core's shared/yodamanClient: a copy packaged into src/shared by
+ *    copy-shared.js, or, run from the repo, ../../../shared directly.
  *
  */
 const vscode = require('vscode');
 const path = require('path');
-// Access the client singleton
-const { createYodaManClient } = require('../../../shared/yodamanClient');
+// The packaged copy (copy-shared.js) when installed; core's own when run from the repo.
+const { createYodaManClient } = (() => {
+    try {
+        return require('./shared/yodamanClient');
+    } catch (err) {
+        if (err.code !== 'MODULE_NOT_FOUND') throw err;
+        return require('../../../shared/yodamanClient');
+    }
+})();
 const coreSurface = require('./coreSurface');
 
 let output;
