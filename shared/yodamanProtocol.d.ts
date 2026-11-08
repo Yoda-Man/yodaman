@@ -16,6 +16,8 @@ export type TaskEventType =
   | 'awaiting_approval'
   | 'task_cancelled'
   | 'final_answer'
+  | 'response_truncated'
+  | 'upload_error'
   | 'error';
 
 export type TaskStatus =

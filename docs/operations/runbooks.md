@@ -8,16 +8,17 @@ into this one.)
 
 ## Start the runtime
 
-1. Confirm Node.js 18 or newer is available.
+1. Confirm Node.js 24 or newer is available.
 2. Confirm `ctx --version` succeeds.
 3. Confirm `graphify --help` succeeds, or set `YODAMAN_GRAPHIFY_BIN`.
-4. Install dependencies with `npm install`.
-5. Start YodaMan with `npm start`.
-6. Open `http://localhost:5190` for the development UI or `http://localhost:3090` for packaged runtime endpoints.
+4. Confirm `ollama --version` succeeds. `npm start` exits if any of these three is missing.
+5. Install dependencies with `npm install`.
+6. Start YodaMan with `npm start` (it runs `npm run dev`: the runtime plus the Vite dev server).
+7. Open `http://localhost:5190` for the development UI. The runtime API listens on `http://127.0.0.1:3090` (`YODAMAN_PORT` changes the port).
 
 ## Stop the runtime
 
-Use `Ctrl+C` in the terminal running YodaMan. The shutdown handler stops active indexing work and closes file watchers.
+Use `Ctrl+C` in the terminal running YodaMan. The shutdown handler (`SIGINT`/`SIGTERM`) stops active indexing work, stops running `ctx` processes, and closes file watchers.
 
 If a detached development process is left behind, identify it with:
 
@@ -35,9 +36,9 @@ Use the CLI dependency doctor to verify every required dependency is installed a
 yodaman doctor
 ```
 
-Add `--json` for machine-readable output. The command exits non-zero when degraded.
+It checks Ollama, Context Expert (`ctx`), Graphify, and OpenSpec. Add `--json` for machine-readable output. The command exits non-zero when degraded.
 
-Use the CLI Graphify doctor for a fast workspace graph summary:
+Use the CLI Graphify doctor for a fast workspace graph summary (it exits non-zero when no project is active):
 
 ```bash
 yodaman doctor --graph
@@ -48,13 +49,13 @@ Use these endpoints:
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/health` | Full health check: Ollama, ctx, Graphify, OpenSpec reachability + version. Returns `degraded`/`pending` arrays naming missing checks. |
-| `GET /api/readiness` | Workspace readiness verdict (ready/stale/building/unindexed) across all watched directories. |
+| `GET /api/readiness` | Workspace readiness verdict (ready/stale/building/unindexed/missing) across all watched directories, or one with `?projectId=/absolute/workspace`. |
 | `GET /api/status` | Context Expert runtime status. |
 | `GET /api/check?path=/absolute/workspace` | Workspace health check through `ctx`. |
 | `GET /api/desktop/diagnostics` | Process, host, memory, task, and plugin diagnostics. |
 | `GET /api/graphify/status?path=/absolute/workspace` | Graphify graph artifact status. |
 | `GET /api/graphify/build/status?path=/absolute/workspace` | Graphify build job and persisted build status. |
-| `GET /api/policy` | Current workspace roots, blocked commands, and plugin permissions. |
+| `GET /api/policy` | Allowed workspace roots, allowed executables, blocked command patterns, and plugin permissions. |
 | `GET /api/audit?limit=100` | Recent tool/audit activity. |
 
 Every HTTP response includes `X-Request-Id`. Match that value with structured JSON runtime logs when investigating incidents.
@@ -76,8 +77,10 @@ grep '"level":"error"' ~/.yodaman/logs/runtime.log | tail -50
 # follow one request end to end (X-Request-Id is on every HTTP response)
 grep '<request-id>' ~/.yodaman/logs/runtime.log
 
-# rejected cross-site calls — a client pointed at the wrong origin
-grep 'cross_site_blocked' ~/.yodaman/logs/runtime.log
+# rejected cross-site calls — a client pointed at the wrong origin. The
+# cross_site_blocked code is only in the 403 response body; the log records
+# the request as an http_request line with status 403.
+grep '"message":"http_request"' ~/.yodaman/logs/runtime.log | grep '"status":403'
 
 # runtime bound to the network rather than loopback
 grep 'runtime_bound_non_loopback' ~/.yodaman/logs/runtime.log
@@ -87,7 +90,7 @@ tail -100 ~/.yodaman/logs/runtime.log | jq 'select(.level=="error")'
 ```
 
 The in-app Logs modal remains good for first response — text search plus level, severity, and user-action
-filters. For API-level diagnostics:
+filters. For API-level diagnostics (`/api/logs` also accepts `limit`, `message`, `since`, and `until`):
 
 ```bash
 curl "http://localhost:3090/api/logs?level=error&userAction=code_search&query=ctx"
@@ -107,13 +110,11 @@ If the log directory cannot be written, the runtime logs `log_file_sink_disabled
 on — file logging failing never takes the runtime down. Seeing that message means the directory is
 unwritable, not that the runtime is unhealthy.
 
-YodaMan also keeps append-only local state, which does **not** self-rotate:
+YodaMan also keeps local state, which does **not** self-rotate:
 
-- `audit-log.jsonl`
-- `task-history.jsonl`
-- `audit-log.json`
-- `task-history.json`
-- `yodaman.db`, when SQLite is available (in the user's data folder; the Dashboard shows the path)
+- `yodaman.db` (task history and audit log, in the user's data folder; the Dashboard shows the path)
+- `sessions.json` (chat history), in the same data folder
+- `audit-log.jsonl`, `task-history.jsonl`, `audit-log.json`, and `task-history.json` in the same data folder, written only when SQLite cannot be opened
 
 To archive those, stop the runtime, move the files to a dated backup directory, then start the runtime again. Use `DELETE /api/audit` and `DELETE /api/agent/tasks` only when support intentionally wants to clear visible history.
 
@@ -207,8 +208,8 @@ restart and destroy the only record of the cause.
 ## Roll back a release
 
 1. Stop the runtime.
-2. Preserve `audit-log*` and `task-history*` from the install folder. `config.json` and `yodaman.db` live in the user's data folder from 0.5.9 and are untouched by a reinstall.
-3. Check out the previous release tag or install the previous package version.
+2. Nothing in the install folder needs preserving: `config.json` and `yodaman.db` live in the user's data folder from 0.5.9, and `sessions.json` and the JSON fallbacks from 0.6.4, so a reinstall leaves them untouched.
+3. Install the previous package version (`npm install -g yodaman@<previous-version>`), or check out the previous release commit. Git tags stop at `v0.4.4`, so later releases have no tag to check out.
 4. Run `npm install`.
 5. Restore preserved local state files.
 6. Start with `npm start`.
@@ -218,7 +219,7 @@ restart and destroy the only record of the cause.
 ## Ownership
 
 > **"Engineering" is one person.** YodaMan has a single maintainer: **Marwa Trust Mutemasango**
-> (GitHub [@Yoda-Man](https://github.com/Yoda-Man), trustaldo@gmail.com), author of all 110 commits and the
+> (GitHub [@Yoda-Man](https://github.com/Yoda-Man), trustaldo@gmail.com), author of every commit and the
 > only npm publisher. There is no rota, no secondary on-call, and no second person who can cut a release.
 >
 > Support must plan around this rather than discover it during an incident:
@@ -271,8 +272,9 @@ Run from `core/`:
 npm run release:verify
 ```
 
-That chains every gate in order of cost — lint, tests, production audit, vendored
-audit, release smoke, and finally the plugin journey. Then:
+That chains every gate: version check, build, lint, tests, coverage, production
+audit, vendored audit, release smoke, the journey, plugin and approval smokes,
+and finally the packaged-app smoke. Ship only on exit 0. Then:
 
 ```bash
 npm run build
@@ -310,7 +312,7 @@ Expected results:
 | Symptom | First check | Recovery |
 | --- | --- | --- |
 | Runtime unreachable | `GET /api/desktop/diagnostics` or desktop recovery screen. | Restart managed runtime or run `npm start`. |
-| Non-local client receives 401 | Pairing token missing or expired. | Create a new pairing link with `POST /api/pairing`. |
+| Non-local client receives 401 | Pairing token missing, expired (tokens last 24 hours), or lost to a runtime restart (tokens are held in memory only). | Create a new pairing link with `POST /api/pairing`. |
 | Workspace missing | `GET /api/projects` and local `config.json`. | Re-add the workspace from Settings. |
 | Search stale or failing | Logs modal or `/api/logs?userAction=code_search`. | Check query errors and queue state, then run Sync Repository or `POST /api/reindex`. |
 | Graph visualization unavailable | `GET /api/graphify/status?path=...`. | Use Map Preview/Report, then rebuild graph. Large graphs can be `partial`. |

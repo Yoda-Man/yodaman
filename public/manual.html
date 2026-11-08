@@ -28,173 +28,270 @@
         <!-- This page is a standalone document with no app chrome, so it needs its
              own way back: opened in a new tab there is no history to go back to. -->
         <a class="backlink" href="/">&larr; Back to YodaMan</a>
+        <!-- Generated from user_manual.md; keep the two saying the same things. -->
         <header>
             <h1>YodaMan Manual</h1>
-            <p class="lead">Local-first workspace intelligence with chat, search, mandatory Graphify knowledge graphs, supervised agent automation, plugins, desktop controls, VS Code commands, and mobile pairing.</p>
-            <p class="version">Version 0.5.0</p>
+            <p class="lead">YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, Graphify knowledge graph, plugin system, MCP server, and local runtime API. Ollama is the only model it uses; nothing is sent to a cloud LLM.</p>
+            <p class="version">Version 0.6.4</p>
         </header>
 
         <h2>1. Setup</h2>
-        <p>Install Context Expert, OpenSpec, Graphify, install dependencies, and start the runtime from the project root.</p>
+        <p><strong>Prerequisites</strong>: Node.js 24+, Python 3.10+, and <a href="https://ollama.com">Ollama</a> installed.</p>
+        <p><strong>Model requirements</strong>: <code>qwen3.5:9b</code> is the minimum; it works, but its tool calls are occasionally unreliable. 14B and larger (<code>qwen2.5:14b</code>, <code>codestral:22b</code>, <code>deepseek-coder-v2</code>) call tools reliably, and a larger model needs a larger <code>OLLAMA_CONTEXT_LENGTH</code> to pay off (see the README's <em>Choosing a model</em>). The agent uses Context Expert's model: set it with <code>ctx config set default_model &lt;model&gt;</code>. The Dashboard shows the configured model and the context window Ollama actually serves.</p>
+        <p>Install Context Expert (1.3.4 or later), OpenSpec, and Graphify, then install and start YodaMan from the repository root:</p>
         <pre><code>npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node
 npm install -g @fission-ai/openspec@latest
 python3 -m pip install --user graphifyy
-cd yodaman/core
+git clone https://github.com/Yoda-Man/yodaman.git
+cd yodaman
 sh setup.sh</code></pre>
-        <p>The backend runtime listens on <code>http://localhost:3090</code>. The development web UI listens on <code>http://localhost:5190</code>. Use <code>npm run desktop</code> for the Electron app.</p>
-
-        <h2>2. Core ideas</h2>
-        <div class="grid">
-            <div class="card">
-                <h3>Local runtime</h3>
-                <p>One private Express runtime powers the web UI, desktop app, VS Code extension, mobile companion, plugins, and runtime API.</p>
-            </div>
-            <div class="card">
-                <h3>Workspace control</h3>
-                <p>Paste paths, browse folders in desktop clients, select, refresh, validate, edit, delete, and reindex absolute local workspace paths.</p>
-            </div>
-            <div class="card">
-                <h3>Knowledge graph</h3>
-                <p>Graphify builds required workspace graphs for graph-aware answers, impact analysis, freshness warnings, architecture maps, and CLI health checks with <code>yodaman doctor --graph</code>.</p>
-            </div>
-            <div class="card">
-                <h3>Human-approved writes</h3>
-                <p>Agent tasks use graph context, stream events, and pause for approval before applying file writes.</p>
-            </div>
-            <div class="card">
-                <h3>Local persistence</h3>
-                <p>Task history and audit logs persist in SQLite when available, with JSON fallback.</p>
-            </div>
-            <div class="card">
-                <h3>Restricted plugins</h3>
-                <p>Plugins declare permissions. Plugin uploads, unrestricted plugins, and agent shell commands are disabled by default and should only be enabled for trusted local support sessions.</p>
-            </div>
-            <div class="card">
-                <h3>Crash recovery</h3>
-                <p>The desktop recovery screen shows the logo, runtime logs, retry/status actions, and Copy Error.</p>
-            </div>
-        </div>
-
-        <h2>3. Web UI</h2>
+        <p>On macOS, <code>setup.sh</code> also installs whatever of the above is missing (through Homebrew, npm and pip), runs <code>npm install</code>, and starts YodaMan with <code>npm start</code>. <code>npm start</code> checks for <code>ctx</code>, <code>graphify</code> and <code>ollama</code> first and exits if one is missing. With the npm package installed globally, <code>yodaman setup</code> installs the missing tools on any platform.</p>
+        <p>The runtime listens on <code>http://127.0.0.1:3090</code>. For development with hot reload, use <code>npm run dev</code>, which starts both the Express server and the Vite dev server on <code>http://localhost:5190</code> (it proxies <code>/api</code> to port 3090).</p>
+        <p>For desktop use:</p>
+        <pre><code>npm run desktop</code></pre>
+        <h2>2. Core concepts</h2>
+        <h3>Local runtime</h3>
+        <p>The Express runtime is the shared contract for every client. It serves the React UI, exposes project/search/chat/task/plugin endpoints, uses Context Expert for code and documentation intelligence, and requires Graphify for graph-aware answers.</p>
+        <h3>Workspaces</h3>
+        <p>Workspaces are absolute local folder paths. Add them by pasting a path, browsing with a native folder picker in desktop clients, using the sidebar plus button, or using the desktop menu item <code>Add Project Folder</code>. You can edit a workspace path when a project moves, delete stale workspaces, validate workspace health, refresh the workspace list, and run <code>Sync Repository</code> to reindex the active workspace and update its Graphify graph.</p>
+        <h3>Graphify knowledge graph</h3>
+        <p>Graphify powers the graph, impact analysis and spec coverage. The runtime starts without it; those features then report what is missing. Graphify runs local-only: by default it builds the graph without any model, and only <code>YODAMAN_GRAPHIFY_FULL_EXTRACT=true</code> uses Ollama for full semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend for full extraction. Reindexing builds or updates <code>graphify-out/graph.json</code> and <code>GRAPH_REPORT.md</code> for each workspace and adds the project graph to Graphify's global graph. Chat answers include graph report context plus question-specific graph traversal output. A workspace with no graph gets one built before the answer; a stale graph is used as it is and shown as <code>Graph stale</code>, so you decide when to rebuild.</p>
+        <p>The Graph tab opens Graph Studio, a project-scoped visual workspace for Graphify outputs. Its <strong>Mind Map</strong>, <strong>Canvas</strong> (vis-network) and <strong>Report</strong> views show the generated graph artifacts and the markdown report, alongside build status, a graph query box, and impact analysis.</p>
+        <p>Run a local Graphify health check from the command line:</p>
+        <pre><code>yodaman doctor --graph</code></pre>
+        <p>The graph doctor reports active workspace graphs, persisted freshness, orphaned nodes, and the most dependency-heavy file. If orphaned nodes appear, run <code>Sync Repository</code> in the app or <code>POST /api/reindex</code> for that workspace.</p>
+        <h3>Dependency health check</h3>
+        <p>Run <code>yodaman doctor</code> with no flags to check every required runtime dependency before starting the app:</p>
+        <pre><code>yodaman doctor</code></pre>
+        <p>The dependency doctor checks <strong>Ollama</strong>, <strong>Context Expert (<code>ctx</code>)</strong>, <strong>Graphify</strong>, and <strong>OpenSpec</strong>, reporting each tool's version, resolved path, and &mdash; for Ollama &mdash; whether its local service is responding. Anything missing is listed with the exact install command for your platform. The command exits <code>0</code> when everything is healthy and <code>1</code> when a dependency is missing or unreachable, so it can gate a script or CI step. Add <code>--json</code> for machine-readable output:</p>
+        <pre><code>yodaman doctor --json</code></pre>
+        <p>The same checks run automatically at startup, appear in the Dashboard health panel, and appear in the desktop startup diagnostics screen, where missing components offer a one-click install. Both that button and <strong>Repair</strong> on the Dashboard run <code>POST /api/setup/repair</code>, which installs Context Expert, Graphify and OpenSpec (never Ollama, never with sudo). It only works with <strong>Repair Can Install Missing Tools</strong> (<code>allowSelfHealInstall</code>) turned on in Settings, and only from this computer. Ollama always gets its install command instead.</p>
+        <h3>How the three dependencies work together</h3>
+        <p>Context Expert, Graphify and OpenSpec each unlock part of YodaMan, and it composes them rather than treating them as three separate tools:</p>
         <ul>
-            <li><strong>Settings</strong>: Open from the top-right Settings button, sidebar plus button, or Configuration modal. Paste an absolute path or use Browse in the desktop app, then add, edit, and delete workspace paths.</li>
-            <li><strong>Workspaces</strong>: Select a project, refresh the workspace list, validate health, toggle inclusion, edit the file path, delete a workspace, and sync the selected repository.</li>
-            <li><strong>Chat</strong>: Ask questions using selected workspace context.</li>
-            <li><strong>Search</strong>: Run semantic search across indexed code and documentation, optionally scoped to the selected project. Results are ranked by a four-signal blend: Context Expert semantic relevance (0.50), Graphify proximity to your active file (0.20), Graphify structural centrality (0.15), and OpenSpec spec coverage (0.15).</li>
-            <li><strong>Dashboard</strong>: View status, database/index metrics, environment info, diagnostics, task counts, approvals, plugin policy, and mobile pairing.</li>
-            <li><strong>Logs</strong>: Open searchable runtime logs, reindex requests, index queue state, and <code>ctx index</code> output. Filter by text, level, severity, and user action before copying diagnostics.</li>
-            <li><strong>Manual</strong>: Read the in-app guide.</li>
-            <li><strong>Stardust</strong>: OpenSpec CLI wrapper for spec-driven development. Propose, validate and archive changes, or draft specs for a project that has none. Includes diagnostics, version checks, and one-click OpenSpec installation.</li>
-            <li id="plugins"><strong>Plugins</strong>: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, and delete non-mandatory plugin files. The <strong>Docs</strong> button on that page opens the full plugin authoring guide in the app &mdash; the contract, the permission allowlist, worked examples, and how the agent sees your tool. See section 11 for the summary.</li>
-            <li><strong>Graph doctor</strong>: Run <code>yodaman doctor --graph</code> to check active graphs, persisted freshness, orphaned nodes, and the most dependency-heavy file.</li>
-            <li><strong>Dependency doctor</strong>: Run <code>yodaman doctor</code> to check Ollama, Context Expert (<code>ctx</code>), Graphify, and OpenSpec. Each tool reports its version, resolved path, and reachability, and anything missing lists the install command for your platform. Add <code>--json</code> for machine-readable output; the command exits non-zero when a dependency is missing or unreachable.</li>
+            <li><strong>Approving a change shows its cost.</strong> When Yoda-Agent proposes a file write, the approval prompt reports the blast radius from the knowledge graph: how many files depend on the target, whether any test covers that path, which dependents are nearest, and an overall risk verdict. A change that reaches five or more files with no covering test is flagged as high risk. If no graph has been built yet the diff still appears, with the blast radius marked unavailable.</li>
+            <li><strong>Search is Stardust-powered.</strong> Every search blends four signals from all three mandatory tools: Context Expert semantic relevance (weight 0.50), Graphify proximity to your active file (0.20), Graphify structural centrality (0.15), and OpenSpec spec coverage &mdash; whether the file is described in any architecture spec (0.15). Results mix code and documentation, each tagged with its source (<code>_source</code>), and each hit carries a <code>specFlag</code> showing which specs describe it. Pass <code>activeFile</code> to bias results toward what you are editing.</li>
+            <li><strong>Accepted changes refresh the workspace.</strong> Once an agent task that wrote files finishes, that workspace is reindexed and its graph updated automatically &mdash; once per task, not once per file. Without this, the answer after an accepted change would be computed from stale data.</li>
+            <li><strong>One readiness signal.</strong> The Chat header shows whether this workspace's answers can be trusted: <code>Graph current</code>, <code>Graph stale</code>, <code>Refreshing</code>, or <code>Not indexed</code>. The verdict is always the weakest layer, so nothing hides behind an average. Query it directly with <code>GET /api/readiness?projectId=&lt;path&gt;</code>.</li>
+            <li><strong>Architecture drift.</strong> OpenSpec records the architecture you intended; the graph records the one you built. <code>GET /api/stardust/drift</code> compares them and reports two things: specs citing files that no longer exist (a spec that has quietly become wrong), and modules many files depend on that no spec describes. Requires both an initialized OpenSpec and a built graph, and tells you which is missing. Also available to the agent as the <code>specDrift</code> tool.</li>
+            <li><strong>Specs grounded in real modules.</strong> Before a change is written up, <code>GET /api/stardust/context?projectRoot=&lt;path&gt;&amp;files=a.js,b.js</code> returns the workspace's architectural hubs plus the blast radius and risk of each file the change touches, so a proposal cites modules that exist and states impact it can defend.</li>
+            <li><strong>Plugins share the same graph.</strong> Droid-Sweep finds unused files from resolved import edges rather than filename guessing, and reports whether the answer came from the graph or the text-scan fallback. Lightsaber's health score now uses real per-file test coverage, and its <code>test-coverage</code> action reports the share of source files a test actually reaches, worst-and-most-depended-on first.</li>
         </ul>
-
+        <h3>Default coding skill</h3>
+        <p>Yoda-Agent loads a default coding skill for implementation work. It emphasizes explicit assumptions, simple solutions, surgical edits, matching existing style, and verifying changes with targeted tests or builds.</p>
+        <h3>Supervised agent work</h3>
+        <p>Agent tasks stream task starts, tool calls, approval requests, cancellations, final answers, and errors.</p>
+        <p><strong>Every action that changes something pauses for your decision</strong> &mdash; not only whole-file writes. Editing a file, patching a range, running a command, and creating or archiving an OpenSpec change all stop and wait. Reading, searching, and querying the graph run freely, because they cannot change anything and prompting for them would only train you to click through.</p>
+        <p>For a file edit you see the file as it <em>will be</em>, not the raw arguments, alongside the blast radius from the knowledge graph: what depends on it, which tests cover it, and which specs describe it. A diff says what changed; it never says what it costs.</p>
+        <p>A tool nobody has classified is treated as dangerous until someone says otherwise. See Approvals (<code>docs/guides/approvals.md</code> in the repository) for the full model and how to verify it yourself.</p>
+        <h3>Persistence and audit</h3>
+        <p>Task history and audit logs persist locally in SQLite (<code>yodaman.db</code>). If Node's SQLite support is unavailable, YodaMan falls back to JSON/JSONL files. Chat sessions are kept in <code>sessions.json</code>. All of these live in your data folder next to <code>config.json</code> (<code>~/Library/Application Support/YodaMan</code> on macOS, <code>%APPDATA%\YodaMan</code> on Windows, <code>~/.config/YodaMan</code> on Linux), outside the install, so upgrades keep them; the Dashboard shows the paths under <strong>Your Data</strong>. Clients can clear task history and audit logs through the runtime endpoints.</p>
+        <h3>Creating plugins with the CLI</h3>
+        <p>YodaMan includes a <code>create-plugin</code> command to scaffold new plugins:</p>
+        <pre><code>yodaman create-plugin my-tool</code></pre>
+        <p>This generates:</p>
+        <ul>
+            <li><strong><code>plugins/my-tool.js</code></strong> &mdash; plugin template with the standard YodaMan plugin interface (<code>name</code>, <code>description</code>, <code>permissions</code>, <code>parameters</code>, <code>execute</code>)</li>
+            <li><strong><code>plugins/my-tool.test.js</code></strong> &mdash; Jest test file with basic structure checks</li>
+            <li><strong><code>plugins/README.md</code></strong> &mdash; updated with an API reference entry for the new plugin</li>
+        </ul>
+        <p>The loader skips <code>*.test.js</code> files, so the test file is never loaded as a plugin.</p>
+        <p>After scaffolding, edit the generated <code>.js</code> file to implement your tool logic, update the <code>parameters</code> and <code>permissions</code>, then run <code>npx jest plugins/my-tool.test.js</code> to verify the structure. Restart YodaMan to load it; plugins are read from <code>plugins/</code> at startup.</p>
+        <h3>Plugins</h3>
+        <p>Plugins are JavaScript modules that extend the agent with custom tools. A plugin should export a <code>name</code>, <code>description</code>, <code>parameters</code>, <code>permissions</code>, and an async <code>execute</code> function. Plugin uploads, unrestricted plugins, and agent shell commands are disabled by default. Turn them on in <strong>Settings &rarr; Developer Settings</strong> (Plugin Uploads, Unrestricted Plugins, Agent Shell Commands) or with <code>YODAMAN_ALLOW_PLUGIN_UPLOADS</code>, <code>YODAMAN_ALLOW_UNRESTRICTED_PLUGINS</code>, or <code>YODAMAN_ALLOW_AGENT_COMMANDS</code>, and only during trusted local support sessions. A plugin call that declares a mutating permission (<code>write</code>, <code>command</code>, <code>unrestricted</code>, and others) pauses for approval like any other change. See section 13 for writing one.</p>
+        <h2>3. Web UI</h2>
+        <p>The top bar has five tabs (<strong>Chat</strong>, <strong>Graph</strong>, <strong>Dashboard</strong>, <strong>Plugins</strong>, <strong>Stardust</strong>) plus <strong>Logs</strong> and <strong>Settings</strong> buttons.</p>
+        <ul>
+            <li><strong>Settings</strong>: Open from the top-right Settings button, the sidebar plus button, or <strong>Add directory</strong> when no workspace exists yet. Paste an absolute path or use Browse in the desktop app, then add, edit, and stop watching workspace paths. <strong>Open files in</strong> chooses how search results and chat file links open: the OS default app for the file type (the default), a detected editor, or a custom command for any editor (<code>{file}</code>, <code>{line}</code> and <code>{column}</code> are filled in). <strong>Developer Settings</strong> holds the security switches, <strong>Connect other agents</strong> the MCP setup (section 7), and <strong>View User Manual</strong> opens this guide.</li>
+            <li><strong>Workspaces sidebar</strong>: Select a project, refresh the list, validate health, include or exclude it from context, edit the file path, remove a workspace, and run <strong>Sync Repository</strong> on the selected one.</li>
+            <li><strong>Chat</strong>: The Chat tab has two views. <strong>Chat</strong> sends tasks to Yoda-Agent; a plain search such as "find where login is handled" is answered straight from the search pipeline, and anything that needs reasoning goes to the agent. The header shows the workspace's readiness (see section 2). The dropdown above the textarea (<strong>Insert a preset or plugin...</strong>) inserts a <strong>task preset</strong>, such as <strong>📊 Impact Analysis</strong> (affected files, breaking changes, and tests to update), or a plugin command; nothing runs until you press Send. More presets can be added to the <code>TASK_PRESETS</code> array in <code>AgentChatTab.jsx</code>.<br><br>Agent responses are <strong>graph-aware</strong>. When graph context is available, the agent cites specific files and their dependencies from the knowledge graph, and says how many files a proposed change would reach. The Graph tab shows the same graph.</li>
+            <li><strong>Search</strong>: The other Chat view. Runs semantic search across indexed code and documentation in the selected workspace. Results arrive first, then the local model writes a short summary citing them as [1], [2]. Each result has an <strong>Open</strong> button.</li>
+            <li><strong>Dashboard</strong>: System health with <strong>Repair</strong>, Context Expert and embedding configuration, vector storage, the AI Engine (model and Ollama context window), indexing, workspaces, environment, <strong>Your Data</strong> (where your files live), runtime diagnostics (PID, uptime, task and pending-approval counts), an on-demand <strong>Diagnostics</strong> report, and <strong>Pair Mobile</strong>.</li>
+            <li><strong>Logs</strong>: Searchable runtime logs, recent requests, index queue state, and <code>ctx index</code> output. Filter by text, level, severity, and user action, then use Copy when sharing an error.</li>
+            <li><strong>Manual</strong>: <strong>View User Manual</strong> in Settings opens the in-app version of this guide.</li>
+            <li><strong>Stardust</strong>: OpenSpec workflow for spec-driven development: propose, validate and archive changes, draft specs for a project that has none, and see drift, coverage and impact. Includes diagnostics, version checks, and one-click OpenSpec installation (section 11).</li>
+            <li id="plugins"><strong>Plugins</strong>: Install <code>.js</code> or <code>.zip</code> plugins (when uploads are enabled), inspect permissions and parameters, refresh loaded plugins, and remove plugins; the five default plugins cannot be removed. The <strong>Docs</strong> button opens the full plugin authoring guide.</li>
+        </ul>
         <h2>4. Desktop app</h2>
         <p>The Electron app starts a managed runtime sidecar when no runtime is already available on port <code>3090</code>. It also runs from the system tray.</p>
+        <p>Desktop menu (<strong>YodaMan</strong>) and tray actions:</p>
         <ul>
-            <li><code>Restart Managed Runtime</code> restarts the managed backend.</li>
-            <li><code>Copy Mobile Pairing Link</code> creates and copies a <code>yodaman://pair</code> link.</li>
-            <li><code>Add Project Folder</code> opens a native folder picker.</li>
-            <li><code>Show YodaMan</code> restores the window from the tray.</li>
-            <li><code>Quit</code> stops the desktop app and managed runtime.</li>
+            <li><code>Restart Managed Runtime</code> (menu and tray): Restarts the Electron-managed backend process.</li>
+            <li><code>Copy Mobile Pairing Link</code> (menu and tray): Creates and copies a <code>yodaman://pair</code> link.</li>
+            <li><code>Add Project Folder</code> (menu): Opens a native directory picker and registers the selected workspace.</li>
+            <li><code>Show YodaMan</code> (tray): Restores the desktop window.</li>
+            <li><code>Quit</code> (menu and tray): Stops the desktop app and managed runtime.</li>
         </ul>
-
+        <p>While the runtime starts, and whenever it cannot be reached, the diagnostics screen shows the YodaMan logo and version, a checklist (Node.js, Graphify, Ollama, Context Expert, OpenSpec, Config, Runtime) with install buttons for missing components, recent runtime logs, <code>Continue →</code>, <code>Try Again</code>, <code>Copy Error</code>, and <code>Dev Tools</code>.</p>
         <h2>5. VS Code extension</h2>
-        <p>The extension checks runtime status, starts the runtime command, adds workspaces by browsing, pasting, or using the current VS Code workspace, asks/searches/reindexes the current workspace, opens runtime logs, runs and cancels agent tasks, streams events, opens proposed writes as diffs, approves or rejects changes, clears task/audit history, and exposes the YodaMan activity bar sidebar.</p>
-
+        <p>The VS Code extension provides editor-native access to the same local runtime.</p>
+        <p>Available actions (Command Palette, prefixed <code>YodaMan:</code>):</p>
+        <ul>
+            <li>Check runtime status, and start the runtime with the configured command (<code>yodaman.runtimeCommand</code>, default <code>yodaman</code>).</li>
+            <li>Add a workspace by browsing for a folder, pasting a path, or using the current VS Code workspace.</li>
+            <li>Ask about the current workspace.</li>
+            <li>Search and reindex the current workspace.</li>
+            <li>Open runtime logs and index queue state, and show runtime diagnostics.</li>
+            <li>Run and cancel agent tasks, with agent events streamed to the YodaMan output channel.</li>
+            <li>Open proposed writes as VS Code diffs, approve or reject them, and list pending approvals.</li>
+            <li>Show the blast radius for the current file.</li>
+            <li>Open the Stardust change board, and check (or clear) spec drift markers.</li>
+            <li>List plugins.</li>
+            <li>Clear task history and audit logs.</li>
+            <li>Use the YodaMan activity bar sidebar (<strong>Agent</strong> view).</li>
+        </ul>
+        <p>The default runtime URL (<code>yodaman.runtimeUrl</code>) is <code>http://localhost:3090</code>.</p>
         <h2>6. Mobile companion</h2>
-        <p>The mobile companion pairs with <code>yodaman://pair</code> links. It can check status, list projects, choose a workspace, ask, search, inspect task timelines, open event details, cancel active tasks, refresh pending approvals, and approve or reject proposed writes.</p>
-
-        <h2>7. Runtime API highlights</h2>
+        <p>The mobile companion pairs with the runtime using <code>yodaman://pair</code> links, or by entering the runtime URL and a pairing token. On the same network it can check status and workspace readiness, list projects, choose a workspace, ask, search, view the Stardust board, drift, compose and diagnostics, inspect task timelines, open task event details, cancel active tasks, refresh pending approvals, and approve or reject proposed writes.</p>
+        <p>The runtime listens only on <code>127.0.0.1</code> by default. For a phone to reach it, start it with <code>YODAMAN_HOST=0.0.0.0</code> and use your desktop's LAN address, for example <code>http://192.168.1.20:3090</code>. Pairing links are created on this computer only (the desktop menu or the Dashboard), and carry the desktop's LAN address in place of <code>127.0.0.1</code> or <code>localhost</code>.</p>
+        <h2>7. Other agents (MCP)</h2>
+        <p>YodaMan can lend its index to Cursor, Claude Code, Zed, and anything else that speaks MCP. Those tools have strong models and no knowledge of your private codebase; YodaMan has exactly that, locally.</p>
+        <pre><code>claude mcp add yodaman -- yodaman-mcp</code></pre>
+        <p>Or, for any MCP client:</p>
+        <pre><code>{ "mcpServers": { "yodaman": { "command": "yodaman-mcp" } } }</code></pre>
+        <p>Five tools become available: <code>yodaman_projects</code>, <code>yodaman_search</code> (the four-signal blend), <code>yodaman_graph_query</code>, <code>yodaman_impact</code>, and <code>yodaman_spec_drift</code>. Reach for spec drift first &mdash; it is the thing a model reading your repository cannot work out on its own, because it needs the specs and the graph together.</p>
+        <p><strong>All five are read-only, permanently.</strong> The approval gate protects writes made by YodaMan's own agent; another client does not run that gate and cannot be made to. If you want an agent to change files through YodaMan, use YodaMan's agent.</p>
+        <p>The runtime must be running &mdash; the MCP server is a thin proxy over the runtime at <code>YODAMAN_URL</code> (<code>http://127.0.0.1:3090</code> by default). Nothing listens on a port and nothing leaves the machine. Full details in MCP (<code>docs/guides/mcp.md</code> in the repository).</p>
+        <h2>8. Runtime API highlights</h2>
         <ul>
-            <li><code>GET/POST/PUT/DELETE /api/projects</code>: List, add, update, or remove workspace paths.</li>
+            <li><code>GET /api/projects</code>: List indexed and watched projects.</li>
+            <li><code>POST /api/projects</code>: Add a workspace path.</li>
+            <li><code>PUT /api/projects</code>: Update a tracked workspace path.</li>
+            <li><code>DELETE /api/projects</code>: Remove a tracked workspace path.</li>
             <li><code>POST /api/reindex</code>: Queue a workspace for reindexing.</li>
-            <li><code>/api/graphify/*</code>: Read graph status, rebuild graphs, query relationships, explain nodes, find paths, run impact analysis, and load architecture maps.</li>
-            <li><code>GET /api/search</code> and <code>POST /api/ask</code>: Search and ask against indexed context.</li>
-            <li><code>GET /api/status</code> and <code>GET /api/desktop/diagnostics</code>: Read status and diagnostics.</li>
-            <li><code>GET/POST/DELETE /api/plugins</code>: Manage JavaScript plugins.</li>
-            <li><code>/api/agent/*</code>: Run, inspect, approve, reject, cancel, or clear agent tasks.</li>
-            <li><code>GET/DELETE /api/audit</code>: Inspect or clear audit logs.</li>
-            <li><code>POST /api/pairing</code>: Create mobile pairing links.</li>
+            <li><code>GET /api/graphify/status</code>: Read Graphify graph state for a workspace.</li>
+            <li><code>POST /api/graphify/build</code>: Rebuild or update a workspace graph.</li>
+            <li><code>POST /api/graphify/query</code>: Query the workspace graph.</li>
+            <li><code>POST /api/graphify/explain</code>: Explain a graph node and its neighbors.</li>
+            <li><code>POST /api/graphify/path</code>: Find a graph path between two entities.</li>
+            <li><code>POST /api/graphify/affected</code>: Run impact analysis for a graph node.</li>
+            <li><code>GET /api/graphify/map</code>: Read a compact architecture map summary.</li>
+            <li><code>POST /api/graphify/tree</code>: Generate Graphify's D3 tree artifact.</li>
+            <li><code>GET /api/search</code>: Run unified Stardust-powered search across code and docs. Accepts <code>query</code>, <code>project</code>, <code>top</code> (default 15), <code>activeFile</code>. Returns merged results with <code>_source</code> provenance (<code>code</code>|<code>docs</code>), <code>specFlag</code> annotations, and <code>graphRank</code> scores with the four-signal breakdown.</li>
+            <li><code>GET /api/search/stream</code>: The Search view's search, as server-sent events. Same query parameters. Sends <code>results</code> (the same body as <code>GET /api/search</code>) as soon as the pipeline finishes, then <code>summary_start</code> (<code>model</code>), <code>summary</code> text pieces, and <code>done</code>. The summary is written by the local model Context Expert uses, from those results only, citing them as [1], [2]. A failed summary sends <code>summary_error</code> and leaves the results standing; a failed search sends <code>search_error</code>.</li>
+            <li><code>POST /api/ask</code>: Ask a question.</li>
+            <li><code>GET /api/status</code>: Read Context Expert status.</li>
+            <li><code>GET /api/desktop/diagnostics</code>: Read runtime, task, host, and plugin diagnostics.</li>
+            <li><code>GET /api/plugins</code>, <code>POST /api/plugins</code>, <code>DELETE /api/plugins/:name</code>: Manage plugins.</li>
+            <li><code>GET /api/agent/tasks</code>, <code>DELETE /api/agent/tasks</code>: Inspect or clear task history.</li>
+            <li><code>POST /api/agent/task</code>, <code>POST /api/agent/approve</code>, <code>POST /api/agent/cancel</code>: Run, approve, reject, or cancel agent work.</li>
+            <li><code>GET /api/stardust/drift</code>: Compare OpenSpec intent against the actual graph. Accepts <code>projectRoot</code> and <code>minDependents</code>. Returns stale spec references, undocumented modules, and <code>inSync</code>.</li>
+            <li><code>GET /api/stardust/context</code>: Graph-grounded context for authoring a change. Accepts <code>projectRoot</code> and a comma-separated <code>files</code> list.</li>
+            <li><code>GET /api/readiness</code>: Whether a workspace's answers are current. Pass <code>?projectId=&lt;absolute path&gt;</code> for one workspace, or omit it for every watched workspace. Returns <code>ready</code>, <code>stale</code>, <code>building</code>, or <code>unindexed</code>, plus the per-layer detail and a suggested action.</li>
+            <li><code>GET /api/search/code</code>: Code search. Accepts <code>activeFile</code> to bias ranking toward files connected to what you are editing.</li>
+            <li><code>GET /api/audit</code>, <code>DELETE /api/audit</code>: Inspect or clear audit logs.</li>
+            <li><code>POST /api/pairing</code>: Create mobile pairing links (from this computer only).</li>
         </ul>
-
-        <h2>8. Troubleshooting</h2>
+        <h2>9. Troubleshooting</h2>
         <ul>
-            <li><strong>Not sure what is missing</strong>: Run <code>yodaman doctor</code> for a full dependency report with per-tool install commands.</li>
+            <li><strong>Something is missing but you are not sure what</strong>: Run <code>yodaman doctor</code> for a full dependency report with per-tool install commands.</li>
             <li><strong>Context Expert not found</strong>: Install <code>yodaman-ctx</code> (YodaMan's Context Expert) and confirm <code>ctx --version</code> works.</li>
-            <li><strong>Graphify not found</strong>: Install <code>graphifyy</code>, confirm <code>graphify --help</code> works, or set <code>YODAMAN_GRAPHIFY_BIN</code>.</li>
-            <li><strong>Graph health warnings</strong>: Run <code>yodaman doctor --graph</code>, then sync the affected workspace if orphaned nodes or missing graphs are reported.</li>
-            <li><strong>Runtime unreachable</strong>: Check port <code>3090</code>, restart the managed runtime, or run <code>yodaman</code> from Terminal.</li>
-            <li><strong>Moved repository</strong>: Open Settings, edit the workspace path, save, then sync.</li>
-            <li><strong>Search results are stale</strong>: Reindex the selected workspace.</li>
-            <li><strong>Mobile cannot connect</strong>: Use the desktop LAN IP, confirm firewall access to port <code>3090</code>, and generate a fresh pairing link.</li>
-            <li><strong>Plugin blocked</strong>: Add explicit permissions or intentionally allow unrestricted plugins.</li>
-            <li><strong>OpenSpec not found</strong>: Install <code>@fission-ai/openspec@latest</code> and confirm <code>openspec --version</code> works, or click "Install Now" in the Stardust tab or the desktop startup diagnostics screen. <code>yodaman doctor</code> and the Dashboard health panel both report OpenSpec status.</li>
-            <li><strong>Crash screen</strong>: Use Copy Error to capture the message and logs.</li>
+            <li><strong>Graphify not found</strong>: Install <code>graphifyy</code>, confirm <code>graphify --help</code> works, or set <code>YODAMAN_GRAPHIFY_BIN</code> to the executable path.</li>
+            <li><strong>Graph health looks wrong</strong>: Run <code>yodaman doctor --graph</code>, then sync the affected workspace if the command reports orphaned nodes or missing graphs.</li>
+            <li><strong>Runtime unreachable</strong>: Check port <code>3090</code>, then use <code>Restart Managed Runtime</code> or run <code>yodaman</code> from Terminal.</li>
+            <li><strong>Install or Repair says it is turned off</strong>: Turn on <strong>Repair Can Install Missing Tools</strong> in Settings &rarr; Developer Settings, or run the install command it shows yourself.</li>
+            <li><strong>Moved repository</strong>: Open Settings, edit the workspace path, save, then sync the repository.</li>
+            <li><strong>Search results are stale</strong>: Select the workspace and run <code>Sync Repository</code>.</li>
+            <li><strong>Mobile cannot connect</strong>: Start the runtime with <code>YODAMAN_HOST=0.0.0.0</code>, use the desktop LAN IP, confirm firewall access to port <code>3090</code>, and generate a fresh pairing link.</li>
+            <li><strong>Plugin blocked</strong>: Add explicit permissions from the allowlist to the plugin, or intentionally allow unrestricted plugins with <strong>Unrestricted Plugins</strong> in Settings or <code>YODAMAN_ALLOW_UNRESTRICTED_PLUGINS=true</code>.</li>
+            <li><strong>OpenSpec not found</strong>: Install <code>@fission-ai/openspec@latest</code> and confirm <code>openspec --version</code> works, or click <strong>Install Now</strong> in Stardust &rarr; Diagnostics, or <strong>Install OpenSpec</strong> on the desktop startup diagnostics screen (which needs Repair turned on). <code>yodaman doctor</code> and the Dashboard health panel both report OpenSpec status.</li>
+            <li><strong>Crash screen</strong>: Use <code>Copy Error</code> to copy the exact message and recent runtime logs.</li>
         </ul>
-
-        <h2>9. Verification</h2>
-        <pre><code>npm test
-npm run build
+        <h2>10. Verification and builds</h2>
+        <p>Before publishing a release:</p>
+        <pre><code>npm run release:verify   # version check, build, lint, tests, coverage, audits, smoke tests and release gates
 npm run desktop:pack
 cd extensions/vscode-yodaman
 npm run lint
 npm run package</code></pre>
-
-        <h2>10. Stardust &mdash; OpenSpec Integration</h2>
-        <p>YodaMan integrates OpenSpec through the <strong>Stardust</strong> tab with eight views: Board, Drift, Compose, Trust, Trace, Impact, Diagnostics, and Commands — plus agent tools (specPropose, specValidate, specArchive, specDrift) for autonomous OpenSpec workflows.</p>
+        <h2>11. Project Stardust &mdash; OpenSpec Integration</h2>
+        <p>YodaMan 0.6.4 integrates OpenSpec through the <strong>Stardust</strong> tab. OpenSpec provides structured spec-driven development with a propose &rarr; implement &rarr; validate &rarr; archive workflow. The tab has eight views:</p>
+        <ul>
+            <li><strong>Board</strong>: Real-time change overview with card-based navigation, task progress bars, validation health icons, and a side-by-side spec diff viewer. Select a change to review its proposed spec deltas grouped by operation (ADDED/MODIFIED/REMOVED/RENAMED), then validate or archive directly from the diff panel. The board updates live via WebSocket &mdash; file changes in <code>openspec/</code> push instantly.</li>
+            <li><strong>Drift</strong>: Architecture drift detection comparing OpenSpec specs against the knowledge graph. Shows stale spec references (files cited in specs that no longer exist) and undocumented modules (load-bearing files no spec describes). Unique to YodaMan.</li>
+            <li><strong>Compose</strong>: File-centric cross-reference. Enter any repo path to see which OpenSpec specs describe it, its Graphify structural position (dependents, centrality, blast radius, test coverage), and how Context Expert ranks it &mdash; three columns, one file.</li>
+            <li><strong>Trust</strong>: Unified health dashboard across Context Expert, Graphify, and OpenSpec with per-tool status cards and the overall WorkspaceReadiness verdict.</li>
+            <li><strong>Trace</strong>: Search ranking transparency. Every search result shows its semantic×0.50 + proximity×0.20 + centrality×0.15 + specCoverage×0.15 breakdown with colour-coded bars for each signal and a spec coverage indicator showing which OpenSpec specs describe the file.</li>
+            <li><strong>Diagnostics</strong>: Installation check, version, whether <code>openspec/config.yaml</code> exists, and <strong>Run Diagnostics</strong>, <strong>Install Now</strong> and <strong>Initialize Project</strong> buttons.</li>
+            <li><strong>Commands</strong>: Direct CLI access with Propose, Validate, Archive, List Changes, List Specs and Draft Specs buttons plus a scrollable console output. The Propose button creates <code>openspec/changes/&lt;name&gt;/</code> with proposal.md, design.md, and tasks.md.</li>
+            <li><strong>Impact</strong>: Dedicated blast-radius analysis with configurable hop depth and spec awareness. Enter any file path to see dependents, test coverage, and which OpenSpec specs describe it.</li>
+        </ul>
         <h3>Setup</h3>
         <pre><code>npm install -g @fission-ai/openspec@latest</code></pre>
         <h3>Workflow</h3>
+        <p>A project with no specs yet can start with <strong>Draft Specs</strong> (next section).</p>
         <ol>
-            <li><strong>Propose</strong>: Create a new change proposal with a title, description, and spec path.</li>
-            <li><strong>Validate</strong>: Check the change against your project's specs (supports <code>--strict</code> mode).</li>
-            <li><strong>Apply</strong>: Apply the validated change (supports <code>--dry-run</code> for safety).</li>
-            <li><strong>Archive</strong>: Archive a completed change.</li>
+            <li><strong>Propose</strong>: Enter a change name (for example <code>add-auth-middleware</code>) in the Commands tab and click <strong>Propose</strong>. Stardust creates <code>openspec/changes/&lt;name&gt;/</code> with template <code>proposal.md</code>, <code>design.md</code> and <code>tasks.md</code>. It does not read your code or write specs: fill in the templates, and describe the requirements the change adds, modifies or removes as spec deltas under <code>openspec/changes/&lt;name&gt;/specs/</code>.</li>
+            <li><strong>Implement</strong>: Make the change yourself or with Yoda-Agent, ticking off <code>tasks.md</code> as you go.</li>
+            <li><strong>Validate</strong>: Runs <code>openspec validate &lt;name&gt;</code> to check the change and its spec deltas.</li>
+            <li><strong>Archive</strong>: Runs <code>openspec archive &lt;name&gt;</code>. The change moves to the archive and its spec deltas are merged into <code>openspec/specs/</code>. This is how specs are created and updated.</li>
         </ol>
+        <p>There is no separate Apply step: archiving a change is what applies its spec deltas.</p>
+        <h3>Draft specs for an existing project</h3>
+        <p>A project with code but no specs can get a first set from <strong>Commands &rarr; Draft Specs</strong> (or by typing <code>Draft baseline specs</code> in Chat). YodaMan:</p>
+        <ol>
+            <li>Groups the code into capabilities by top-level module (for example <code>backend/core</code> becomes <code>backend-core</code>), using the Graphify graph and putting the modules most of the code depends on first. Up to six capabilities, tests left out.</li>
+            <li>Retrieves each capability's key code through the search pipeline (Context Expert, ranked by Graphify).</li>
+            <li>Asks your local model (through Context Expert and Ollama; nothing leaves your machine) to write requirements in OpenSpec's format: <code>### Requirement:</code> blocks with SHALL statements and <code>#### Scenario:</code> blocks.</li>
+        </ol>
+        <p>Nothing is written until you approve it. Chat asks first to run <code>openspec init</code> (only if <code>openspec/</code> is missing; no AI-tool files are added), then shows each <code>openspec/specs/&lt;capability&gt;/spec.md</code> as a diff with its blast radius. Reject a draft and it is not written. An existing spec is never replaced, and a capability the model could not describe is skipped and named in the answer.</p>
+        <p>Every draft says <strong>DRAFT</strong> in its Purpose section. Read and edit them before you rely on them, then run <code>openspec validate --specs</code>. Drafting needs a built graph (run Sync Repository first) and takes about a minute per capability on a 9B model.</p>
+        <h3>Diagnostics</h3>
+        <p>The Stardust tab includes a Diagnostics panel that checks:</p>
+        <ul>
+            <li>OpenSpec installation status</li>
+            <li>Current OpenSpec version</li>
+            <li>Whether <code>openspec/config.yaml</code> exists in your workspace</li>
+        </ul>
+        <p><strong>Install Now</strong> runs <code>npm install -g @fission-ai/openspec</code>, with the same gate as Repair: only when <strong>Repair Can Install Missing Tools</strong> is on in Settings, and only from this computer. <strong>Initialize Project</strong> runs <code>openspec init --tools all</code>, which also writes OpenSpec's AI-tool files; the Draft Specs flow initializes with <code>--tools none</code>.</p>
+        <h3>Agent Tools</h3>
+        <p>The Yoda-Agent has five OpenSpec tools available during autonomous tasks:</p>
+        <ul>
+            <li><code>specPropose(project, changeName, description)</code> &mdash; Creates a new change proposal under <code>openspec/changes/&lt;name&gt;/</code>.</li>
+            <li><code>specDraft(project, maxCapabilities)</code> &mdash; Drafts baseline specs for a project with none, as described above. It writes nothing; the agent saves each draft with <code>writeFile</code>, which asks for approval.</li>
+            <li><code>specValidate(project, changeName)</code> &mdash; Validates a change against project specs via the CLI.</li>
+            <li><code>specArchive(project, changeName)</code> &mdash; Archives a completed change.</li>
+            <li><code>specDrift(project)</code> &mdash; Compares OpenSpec intent against the actual knowledge graph.</li>
+        </ul>
+        <p>The agent is instructed to follow the Propose &rarr; Validate &rarr; Archive workflow for any significant feature, and to check drift before proposing new work.</p>
         <h3>API Endpoints</h3>
         <ul>
-            <li><code>GET /api/stardust/board?projectRoot=...</code> — Change-board snapshot (REST fallback for WebSocket)</li>
-            <li><code>GET /api/stardust/deltas/:name?projectRoot=...</code> — Operation-grouped spec deltas for a change</li>
-            <li><code>GET /api/stardust/compose?projectRoot=...&file=...</code> — File-centric cross-reference (OpenSpec + Graphify + Context Expert)</li>
-            <li><code>GET /api/stardust/spec?projectRoot=...&spec=...</code> — Current published spec text by ID</li>
-            <li><code>GET /api/stardust/change-impact/:name?projectRoot=...</code> — Per-change graph-resolved impact analysis</li>
-            <li><code>PUT /api/stardust/validation/:name</code> — Store validation result for board health icons</li>
-            <li><code>WS /api/stardust/live?projectRoot=...</code> — Real-time WebSocket for board + activity feed</li>
-            <li><code>GET /api/stardust/diagnose?projectRoot=...</code> — Run OpenSpec diagnostics</li>
-            <li><code>POST /api/stardust/run</code> — Execute any OpenSpec workflow action (propose, validate, archive, list, init, install)</li>
-            <li><code>GET /api/stardust/drift?projectRoot=...</code> — Compare OpenSpec intent against the actual knowledge graph</li>
-            <li><code>GET /api/stardust/context?projectRoot=...&files=...</code> — Graph-grounded context for authoring a change</li>
+            <li><code>GET /api/stardust/board?projectRoot=...</code> &mdash; Change-board snapshot (REST fallback for WebSocket)</li>
+            <li><code>GET /api/stardust/deltas/:name?projectRoot=...</code> &mdash; Operation-grouped spec deltas for a change</li>
+            <li><code>GET /api/stardust/compose?projectRoot=...&amp;file=...</code> &mdash; File-centric cross-reference (OpenSpec + Graphify + Context Expert)</li>
+            <li><code>GET /api/stardust/spec?projectRoot=...&amp;spec=...</code> &mdash; Current published spec text by ID</li>
+            <li><code>GET /api/stardust/change-impact/:name?projectRoot=...</code> &mdash; Per-change graph-resolved impact analysis</li>
+            <li><code>PUT /api/stardust/validation/:name</code> &mdash; Store validation result for board health icons</li>
+            <li><code>WS /api/stardust/live?projectRoot=...</code> &mdash; Real-time WebSocket for board + activity feed</li>
+            <li><code>GET /api/stardust/diagnose?projectRoot=...</code> &mdash; Run OpenSpec diagnostics</li>
+            <li><code>POST /api/stardust/run</code> &mdash; Execute any OpenSpec workflow action (propose, validate, archive, list, init, install)</li>
         </ul>
-
-        <h2 id="agent-context">11. How the agent uses the three tools</h2>
+        <h2 id="agent-context">12. How the agent uses the three tools</h2>
         <p>Context Expert has no session, so every reasoning step re-sends the conversation. Three mechanisms keep that affordable and keep all three tools in the loop:</p>
         <ul>
-            <li><strong>Stardust brief</strong>: built once at the start of each task from all three tools at the same time &mdash; graph size and busiest modules, the spec list and current drift, and for every file the task names, its blast radius, covering tests and describing specs. It replaces the fixed slice of <code>GRAPH_REPORT.md</code> that used to be prepended regardless of the task, and it keeps only the report sections that carry information (God Nodes, Surprising Connections) rather than the navigation index.</li>
-            <li><strong>Bounded transcript</strong>: tool results are clipped on arrival, the newest turns stay verbatim, and older turns collapse to one line each recording which tool ran and how it ended. The original task is never elided. Prompt size plateaus instead of growing with every step.</li>
+            <li><strong>Stardust brief</strong>: built once at the start of each task from all three tools: graph size and busiest modules, the spec list and current drift, and for every file the task names, its blast radius, covering tests and describing specs. From <code>GRAPH_REPORT.md</code> it keeps only the sections that carry information (God Nodes, Surprising Connections).</li>
+            <li><strong>Bounded transcript</strong>: tool results are clipped on arrival, the newest turns stay verbatim, and older turns collapse to one line each recording which tool ran and how it ended. The original task is never elided. The prompt budget grows with the context window Ollama serves, and <code>YODAMAN_AGENT_PROMPT_CHARS</code>, when set, replaces it with a fixed number of characters (at most 120,000).</li>
             <li><strong>Scoped retrieval</strong>: each <code>ctx ask</code> is scoped to the active workspace with <code>-p</code>, so retrieval runs against one project rather than every indexed project at once.</li>
         </ul>
-        <p>The agent also has <code>impactOf(file, project, depth)</code>, which returns a file's dependents, covering tests, risk and describing specs from an in-process graph read. It is the same assessment the write-approval dialog shows you, made available to the model <em>before</em> it proposes a change.</p>
-        <p>Tool signatures reaching the model are typed &mdash; <code>readFile(filePath: string (workspace-relative or absolute path))</code>, with <code>?</code> marking optional parameters &mdash; so parameter meaning no longer has to be inferred from the name alone.</p>
-
-        <h2 id="plugin-authoring">12. Writing a plugin</h2>
-        <p>A plugin is one CommonJS file in <code>core/plugins/</code>. The in-app guide (Plugins &rarr; Docs) covers this in full with copy-ready examples; the contract is:</p>
+        <p>The agent also has <code>impactOf(file, project, depth)</code>, which returns a file's dependents, covering tests, risk and describing specs from an in-process graph read. It is the same assessment the approval prompt shows you, made available to the model <em>before</em> it proposes a change.</p>
+        <p>Tool signatures reaching the model are typed, with <code>?</code> marking optional parameters (<code>searchCode(query: string (natural language or a code fragment), project?: string, ...)</code>), so parameter meaning does not have to be inferred from the name alone.</p>
+        <h2 id="plugin-authoring">13. Writing a plugin</h2>
+        <p>A plugin is one CommonJS file in <code>plugins/</code>. The in-app guide (Plugins &rarr; Docs) covers this in full with copy-ready examples; the contract is:</p>
         <pre><code>module.exports = {
-    name: 'Kyber-Count',                 // required — the tool name the model emits
-    description: 'What it does. Chat usage: "count the lines in this project"',
+    name: 'Kyber-Count',                 // required: the tool name the model emits
+    description: 'What it does. 💡 Chat usage: "count the lines in this project"',
     permissions: ['read'],               // required for uploads; allowlisted values only
-    parameters: {                        // only the KEYS reach the model
+    parameters: {
         workspacePath: { type: 'string', required: true, description: 'Absolute path' }
     },
-    async execute(params = {}) {         // required — returns a JSON-serializable result
+    async execute(params = {}) {         // required: returns a JSON-serializable result
         return { fileCount: 0 };
     }
 };</code></pre>
         <ul>
-            <li><strong>Allowed permissions</strong>: <code>read</code>, <code>write</code>, <code>command</code>, <code>network</code>, <code>search</code>, <code>graphify:read</code>, <code>git:read</code>, <code>agent:invoke</code>, <code>task:create</code>, <code>audit:write</code>, <code>upload:temp</code>, <code>filesystem:read-selected</code>, <code>desktop:openFile</code>, <code>storage:indexeddb</code>, <code>webxr</code>, <code>speech</code>, <code>unrestricted</code>. Anything else stops the plugin from loading. Omitting the array means <code>unrestricted</code>, which is refused at call time unless enabled in Settings &mdash; and uploads reject it outright.</li>
-            <li><strong>The description is the prompt.</strong> <code>ToolBox.getToolDefinitions()</code> gives the model only <code>name(paramKeys): description</code>, so parameter types and per-parameter descriptions never reach it. Put the meaning, and the phrases a user would type, in the description.</li>
-            <li><strong>Keep results small.</strong> The whole return value is serialized into the model's context. Cap arrays and return counts with a truncated sample.</li>
+            <li><strong>Allowed permissions</strong>: <code>read</code>, <code>write</code>, <code>command</code>, <code>network</code>, <code>search</code>, <code>graphify:read</code>, <code>git:read</code>, <code>agent:invoke</code>, <code>task:create</code>, <code>audit:write</code>, <code>upload:temp</code>, <code>filesystem:read-selected</code>, <code>desktop:openFile</code>, <code>storage:indexeddb</code>, <code>webxr</code>, <code>speech</code>, <code>unrestricted</code>. Anything else stops the plugin from loading. Omitting the array means <code>unrestricted</code>, which is refused at call time unless Unrestricted Plugins is enabled in Settings, and uploads reject it outright.</li>
+            <li><strong>The description is the prompt.</strong> The model sees <code>name(param: type (description), ...)</code> and your description, capped at 300 characters. A small model served through a small context window sees only the signature. Put the meaning, and the phrases a user would type, early in the description.</li>
+            <li><strong>Keep results small.</strong> The return value is serialized into the model's context. Cap arrays and return counts with a truncated sample.</li>
             <li><strong>Prefer the graph.</strong> <code>require('../backend/infrastructure/GraphFacts')</code> answers structural questions from resolved import edges instead of a filesystem scan.</li>
             <li><strong>Lifecycle form</strong>: exporting <code>onLoad</code>/<code>onEnable</code>/<code>onDisable</code>/<code>onUnload</code> instead of <code>execute</code> gets a <code>PluginAPI</code> instance with <code>log</code>, <code>ui</code>, <code>fetch</code>, <code>worker</code> and <code>config</code>.</li>
             <li><strong>Verify</strong>: <code>node -e "const t=require('./backend/infrastructure/ToolBox');console.log([...t.plugins.keys()])"</code></li>

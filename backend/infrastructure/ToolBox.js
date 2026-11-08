@@ -134,7 +134,8 @@ class ToolBox {
 
         const files = fs.readdirSync(pluginsDir);
         files.forEach(file => {
-            if (!file.endsWith('.js')) return;
+            // `yodaman create-plugin` writes <name>.test.js beside the plugin; it is not one.
+            if (!file.endsWith('.js') || file.endsWith('.test.js')) return;
             // Check if disabled by reading plugin name from source
             try {
                 const content = fs.readFileSync(path.join(pluginsDir, file), 'utf8');

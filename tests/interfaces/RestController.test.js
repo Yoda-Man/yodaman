@@ -618,6 +618,90 @@ describe('RestController Integration', () => {
         }
     });
 
+    describe('plugin uploads add plugins, never replace or half-install them', () => {
+        const pluginsDir = path.resolve(__dirname, '../../plugins');
+        const uploadHandler = () => {
+            const layer = router.stack.find((l) => l.route?.path === '/plugins' && l.route.methods.post);
+            return layer.route.stack.at(-1).handle;
+        };
+        const zipOf = (name, source) => {
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-zip-'));
+            fs.writeFileSync(path.join(dir, name), source);
+            const zip = path.join(pluginsDir, `upload-${process.pid}-${Date.now()}.zip`);
+            require('child_process').execFileSync('zip', ['-j', '-q', zip, path.join(dir, name)]);
+            return zip;
+        };
+        const send = async (zip) => {
+            const res = { statusCode: 200, status(c) { this.statusCode = c; return this; }, json(p) { this.payload = p; return this; }, send(p) { this.payload = p; return this; } };
+            await uploadHandler()({ file: { originalname: path.basename(zip), path: zip, size: 1 } }, res);
+            return res;
+        };
+
+        test('a file name already installed is refused', () => {
+            expect(() => router.newPluginFilename('graphify.js')).toThrow('already installed');
+            expect(() => router.newPluginFilename('main.js')).toThrow('already installed');
+            expect(router.newPluginFilename(`not-installed-${process.pid}.js`)).toBe(`not-installed-${process.pid}.js`);
+        });
+
+        test("an archive's main.js cannot overwrite Holocron's", async () => {
+            const before = fs.readFileSync(path.join(pluginsDir, 'main.js'), 'utf8');
+            const res = await send(zipOf('main.js', 'module.exports = { name: "evil", execute() {} };'));
+            expect(res.statusCode).toBe(400);
+            expect(fs.readFileSync(path.join(pluginsDir, 'main.js'), 'utf8')).toBe(before);
+        });
+
+        test('a plugin that fails validation is removed again', async () => {
+            const name = `half-installed-${process.pid}.js`;
+            try {
+                const res = await send(zipOf(name, 'module.exports = { name: "no-execute" };'));
+                expect(res.statusCode).toBe(400);
+                expect(fs.existsSync(path.join(pluginsDir, name))).toBe(false);
+            } finally {
+                fs.rmSync(path.join(pluginsDir, name), { force: true });
+            }
+        });
+    });
+
+    test('a pairing token is not enough to change settings or model configuration', () => {
+        // Otherwise a paired phone could turn off the token requirement itself,
+        // or turn on agent shell commands.
+        const res = { status(c) { this.statusCode = c; return this; }, json(p) { this.payload = p; return this; } };
+        const next = jest.fn();
+        router.configLocalOnly({ ip: '192.168.1.30' }, res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(403);
+        router.configLocalOnly({ ip: '127.0.0.1' }, res, next);
+        expect(next).toHaveBeenCalled();
+
+        const guarded = (method, routePath) => router.stack
+            .find((l) => l.route?.path === routePath && l.route.methods[method]).route.stack[0].handle === router.configLocalOnly;
+        expect(guarded('put', '/settings')).toBe(true);
+        expect(guarded('post', '/ctx/config')).toBe(true);
+        expect(guarded('post', '/ollama/context')).toBe(true);
+    });
+
+    test('pairing can only be managed from this computer', () => {
+        // /pairing is exempt from the token gate, so without this a device on
+        // the LAN could mint its own token and then use the whole API.
+        const run = (ip) => {
+            const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(p) { this.payload = p; return this; } };
+            const next = jest.fn();
+            router.pairingLocalOnly({ ip }, res, next);
+            return { res, next };
+        };
+        expect(run('127.0.0.1').next).toHaveBeenCalled();
+        expect(run('::1').next).toHaveBeenCalled();
+        const remote = run('192.168.1.30');
+        expect(remote.next).not.toHaveBeenCalled();
+        expect(remote.res.statusCode).toBe(403);
+        expect(remote.res.payload.code).toBe('pairing_local_only');
+        // And it is mounted, ahead of the pairing routes.
+        const guard = router.stack.findIndex((layer) => layer.handle === router.pairingLocalOnly);
+        const create = router.stack.findIndex((layer) => layer.route?.path === '/pairing' && layer.route.methods.post);
+        expect(guard).toBeGreaterThan(-1);
+        expect(guard).toBeLessThan(create);
+    });
+
     test('plugin uploads are disabled by default and filenames are restricted', () => {
         const original = process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS;
         delete process.env.YODAMAN_ALLOW_PLUGIN_UPLOADS;

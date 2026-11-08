@@ -63,7 +63,15 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
  *   which is the behaviour that existed before this function.
  * @returns {{maxPromptChars: number, maxEntryChars: number}}
  */
-function promptBudgetFor(effectiveContextTokens) {
+function promptBudgetFor(effectiveContextTokens, { override = process.env.YODAMAN_AGENT_PROMPT_CHARS } = {}) {
+    // YODAMAN_AGENT_PROMPT_CHARS replaces the computed budget when set; it was
+    // documented and named in the over-budget hint, but nothing read it here.
+    const forced = Number(override);
+    if (Number.isFinite(forced) && forced > 0) {
+        const maxPromptChars = Math.min(Math.floor(forced), MAX_PROMPT_CHARS);
+        return { maxPromptChars, maxEntryChars: clamp(Math.floor(maxPromptChars * ENTRY_SHARE), MIN_ENTRY_CHARS, MAX_ENTRY_CHARS) };
+    }
+
     const tokens = Number(effectiveContextTokens);
     if (!Number.isFinite(tokens) || tokens <= 0) {
         return { maxPromptChars: MIN_PROMPT_CHARS, maxEntryChars: MIN_ENTRY_CHARS };

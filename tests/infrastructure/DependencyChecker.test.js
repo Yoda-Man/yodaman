@@ -87,6 +87,14 @@ describe('Health self-heal coverage', () => {
         expect(code).not.toContain("'/bin/sh'");
     });
 
+    test('the desktop startup screen installs through Repair, not the removed route', () => {
+        // Its Install buttons posted to /api/health/install for months after
+        // that route was removed, so every click was a 404.
+        const main = fs.readFileSync(path.resolve(__dirname, '../../electron/main.js'), 'utf8');
+        expect(main).not.toContain('/api/health/install');
+        expect(main).toContain("postJson('/api/setup/repair')");
+    });
+
     test('GET /health reports openspec as a first-class check', () => {
         expect(restControllerSource).toContain('openspec: enrich(checks.openspec)');
     });

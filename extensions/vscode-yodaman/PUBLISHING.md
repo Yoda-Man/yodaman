@@ -9,11 +9,9 @@ npm install
 npm run package
 ```
 
-This creates:
-
-```text
-vscode-yodaman-0.4.4.vsix
-```
+This creates `vscode-yodaman-<version>.vsix`, named from `version` in
+`package.json` (currently `vscode-yodaman-0.6.4.vsix`). `vscode:prepublish` runs
+`npm run lint` first.
 
 ## Publish
 

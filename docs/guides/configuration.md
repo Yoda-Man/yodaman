@@ -27,7 +27,7 @@ Use absolute paths. The API validates submitted paths and normalizes them before
 
 ### `settings`
 
-Each setting can also be overridden by an environment variable named after it (`allowPluginUploads` → `YODAMAN_ALLOW_PLUGIN_UPLOADS`). An environment value wins over `config.json`; `true`/`false` become booleans and `allowedCommands` takes a comma-separated list.
+Settings can be changed in the app, or through `PUT /api/settings`, only from this computer: a device holding a pairing token cannot change them. Each setting can also be overridden by an environment variable named after it (`allowPluginUploads` → `YODAMAN_ALLOW_PLUGIN_UPLOADS`). An environment value wins over `config.json`; `true`/`false` become booleans and `allowedCommands` takes a comma-separated list.
 
 | Key | Default | Description |
 | --- | --- | --- |
@@ -37,7 +37,7 @@ Each setting can also be overridden by an environment variable named after it (`
 | `allowAgentCommands` | `false` | Enables agent shell command execution. Keep disabled except during trusted local support sessions. |
 | `allowSelfHealInstall` | `false` | Lets **Repair** on the Dashboard run the npm and pip installs for Context Expert, Graphify and OpenSpec (never Ollama, never sudo), from this computer only. |
 | `allowedCommands` | `[]` | Extra executable names the agent may run, on top of the built-in allowlist. Bare names only. |
-| `editorCommand` | `""` | How files open from search results and chat links. Empty or `system` uses the OS default app for the file type; an app bundle path opens that app; anything else is a command template such as `idea --line {line} {file}`. Can only be changed from this computer. |
+| `editorCommand` | `""` | How files open from search results and chat links. Empty or `system` uses the OS default app for the file type; an app bundle path opens that app; anything else is a command template such as `idea --line {line} {file}`. |
 
 ## Environment variables
 
@@ -53,6 +53,7 @@ Each setting can also be overridden by an environment variable named after it (`
 | `YODAMAN_LOG_MAX_BYTES` / `YODAMAN_LOG_MAX_FILES` | `5242880` / `3` | Log rotation size and number of rotated files kept. |
 | `YODAMAN_UPLOAD_ROOT` | `<os tmpdir>/yodaman-agent-uploads` | Where files attached to agent tasks are stored. |
 | `YODAMAN_CTX_ASK_TIMEOUT_MS` | `12000` | Timeout for the `ctx ask` call behind `POST /api/ask` before it falls back. |
+| `YODAMAN_AGENT_PROMPT_CHARS` | sized to the served context window | Sets the agent's prompt budget in characters instead (at most 120,000). |
 | `YODAMAN_WATCH_DEBOUNCE_MS` | `1500` | Debounce window for filesystem watcher reindex queueing. |
 | `YODAMAN_GRAPHIFY_BIN` | auto-detected | Graphify executable path. Without it YodaMan searches `PATH` and the user Python bin directories, then falls back to `graphify`. Set it when `graphifyy` is installed somewhere else. |
 | `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Timeout for Graphify build, query, explain, and path subprocesses. |

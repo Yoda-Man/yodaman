@@ -126,7 +126,7 @@ const project = z.string().describe(
 server.registerTool('yodaman_projects', {
     title: 'List indexed workspaces',
     description:
-        'Workspaces YodaMan has indexed, with whether each is indexed and how fresh it is. '
+        'Workspaces YodaMan knows about, with whether each is indexed and how many files it holds. '
         + 'Call this first — every other tool needs an absolute workspace path.',
     inputSchema: {}
 }, async () => {
@@ -152,7 +152,7 @@ server.registerTool('yodaman_search', {
         activeFile: z.string().optional().describe(
             'File currently being worked on. Boosts results near it in the dependency graph.'
         ),
-        top: z.number().int().min(1).max(50).optional().describe('Max results (default 10).')
+        top: z.number().int().min(1).max(50).optional().describe('Max results (default 15).')
     }
 }, async ({ query, project: path, activeFile, top }) => {
     const params = new URLSearchParams({ query, project: path });

@@ -1,8 +1,13 @@
 const fs = require('fs');
-const path = require('path');
 const logger = require('./Logger');
 
-const SESSIONS_FILE = path.join(__dirname, '../../sessions.json');
+const { dataFile, prepareDataDir } = require('./DataPaths');
+
+// The data folder, not the install folder: upgrades replace the install, and a
+// signed macOS app cannot write inside itself. prepareDataDir copies an older
+// install's sessions.json across first.
+prepareDataDir();
+const SESSIONS_FILE = dataFile('sessions.json');
 
 /**
  * SessionStore (Infrastructure Layer)

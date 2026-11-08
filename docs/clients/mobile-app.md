@@ -1,45 +1,56 @@
 # YodaMan Mobile Companion
 
-The mobile companion should be a focused oversight client for YodaMan, not a full code editor.
+The mobile companion is a focused oversight client for YodaMan, not a full code editor.
 
 ## Primary Workflows
 
-- Check whether the local or paired runtime is online.
+The app has six tabs: Connect, Ask, Stardust, Impact, Tasks, and Approvals.
+
+- Check whether the paired runtime is online, with Context Expert, Graphify, OpenSpec, and Ollama status and workspace readiness.
 - Select an indexed project.
 - Ask questions about indexed projects.
 - Search code semantically.
+- View the Stardust board (active OpenSpec changes) and spec drift, read-only, and run diagnostics.
+- Analyse the blast radius of a file before changing it.
 - Monitor persisted agent task timelines.
 - Inspect full task event details.
 - Cancel active agent tasks.
-- Approve or reject proposed changes.
-- Receive an in-app alert when refreshed approvals need attention.
+- Approve or reject proposed changes, with a confirmation dialog and the change's impact shown.
 
-## Current Scaffold
+Pull to refresh reloads the Connect, Stardust, Tasks, and Approvals tabs. The app does not notify you of new approvals; refresh the Approvals tab to see them.
 
-The initial scaffold lives in `apps/mobile`.
+## Current App
 
-It uses Expo and React Native, with a small API client for:
+The app lives in `apps/mobile` (`App.js`).
+
+It uses Expo and React Native. Its API client (`apps/mobile/src/api/yodamanClient.js`) wraps the shared client in `shared/yodamanClient.js`; the app calls:
 
 - `GET /api/status`
+- `GET /api/health`
+- `GET /api/readiness`
 - `GET /api/projects`
 - `POST /api/ask`
 - `GET /api/search`
-- `POST /api/agent/approve`
-- `POST /api/agent/cancel`
+- `GET /api/stardust/board`
+- `GET /api/stardust/drift`
+- `GET /api/stardust/diagnose`
+- `GET /api/stardust/compose`
 - `GET /api/agent/tasks`
 - `GET /api/agent/tasks/:taskId/events`
+- `POST /api/agent/cancel`
 - `GET /api/agent/pending-approvals`
-- `GET /api/policy`
-- `GET /api/audit`
+- `POST /api/agent/approve`
+
+Connecting a phone to your machine is covered in [Linking YodaMan Mobile To Your Machine](mobile-linking.md).
 
 ## Runtime Follow-Up
 
-The mobile app can now select projects, route ask/search calls to a project, inspect recent task timelines, open full task event details, cancel active tasks, and use the approval inbox. A richer production version should add one of the following:
+The mobile app polls on demand. A richer production version should add one of the following:
 
 - a task event relay keyed by user/session
 - WebSocket support for multi-client task subscriptions
 - push notifications for pending approvals
 
-The recommended next runtime addition is native push notification delivery or WebSocket subscriptions for live mobile task timelines.
+The recommended next runtime addition is native push notification delivery or WebSocket subscriptions for live mobile task timelines. (The runtime's only WebSocket today is `/api/stardust/live`, for OpenSpec board updates.)
 
 Native push notifications require Expo notification dependencies, platform credentials, and store/provider setup. Those are intentionally left as the next account-backed phase rather than mocked locally.

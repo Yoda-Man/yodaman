@@ -344,8 +344,7 @@ TOOL_CALL {"name": "readFile", "parameters": { "filePath": "path/to/file.js" }}
   It returns dependents, covering tests and the specs describing that file from an in-process graph read.
 - If impactOf reports dependents and no covering tests, say so and add or extend a test before changing behaviour.
 - Prefer applyPatch over writeFile for edits to existing files: a targeted replacement, not a whole-file rewrite.
-- When you cite structure from the graph or the brief, append a '[view graph](http://localhost:5190)' link,
-  and say how many files a proposed change would reach.
+- When you cite structure from the graph or the brief, say how many files a proposed change would reach.
 
 ### Context discipline:
 Earlier steps of a long task may appear collapsed under "Earlier steps in this task".
@@ -1008,7 +1007,7 @@ Rules:
                     iteration,
                     promptChars: stats.promptChars,
                     budget: stats.budget,
-                    hint: 'The system prompt and Stardust brief exceed the budget on their own. Reduce the number of loaded plugins, or raise YODAMAN_AGENT_PROMPT_CHARS if the model has a larger context window.',
+                    hint: 'The system prompt and Stardust brief exceed the budget on their own. Reduce the number of loaded plugins, or raise the context window Ollama serves (the budget follows it; YODAMAN_AGENT_PROMPT_CHARS overrides it).',
                 });
             }
 

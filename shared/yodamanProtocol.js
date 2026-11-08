@@ -16,6 +16,8 @@ const TASK_EVENT_TYPES = Object.freeze({
     AWAITING_APPROVAL: 'awaiting_approval',
     TASK_CANCELLED: 'task_cancelled',
     FINAL_ANSWER: 'final_answer',
+    RESPONSE_TRUNCATED: 'response_truncated',
+    UPLOAD_ERROR: 'upload_error',
     ERROR: 'error'
 });
 

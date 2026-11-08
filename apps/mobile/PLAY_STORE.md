@@ -44,7 +44,7 @@ The current `eas.json` submits to the `internal` track first. Promote to closed/
 
 The phone cannot connect to `127.0.0.1` on your Mac. Use one of these:
 
-- Same Wi-Fi LAN: create a pairing payload from the desktop runtime, then set the app runtime URL to `http://<mac-lan-ip>:3090`.
-- Deep link: use the `yodaman://pair?url=...&token=...` payload from `POST /api/pairing`.
+- Same Wi-Fi LAN: start the runtime with `YODAMAN_HOST=0.0.0.0` (it binds `127.0.0.1` by default), create a pairing payload from the desktop runtime, then set the app runtime URL to `http://<mac-lan-ip>:3090`.
+- Pairing link: paste the `yodaman://pair?url=...&token=...` link from `POST /api/pairing` into the Runtime URL field and tap **Use pairing link**. The app does not open these links from outside; they are pasted.
 - Remote access: add a secure relay or tunnel in a later release.
 

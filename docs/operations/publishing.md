@@ -2,14 +2,20 @@
 
 ## Core npm Package
 
-The root package publishes the local runtime, backend, web build, CLI entrypoint, public assets, and docs needed by `yodaman`.
+The root package publishes the local runtime and CLI: `bin`, `dist` (the web build), `backend`, `shared`, `plugins` (minus its local `config.json`), `server.js`, `start.js`, `public`, `README.md`, `user_manual.md`, and `config.example.json` (the `files` list in `package.json`). Node.js 24 or newer is required (`engines`).
 
-Prepare and verify:
+Release work happens on the `dev` branch; the maintainer merges into `main` after a stable release.
+
+Move every version reference in one step, then add the new `CHANGELOG.md` entry by hand (the script deliberately leaves the changelog and the Homebrew formula alone):
 
 ```bash
-npm test -- --runInBand
-npm run build
-npm run release:smoke
+npm run version:bump -- <new-version>
+```
+
+Verify. `release:verify` is the gate: ship only when it exits 0. It chains `version:check`, `build`, `lint`, `test`, `test:coverage`, `audit:prod`, `audit:vendored`, `release:smoke`, `test:journeys`, `test:plugins`, `test:approval`, and `test:packaged`.
+
+```bash
+npm run release:verify
 npm pack --dry-run
 ```
 
@@ -18,6 +24,17 @@ Publish:
 ```bash
 npm publish
 ```
+
+### Homebrew
+
+The formula lives in `packaging/homebrew/yodaman.rb`. Its `url` and `sha256` are derived from the tarball actually published to npm, so regenerate it only after `npm publish`:
+
+```bash
+node scripts/brew-formula.js            # rewrite url and sha256
+node scripts/brew-formula.js --check    # verify without writing
+```
+
+Then copy the updated formula into the separate `homebrew-yodaman` tap repository.
 
 The root `.gitignore` excludes desktop, mobile, VS Code, dependency, and generated release artifacts so packaging and commits stay focused on source and release metadata.
 
@@ -32,7 +49,7 @@ cd extensions/vscode-yodaman
 npm run package
 ```
 
-The generated `vscode-yodaman-<version>.vsix` file is ignored by git and should be uploaded or attached to releases outside the source tree.
+`npm run package` runs `vsce package --no-dependencies`. The generated `vscode-yodaman-<version>.vsix` file is ignored by git; `npm run website:downloads` (from the repository root) copies it into `website/downloads/` alongside the desktop artifacts.
 
 Publish:
 
@@ -42,7 +59,7 @@ VSCE_PAT=<token> npm run publish
 
 Requirements:
 
-- Visual Studio Marketplace publisher matching `publisher` in `package.json`.
+- Visual Studio Marketplace publisher matching `publisher` in `extensions/vscode-yodaman/package.json` (`yodaman`).
 - Marketplace personal access token.
 
 Reference: VS Code's official publishing docs describe `vsce` as the packaging and publishing CLI for extensions, and `vsce publish` requires a Marketplace token if you are not already logged in.
@@ -58,7 +75,7 @@ cd apps/mobile
 npm run build:android
 ```
 
-Submit:
+Submit (the EAS `production` submit profile uploads to the Play `internal` track):
 
 ```bash
 npm run submit:android
@@ -75,27 +92,35 @@ Requirements:
 
 Reference: Expo's official EAS Submit docs require a Google service account key for Android submissions. Google Play's official App Signing docs describe upload keys as the keys used to sign app bundles before upload, while Google manages app signing keys through Play App Signing.
 
-## Desktop Clients
+## Apple App Store iOS App
 
-Desktop builds are produced from the root package with Electron Builder:
+The same Expo codebase ships to iOS as bundle identifier `com.yodaman.mobile`:
 
 ```bash
-npm run release:smoke
-npm run desktop:pack
-npm run desktop:dist
+cd apps/mobile
+npm run build:ios
+npm run submit:ios
 ```
+
+`npm run build:all` builds both platforms together. The account-side steps (EAS project link, store listings, hosted privacy policy) are listed in `apps/mobile/STORE_SUBMISSION.md`.
+
+## Desktop Clients
+
+Desktop builds are produced from the root package with Electron Builder (`electron-builder.json`), into `release/`:
+
+```bash
+npm run desktop:pack       # unpacked app directory only
+npm run desktop:dist       # host platform: dmg/zip (macOS), nsis/zip (Windows), AppImage/zip (Linux)
+npm run desktop:dist:all   # macOS arm64, then Windows and Linux x64
+```
+
+Both `dist` scripts build the web app, run `test:render` before packaging and `test:packaged` against the packaged app, and finish with `npm run website:downloads`, which copies the current version's artifacts into `website/downloads/`. A Windows installer cross-built on macOS or Linux is not publishable (electron-builder needs Wine for NSIS), so `website:downloads` skips Windows artifacts off a Windows host; build them on a native runner with `.github/workflows/release.yml` (manual dispatch or a `v*` tag).
 
 Generated installers, unpacked apps, and platform packages are ignored by git. Sign and notarize platform artifacts before publishing public downloads.
 
-## Knights Signing Reference
+## Android Signing
 
-The Knights app is Flutter-native. Its release flow:
-
-- `android/key.properties` stores release signing config.
-- `android/app/build.gradle.kts` loads `keyAlias`, `keyPassword`, `storeFile`, and `storePassword`.
-- `publish/build_bundle.sh` builds a signed app bundle and debug symbols.
-
-YodaMan Mobile is Expo-managed. The equivalent signing layer is EAS credentials:
+YodaMan Mobile is Expo-managed, so the signing layer is EAS credentials:
 
 - EAS can manage Android credentials remotely.
 - Existing keystores can be supplied through EAS local credentials if needed.

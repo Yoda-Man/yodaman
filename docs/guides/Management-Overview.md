@@ -17,7 +17,7 @@ YodaMan is a local-first workspace intelligence platform for software developers
 | **Pre-Installed Plugins** | CodeTrooper, Droid-Sweep, Grand Inquisitor, Lightsaber, Holocron VR, Graphify | ✅ Stable (0.6.4) |
 | **Legacy Plugin Support** | Auto-wraps onLoad/onEnable plugins | ✅ Stable (0.6.4) |
 | **Zip Plugin Upload** | Upload plugins as .zip files | ✅ Stable (0.6.4) |
-| **Centralized Settings** | All developer settings managed from UI | ✅ Stable (0.6.4) |
+| **Centralized Settings** | Security switches and the editor hand-off managed from the Settings dialog; environment variables can override them | ✅ Stable (0.6.4) |
 | **Desktop App** | Electron shell with managed runtime | ✅ Stable |
 | **VS Code Extension** | Editor-native agent access | ✅ Stable |
 | **Mobile Companion** | React Native app for monitoring and approvals | ⚠️ Beta |
@@ -27,43 +27,46 @@ YodaMan is a local-first workspace intelligence platform for software developers
 
 - **Version**: 0.6.4
 - **License**: MIT
-- **Runtime**: Node.js 18+ / Express
-- **Frontend**: React 18 + Vite + Tailwind CSS
-- **AI Backend**: Ollama (qwen3.5:9b minimum; larger models supported and recommended) + HuggingFace embeddings
+- **Runtime**: Node.js 24+ / Express
+- **Frontend**: React 19 + Vite + Tailwind CSS
+- **AI Backend**: Ollama (qwen3.5:9b minimum; larger models supported and recommended) + local HuggingFace embeddings via Context Expert
 - **Build Targets**: macOS (arm64), Windows (x64), Linux (x64)
-- **Test Coverage**: 30+ test suites, ~106 passing tests
-- **5 pre-installed plugins** (graphify, Lightsaber, CodeTrooper, Droid-Sweep, Grand Inquisitor)
+- **Tests**: Jest suites under `tests/`, run by `npm test` and gated by `npm run release:verify`
+- **6 pre-installed plugins** (graphify, Lightsaber, CodeTrooper, Droid-Sweep, Grand Inquisitor, Holocron VR)
 
 ## Project Structure
 
-The YodaMan ecosystem includes:
+The YodaMan ecosystem includes (locations relative to the parent `yodaman/` folder):
 
 | Component | Location | Maintainer |
 |-----------|----------|------------|
 | **Core Runtime** | `core/` | YodaMan Team |
 | **Lightsaber Plugin** | `lightsaber/` | Community |
 | **Holocron VR Plugin** | `Holocron VR/` | Community |
-| **VS Code Extension** | `extensions/vscode-yodaman/` | YodaMan Team |
-| **Mobile App** | `apps/mobile/` | YodaMan Team |
+| **VS Code Extension** | `core/extensions/vscode-yodaman/` | YodaMan Team |
+| **Mobile App** | `core/apps/mobile/` | YodaMan Team |
 
 ## Dependencies
 
 ### Runtime
-- Node.js 18+, Python 3.10+
-- Ollama (local LLM)
-- Context Expert CLI (`ctx`)
-- Graphify (`graphify` Python package)
+- Node.js 24+, Python 3.10+
+- Ollama (local LLM, the only model provider)
+- Context Expert CLI (`ctx`, npm package `yodaman-ctx` 1.3.4 or later)
+- Graphify (`graphify` command from the `graphifyy` Python package)
+- OpenSpec CLI (`openspec`, npm package `@fission-ai/openspec`)
 
-### NPM (9 production packages)
-- Express (web server)
-- React 18 (UI framework)
-- Vite (build tool)
+### NPM (8 production packages)
+- Express (web server), cors
+- ws (WebSocket)
 - simple-git (Git operations)
 - multer (file uploads)
 - chokidar (file watching)
+- @modelcontextprotocol/sdk and zod (MCP server)
+
+React, Vite and Tailwind are build-time dependencies bundled into `dist/`.
 
 ### Desktop Build
-- Electron 42
+- Electron 45
 - electron-builder
 
 ## Maintenance Requirements
@@ -77,27 +80,24 @@ The YodaMan ecosystem includes:
 ### Security Considerations
 - All data stays local — no cloud dependencies
 - Plugin permissions are validated against an allowlist
-- Agent file writes require human approval
-- Audit log tracks all tool calls
+- Every agent action that changes something requires human approval
+- Audit log records every tool call
 - Pairing token required for non-local clients (configurable)
 
-### Upgrade Path (0.2.2 → 0.4.8)
-- Backward compatible — no breaking API changes
-- Plugins from 0.2.2 continue to work; plugin.json `minYodaManVersion` must be ≤ 0.4.8
-- Legacy plugins (onLoad format) now auto-detected
-- Settings migrate automatically from env vars to config.json
+### Upgrades
+- See `UPGRADING.md` for version-to-version notes
+- Settings live in `config.json` in the user's data folder, outside the install, so upgrades keep them; environment variables override them at runtime
+- Plugins without an `execute()` (onLoad/onEnable format) are auto-wrapped as legacy plugins
 
 ## Key Metrics
 
 | Metric | Value |
 |--------|-------|
-| Lines of code (backend) | ~15,000 |
-| Lines of code (frontend) | ~8,000 |
-| Test suites | 30+ |
-| Published versions on npm | 13 |
-| Desktop build size (macOS) | 124 MB |
-| Desktop build size (Windows) | 107 MB |
-| Desktop build size (Linux) | 125 MB |
+| Lines of code (backend + shared) | ~14,700 |
+| Lines of code (frontend, `src/`) | ~11,200 |
+| Desktop download (macOS `.dmg`, arm64) | 135 MB |
+| Desktop download (Windows Setup `.exe`) | 132 MB |
+| Desktop download (Linux `.AppImage`) | 135 MB |
 
 ## Contact
 

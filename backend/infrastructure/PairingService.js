@@ -8,7 +8,7 @@ class PairingService {
     }
 
     createPairing(baseUrl) {
-        const runtimeUrl = baseUrl || this.getLanRuntimeUrl();
+        const runtimeUrl = this.reachableUrl(baseUrl);
         const token = crypto.randomBytes(24).toString('base64url');
         const expiresAt = new Date(Date.now() + this.ttlMs).toISOString();
 
@@ -51,6 +51,24 @@ class PairingService {
 
     revoke(token) {
         return this.tokens.delete(token);
+    }
+
+    /**
+     * The URL a phone can actually use. The desktop and Dashboard ask from this
+     * computer, so the URL they offer is a loopback one, which on the phone
+     * means the phone itself; swap in this machine's LAN address, same port.
+     */
+    reachableUrl(baseUrl) {
+        if (!baseUrl) return this.getLanRuntimeUrl();
+        let url;
+        try {
+            url = new URL(baseUrl);
+        } catch {
+            // Not a URL we can inspect; the caller's value is passed through as given.
+            return baseUrl;
+        }
+        if (!['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname)) return baseUrl;
+        return this.getLanRuntimeUrl(Number(url.port) || 3090);
     }
 
     getLanRuntimeUrl(port = 3090) {

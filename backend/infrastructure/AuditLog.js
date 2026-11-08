@@ -1,10 +1,10 @@
 const fs = require('fs');
-const path = require('path');
 const { db, useSqlite } = require('./Database');
+const { dataFile } = require('./DataPaths');
 const logger = require('./Logger');
 
-const AUDIT_FILE = path.join(__dirname, '../../audit-log.json');
-const AUDIT_JSONL_FILE = path.join(__dirname, '../../audit-log.jsonl');
+const AUDIT_FILE = dataFile('audit-log.json');
+const AUDIT_JSONL_FILE = dataFile('audit-log.jsonl');
 const MAX_ENTRIES = 500;
 
 class AuditLog {

@@ -60,6 +60,32 @@ describe('Stardust routes', () => {
         return { status: res.status, body: await res.json().catch(() => ({})) };
     };
 
+    test('the OpenSpec install action carries the Repair gate', async () => {
+        // It ran `npm install -g` for anyone who asked, while Repair, which
+        // installs the same package, is off by default.
+        const settings = require('../../backend/infrastructure/SettingsProvider');
+        const stardustWrapper = require('../../backend/stardust/StardustWrapper');
+        const install = jest.spyOn(stardustWrapper, 'install').mockResolvedValue({ success: true, stdout: '', stderr: '', code: 0 });
+        // Mocked, not saved: a saved setting would outlive this file in the worker.
+        const real = settings.get.bind(settings);
+        let allowed = false;
+        const get = jest.spyOn(settings, 'get').mockImplementation((key) => (key === 'allowSelfHealInstall' ? allowed : real(key)));
+        try {
+            const off = await post('/api/stardust/run', { action: 'install' });
+            expect(off.status).toBe(403);
+            expect(off.body.code).toBe('self_heal_install_disabled');
+            expect(install).not.toHaveBeenCalled();
+
+            allowed = true;
+            const on = await post('/api/stardust/run', { action: 'install' });
+            expect(on.status).toBe(200);
+            expect(install).toHaveBeenCalledTimes(1);
+        } finally {
+            install.mockRestore();
+            get.mockRestore();
+        }
+    });
+
     // ── H-1 regression guard ────────────────────────────────────────────
     describe('proposeChange rejects path traversal', () => {
         test.each([
