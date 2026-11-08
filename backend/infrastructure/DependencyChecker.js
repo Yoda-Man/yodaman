@@ -244,9 +244,8 @@ const SERVICES = {
         versionArgs: ['--version'],
         // Older yodaman-ctx releases lack the retrieval fixes YodaMan relies on;
         // below this, ctx is reported missing so setup and Repair install latest.
-        // shortcut: the published 1.3.3 reports `ctx --version` as 1.3.2 (built
-        // from a stale dist), so the floor is 1.3.2; raise it when ctx republishes.
-        minVersion: '1.3.2',
+        // 1.3.4, not 1.3.3: the published 1.3.3 reports itself as 1.3.2.
+        minVersion: '1.3.4',
         runningCheck: null,
         installUrl: CTX_INSTALL,
         installHint: { darwin: CTX_INSTALL, linux: CTX_INSTALL, win32: CTX_INSTALL },

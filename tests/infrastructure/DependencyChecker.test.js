@@ -158,6 +158,7 @@ describe('Context Expert minimum version', () => {
         expect(dependencyChecker.isOlder('1.1.0', '1.3.3')).toBe(true);
         expect(dependencyChecker.isOlder('1.3.2', '1.3.3')).toBe(true);
         expect(dependencyChecker.isOlder('1.3.3', '1.3.3')).toBe(false);
+        expect(dependencyChecker.isOlder('1.3.2', dependencyChecker.SERVICES.ctx.minVersion)).toBe(true);
         expect(dependencyChecker.isOlder('1.10.0', '1.3.3')).toBe(false);
         expect(dependencyChecker.isOlder('2.0', '1.3.3')).toBe(false);
         expect(dependencyChecker.isOlder('installed', '1.3.3')).toBe(false);

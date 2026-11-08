@@ -2,6 +2,13 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Context Expert 1.3.4 or later is required** (was 1.3.2). ctx 1.3.4 is the
+  same code as 1.3.3 (plus commander 15.1.0), rebuilt so `ctx --version` reports the right version,
+  which lets the minimum match the latest release.
+
 ## [0.6.3] - 2026-11-07
 
 ### Changed
