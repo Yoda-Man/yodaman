@@ -2,6 +2,22 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.6.3] - 2026-11-07
+
+### Changed
+- **YodaMan now requires Context Expert (`yodaman-ctx`) 1.3.2 or later.** An
+  older `ctx` is reported as missing, so setup and Repair install the latest
+  release instead of searching with an outdated one. (The published 1.3.3
+  reports its version as 1.3.2, so that is the floor until ctx republishes.)
+- The `yodaman-ctx` install command now allows the `tree-sitter-go` and
+  `tree-sitter-rust` install scripts. ctx 1.3 added both parsers, and npm 11
+  blocked their native builds, leaving Go and Rust files unparsed.
+- Holocron VR moves to 0.6.3 alongside YodaMan.
+
+### Fixed
+- The README badge said Node 22+ and the user manual said Node.js 18+; both now
+  say Node 24+, matching `engines`.
+
 ## [0.6.2] - 2026-10-30
 
 ### Changed

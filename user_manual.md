@@ -1,19 +1,19 @@
 # YodaMan User Manual
 
-Version: 0.6.2
+Version: 0.6.3
 
 YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, mandatory Graphify knowledge graph, plugin system, and local runtime API.
 
 ## 1. Setup
 
-**Prerequisites**: Node.js 18+, Python 3.10+, and [Ollama](https://ollama.com) installed.
+**Prerequisites**: Node.js 24+, Python 3.10+, and [Ollama](https://ollama.com) installed.
 
 **Model requirements**: For reliable coding-agent tool calls (structured JSON output), use a model with ≥14B parameters. Smaller models (7B–9B) may produce malformed tool calls or empty responses. Recommended models: `qwen2.5:14b`, `codestral:22b`, `deepseek-coder-v2`. Configure with `ctx config set default_model <model>`. See the Health dashboard for the currently configured model.
 
 Install Context Expert, OpenSpec, and Graphify, then install and start YodaMan from the project root:
 
 ```bash
-npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,onnxruntime-node
+npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node
 npm install -g @fission-ai/openspec@latest
 python3 -m pip install --user graphifyy
 cd yodaman/core
@@ -40,7 +40,7 @@ Workspaces are absolute local folder paths. Add them by pasting a path, browsing
 
 ### Graphify knowledge graph
 
-Graphify is mandatory in 0.6.2 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
+Graphify is mandatory in 0.6.3 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
 
 The Graph tab opens Graph Studio, a project-scoped visual workspace for Graphify outputs. Graph Studio embeds the generated mind-map and Vis.js canvas artifacts, shows graph freshness, renders the markdown report, and keeps graph query plus impact analysis actions close to the visualization.
 
@@ -264,7 +264,7 @@ npm run package
 
 ## 11. Project Stardust — OpenSpec Integration
 
-YodaMan 0.6.2 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow. The tab has eight views:
+YodaMan 0.6.3 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow. The tab has eight views:
 
 - **Board**: Real-time change overview with card-based navigation, task progress bars, validation health icons, and a side-by-side spec diff viewer. Select a change to review its proposed spec deltas grouped by operation (ADDED/MODIFIED/REMOVED/RENAMED), then validate or archive directly from the diff panel. The board updates live via WebSocket — file changes in `openspec/` push instantly.
 - **Drift**: Architecture drift detection comparing OpenSpec specs against the knowledge graph. Shows stale spec references (files cited in specs that no longer exist) and undocumented modules (load-bearing files no spec describes). Unique to YodaMan.

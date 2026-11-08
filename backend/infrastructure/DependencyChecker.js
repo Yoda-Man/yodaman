@@ -131,7 +131,7 @@ const { execFile, execFileSync } = require('child_process');
  * ONNX runtime). Older npm ignores the flag and runs them anyway.
  */
 const CTX_INSTALL = 'npm install -g yodaman-ctx '
-    + '--allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,onnxruntime-node';
+    + '--allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node';
 
 const PLATFORM_PATHS = {
     darwin: [
@@ -242,6 +242,11 @@ const SERVICES = {
     ctx: {
         executable: 'ctx',
         versionArgs: ['--version'],
+        // Older yodaman-ctx releases lack the retrieval fixes YodaMan relies on;
+        // below this, ctx is reported missing so setup and Repair install latest.
+        // shortcut: the published 1.3.3 reports `ctx --version` as 1.3.2 (built
+        // from a stale dist), so the floor is 1.3.2; raise it when ctx republishes.
+        minVersion: '1.3.2',
         runningCheck: null,
         installUrl: CTX_INSTALL,
         installHint: { darwin: CTX_INSTALL, linux: CTX_INSTALL, win32: CTX_INSTALL },
@@ -387,6 +392,18 @@ function parseVersion(stdout) {
     return last ? last.trim() : null;
 }
 
+/** True when version `a` is below `b`, comparing numeric parts; an unparseable `a` is not judged older. */
+function isOlder(a, b) {
+    const pa = String(a || '').split(/[.-]/).map(Number);
+    const pb = String(b).split('.').map(Number);
+    if (!/^\d/.test(String(a || ''))) return false;
+    for (let i = 0; i < pb.length; i++) {
+        const x = pa[i] || 0, y = pb[i] || 0;
+        if (x !== y) return x < y;
+    }
+    return false;
+}
+
 /**
  * Run the tool's version command.
  *
@@ -469,6 +486,14 @@ async function locate(name) {
             };
         }
         version = run.version;
+    }
+    if (svc.minVersion && isOlder(version, svc.minVersion)) {
+        return {
+            found: false, path: binPath, version,
+            error: `${name} ${version} is installed at ${binPath} but YodaMan needs ${svc.minVersion} or newer`,
+            installUrl: svc.installUrl,
+            installHint: (svc.installHint && svc.installHint[process.platform]) || svc.installUrl,
+        };
     }
     return {
         found: true, path: binPath, version,
@@ -700,4 +725,4 @@ function healthEntry(result, { includeRunning = false } = {}) {
 
 module.exports = {
     healthEntry, resetCtxModelCache, locate, check, checkAll, checkRunning, which, detectCtxModel, detectOllamaContext, resetOllamaContextCache,
-    isWeakModel, SERVICES, PLATFORM_PATHS };
+    isWeakModel, isOlder, SERVICES, PLATFORM_PATHS };
