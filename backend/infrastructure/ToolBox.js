@@ -273,6 +273,8 @@ class ToolBox {
                 changeName: { type: 'string', required: true, note: 'kebab-case' },
                 description: { type: 'string', required: false },
             }, 'Creates an OpenSpec change proposal. Call BEFORE implementing any significant feature.'],
+            ['specDraft', { project, maxCapabilities: { type: 'number', required: false, note: '1-12, default 6' } },
+                'Drafts baseline OpenSpec specs (one per top-level module) for a workspace with none, using the local model. Writes nothing: save each draft with writeFile.'],
             ['specValidate', { project, changeName: { type: 'string', required: true } },
                 'Validates a change against project specs. Run after implementing, before archiving.'],
             ['specArchive', { project, changeName: { type: 'string', required: true } },
@@ -756,6 +758,32 @@ class ToolBox {
             files: ['proposal.md', 'design.md', 'tasks.md'],
             message: `OpenSpec change "${changeName}" proposed. Review the files in openspec/changes/${changeName}/ and run specValidate when ready.`
         };
+    }
+
+    /**
+     * Draft baseline specs for a workspace that has none. Writes nothing: each
+     * draft reaches disk only through writeFile, which pauses for approval.
+     */
+    async specDraft({ project, maxCapabilities = 6 }) {
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        // Required lazily: SpecBaseline reaches SearchPipeline, which requires this module.
+        const { draftSpecs } = require('../stardust/SpecBaseline');
+        const result = await draftSpecs(projectPath, { maxCapabilities });
+        return {
+            ...result,
+            message: !result.available
+                ? `No drafts: ${result.reason}.`
+                : `${result.drafts.length} draft spec(s), nothing written yet. Save each with writeFile(filePath, content); every write pauses for approval.`
+                    + (result.openSpecInitialized ? '' : ' OpenSpec is not initialized here: run Init in Stardust first.'),
+        };
+    }
+
+    /** `openspec init` with no AI-tool files. Changes the workspace, so it is never read-only. */
+    async specInit({ project }) {
+        const projectPath = this.resolveAllowedPath(project || process.cwd());
+        const result = await stardustWrapper.init(projectPath, { tools: 'none' });
+        if (!result.success) throw new Error(`openspec init failed: ${result.stderr || result.stdout || 'unknown error'}`);
+        return { success: true, message: `OpenSpec initialized in ${projectPath}.` };
     }
 
     /**

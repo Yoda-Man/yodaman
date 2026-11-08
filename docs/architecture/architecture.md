@@ -1,59 +1,62 @@
 # YodaMan Architecture Overview
 
-This document describes the architecture of YodaMan v0.6.3, a local-first workspace intelligence platform for developers.
+This document describes the architecture of YodaMan v0.6.4, a local-first workspace intelligence platform for developers.
 
 > **Before deleting any file listed here:** a significant part of this system is
 > wired up at runtime rather than through imports — plugins are `require()`d from
 > a computed path, plugin UI components are named as strings in
 > `plugins/plugin.json`, and several files are entry points launched by a host
 > (Electron, VS Code, Expo, npm `bin`). Import-graph tools report all of it as
-> unused. See the "Never delete code just because nothing imports it" section in `AGENT.md`.
-> (This previously cited `core/docs/dead-code.md`, which does not exist.)
+> unused. See the "Never delete code just because nothing imports it" section in the
+> workspace `AGENT.md`, which is kept outside this repository.
 
 ## System Architecture
 
-YodaMan follows a **Clean Architecture** pattern with six layers:
+YodaMan is organised in six layers. Dependencies mostly point downward, but not
+strictly: `ToolBox` (infrastructure) calls `SearchPipeline` (core), and
+`GraphRanker` and `WorkspaceReadiness` call `SpecDrift` (Stardust).
 
 ```
 Frontend (React + Vite)
-    │  HTTP / SSE
+    │  HTTP, SSE, WebSocket (/api/stardust/live)
     ▼
-Interface Layer — RestController.js
+Interface Layer — RestController.js + routes/ (editor, git, graphify, stardust)
+                  + support/ (git, http, workspaces)
     │
     ▼
 Services Layer — fileUploadService, gitService, searchRouter
     │
     ▼
-Core Layer — AgentReasoningEngine, DefaultCodingSkill, QueueService,
-             ConversationBuffer, StardustBrief
+Core Layer — AgentReasoningEngine, ConversationBuffer, DefaultCodingSkill,
+             QueueService, SearchPipeline, SearchSummary, StardustBrief,
+             promptBudget
     │
     ▼
-Infrastructure Layer — ToolBox, ContextEngine, GraphifyService, Logger,
-                       AuditLog, SessionStore, TaskStore, SettingsProvider,
-                       PairingService, FileSystemWatcher, PluginAPI,
-                       CliOutput, Database, DependencyChecker,
-                       DependencyDoctor, GraphFacts, GraphRanker,
-                       GraphifyDoctor, ImpactAnalyzer, WorkspaceReadiness,
-                       OriginPolicy
+Infrastructure Layer — AuditLog, CliOutput, ContextEngine, DataPaths, Database,
+                       DependencyChecker, DependencyDoctor, EditorLauncher,
+                       FileSystemWatcher, GraphFacts, GraphRanker,
+                       GraphifyDoctor, GraphifyService, ImpactAnalyzer, Logger,
+                       McpClients, OllamaConfig, OriginPolicy, PairingService,
+                       PluginAPI, SessionStore, SettingsProvider, SetupPlanner,
+                       TaskStore, ToolBox, UninstallPlanner, WorkspaceReadiness
     │
     ▼
-Stardust Layer — StardustLive + StardustWrapper + SpecDrift
+Stardust Layer — SpecBaseline, SpecDrift, StardustLive, StardustWrapper
     │
     ▼
-External — Context Expert CLI (ctx), Graphify CLI, OpenSpec CLI,
-           Ollama, simple-git, Local File System
+External — Context Expert CLI (ctx, which runs models through Ollama),
+           Graphify CLI, OpenSpec CLI, Ollama, simple-git, local file system
 ```
+
+The diagram below shows which modules `require()` which, taken from the code.
+`Logger`, `DataPaths` and `CliOutput` are used by many modules and are left out
+to keep it readable.
 
 ```mermaid
 graph TD
-    subgraph Frontend
-        ReactUI[React UI]
-        Vite[Vite Build Tool]
-        FrontendDir[frontend/]
-    end
-
     subgraph Interface_Layer
         API[RestController]
+        Routes[routes: editor, git, graphify, stardust]
     end
 
     subgraph Services_Layer
@@ -64,91 +67,140 @@ graph TD
 
     subgraph Core_Layer
         Agent[AgentReasoningEngine]
+        ConvBuf[ConversationBuffer]
         DefaultSkill[DefaultCodingSkill]
         Queue[QueueService]
-        ConvBuf[ConversationBuffer]
-        StardustBrief[StardustBrief]
+        Pipeline[SearchPipeline]
+        Summary[SearchSummary]
+        Brief[StardustBrief]
+        Budget[promptBudget]
     end
 
     subgraph Infrastructure_Layer
-        Engine[ContextEngine]
-        Watcher[FileSystemWatcher]
         Tools[ToolBox]
+        Engine[ContextEngine]
         Graphify[GraphifyService]
-        Logger[Logger]
-        Audit[AuditLog]
-        Settings[SettingsProvider]
-        PluginAPI[PluginAPI]
-        Session[SessionStore]
-        Task[TaskStore]
-        Pairing[PairingService]
-        CliOutput[CliOutput]
-        Database[Database]
-        DepCheck[DependencyChecker]
-        DepDoctor[DependencyDoctor]
         GraphFacts[GraphFacts]
         GraphRanker[GraphRanker]
-        GraphifyDoc[GraphifyDoctor]
         Impact[ImpactAnalyzer]
         Readiness[WorkspaceReadiness]
-        OriginPolicy[OriginPolicy]
+        Watcher[FileSystemWatcher]
+        Audit[AuditLog]
+        Database[Database]
+        TaskStore[TaskStore]
+        Session[SessionStore]
+        Settings[SettingsProvider]
+        DepCheck[DependencyChecker]
+        DepDoctor[DependencyDoctor]
+        GraphifyDoc[GraphifyDoctor]
+        Setup[SetupPlanner]
+        PluginAPI[PluginAPI]
+        Origin[OriginPolicy]
+        Pairing[PairingService]
+        Editor[EditorLauncher]
+        Mcp[McpClients]
+        Ollama[OllamaConfig]
     end
 
     subgraph Stardust_Layer
-        StardustLive[StardustLive]
-        SpecDrift[SpecDrift]
-        StardustWrap[StardustWrapper]
+        Baseline[SpecBaseline]
+        Drift[SpecDrift]
+        Live[StardustLive]
+        Wrapper[StardustWrapper]
     end
 
-    subgraph External
-        Ctx[Context Expert CLI]
-        GFX[Graphify CLI]
-        OpenSpec[OpenSpec CLI]
-        Ollama[Ollama]
-        Git[simple-git]
-        FS[Local File System]
-    end
-
-    ReactUI -->|HTTP/SSE| API
-    FrontendDir --> ReactUI
-    API --> FileUpload
-    API --> GitService
-    API --> SearchRouter
     API --> Agent
-    API --> Queue
-    API --> Settings
     API --> Audit
-    SearchRouter --> QueryClass
-    SearchRouter --> GraphRanker
-    FileUpload --> FS
-    GitService --> Git
-    Agent --> Tools
-    Agent --> Engine
+    API --> Engine
+    API --> DepCheck
+    API --> DepDoctor
+    API --> Editor
+    API --> Watcher
+    API --> Graphify
+    API --> Mcp
+    API --> Ollama
+    API --> Origin
+    API --> Pairing
+    API --> Queue
+    API --> Pipeline
+    API --> Session
+    API --> Settings
+    API --> Setup
+    API --> Tools
+    API --> Readiness
+    API --> Routes
+    API --> FileUpload
+    API --> SearchRouter
+    Routes --> GitService
+    Routes --> Editor
+    Routes --> Settings
+    Routes --> Graphify
+    Routes --> GraphFacts
+    Routes --> Impact
+    Routes --> Pipeline
+    Routes --> Drift
+    Routes --> Live
+    Routes --> Wrapper
+    SearchRouter --> Pipeline
+    SearchRouter --> Summary
+    Summary --> Engine
+    Agent --> ConvBuf
     Agent --> DefaultSkill
+    Agent --> Engine
+    Agent --> DepCheck
+    Agent --> Graphify
+    Agent --> Impact
+    Agent --> Queue
+    Agent --> Pipeline
+    Agent --> Drift
+    Agent --> Brief
+    Agent --> TaskStore
+    Agent --> Tools
+    Agent --> Budget
     Queue --> Engine
-    Watcher --> Queue
-    Engine --> Ctx
-    Engine --> CliOutput
-    Tools --> FS
+    Queue --> Graphify
+    Pipeline --> GraphRanker
+    Pipeline --> Drift
+    Pipeline --> Tools
+    Brief --> GraphFacts
+    Brief --> Graphify
+    Brief --> Impact
+    Brief --> Drift
+    Tools --> Audit
     Tools --> Engine
-    Tools --> Git
-    Graphify --> GFX
-    Graphify --> GraphFacts
-    Graphify --> GraphRanker
-    Graphify --> Impact
-    Graphify --> GraphifyDoc
-    Impact --> GraphFacts
+    Tools --> Graphify
+    Tools --> Impact
+    Tools --> PluginAPI
+    Tools --> Pipeline
+    Tools --> Settings
+    Tools --> Baseline
+    Tools --> Drift
+    Tools --> Wrapper
+    Engine --> DepCheck
+    Graphify --> DepCheck
+    GraphFacts --> Graphify
+    GraphFacts --> Impact
+    GraphRanker --> Graphify
+    GraphRanker --> Impact
+    GraphRanker --> Drift
+    Impact --> Graphify
     Readiness --> Graphify
     Readiness --> Queue
+    Readiness --> Drift
+    Watcher --> Queue
+    Audit --> Database
+    TaskStore --> Database
     DepDoctor --> DepCheck
-    SpecDrift --> GraphFacts
-    StardustWrap --> DepCheck
-    StardustWrap --> OpenSpec
-    StardustLive --> Graphify
-    StardustLive --> ConvBuf
-    PluginAPI --> Tools
-    OriginPolicy --> Tools
-    OriginPolicy --> Settings
+    GraphifyDoc --> Graphify
+    Setup --> DepCheck
+    Baseline --> Engine
+    Baseline --> GraphFacts
+    Baseline --> Impact
+    Baseline --> Pipeline
+    Baseline --> Drift
+    Drift --> GraphFacts
+    Live --> Graphify
+    Wrapper --> DepCheck
 ```
 
 ## Directory Tree
@@ -157,106 +209,93 @@ graph TD
 core/
 ├── backend/
 │   ├── core/
-│   │   ├── AgentReasoningEngine.js     # Autonomous agent loop (ReAct pattern)
-│   │   ├── ConversationBuffer.js       # Agent conversation context buffer + history manager
-│   │   ├── DefaultCodingSkill.js       # Default coding guidelines injected into every task
-│   │   ├── QueueService.js             # Background indexing job manager
+│   │   ├── AgentReasoningEngine.js     # Agent loop: ctx ask → tool call → approval gate → result
+│   │   ├── ConversationBuffer.js       # The agent's transcript, bounded to a prompt budget
+│   │   ├── DefaultCodingSkill.js       # Standing coding guidance appended to every system prompt
+│   │   ├── QueueService.js             # FIFO queue of ctx index jobs, then a graph update
 │   │   ├── SearchPipeline.js           # THE search: Context Expert -> Graphify -> OpenSpec
-│   │   └── StardustBrief.js            # Stardust change summarisation + briefing engine
+│   │   ├── SearchSummary.js            # Local-model summary of search results, from those results only
+│   │   ├── StardustBrief.js            # What the workspace already knows, handed to the agent up front
+│   │   └── promptBudget.js             # Prompt size from the context window Ollama serves
 │   ├── infrastructure/
 │   │   ├── AuditLog.js                 # Tool-call audit trail
-│   │   ├── CliOutput.js                # CLI stdout cleanup / noise stripping
-│   │   ├── ContextEngine.js            # ctx CLI wrapper for search, ask, list, status
-│   │   ├── Database.js                 # SQLite / JSON fallback persistence layer
+│   │   ├── CliOutput.js                # Strips known noise lines from CLI output; summarises errors
+│   │   ├── ContextEngine.js            # ctx CLI wrapper: spawn, ask, project-name resolution
+│   │   ├── DataPaths.js                # Per-user data folder for config.json and yodaman.db
+│   │   ├── Database.js                 # Opens yodaman.db with node:sqlite; creates tables
 │   │   ├── DependencyChecker.js        # Cross-platform tool locator + health checker
-│   │   ├── DependencyDoctor.js         # Runtime dependency health report for CLI
+│   │   ├── DependencyDoctor.js         # `yodaman doctor` dependency report
 │   │   ├── EditorLauncher.js           # Opens a file at a line in the user's editor
-│   │   ├── FileSystemWatcher.js        # Chokidar-based file-change monitor
+│   │   ├── FileSystemWatcher.js        # Chokidar watcher that queues re-indexing
 │   │   ├── GraphFacts.js               # Workspace-wide structural graph queries
-│   │   ├── GraphRanker.js              # Semantic + structural hybrid search re-ranking
-│   │   ├── GraphifyDoctor.js           # Workspace graph health analysis
-│   │   ├── GraphifyService.js          # Knowledge graph build, query, and cache manager
+│   │   ├── GraphRanker.js              # Blends semantic rank with graph structure and spec coverage
+│   │   ├── GraphifyDoctor.js           # `yodaman doctor --graph` report
+│   │   ├── GraphifyService.js          # Graphify CLI wrapper: build, status, query, freshness
 │   │   ├── ImpactAnalyzer.js           # Blast-radius analysis for file changes
-│   │   ├── Logger.js                   # Structured JSON logging
-│   │   ├── OriginPolicy.js             # Cross-origin policy enforcement for remote access
-│   │   ├── PairingService.js           # LAN pairing token manager
-│   │   ├── PluginAPI.js                # Legacy plugin lifecycle API contract
+│   │   ├── Logger.js                   # Structured JSON logging to console and a rotated file
+│   │   ├── McpClients.js               # Which MCP clients read this workspace, and when
+│   │   ├── OllamaConfig.js             # Read and change the context window Ollama serves
+│   │   ├── OriginPolicy.js             # Blocks cross-site browser requests to the local runtime
+│   │   ├── PairingService.js           # Pairing tokens for non-local clients
+│   │   ├── PluginAPI.js                # API contract for legacy (onLoad/onEnable) plugins
 │   │   ├── SessionStore.js             # Chat message persistence
-│   │   ├── SettingsProvider.js         # Centralized settings backed by config.json
-│   │   ├── TaskStore.js                # Agent task state persistence
+│   │   ├── SettingsProvider.js         # Settings from config.json with YODAMAN_* env overrides
+│   │   ├── SetupPlanner.js             # Ordered install plan for missing dependencies
+│   │   ├── TaskStore.js                # Agent task records
 │   │   ├── ToolBox.js                  # Built-in tools + plugin loader + permission validation
-│   │   └── WorkspaceReadiness.js       # Multi-layer workspace readiness verdict
+│   │   ├── UninstallPlanner.js         # What removing YodaMan would delete, without deleting
+│   │   └── WorkspaceReadiness.js       # One readiness verdict from graph and index state
 │   ├── interfaces/
-│   │   ├── RestController.js           # All HTTP endpoints + SSE streams
+│   │   ├── RestController.js           # Mounts every HTTP route; agent task SSE stream
 │   │   ├── routes/
-│   │   │   ├── editorRoutes.js         # Open a workspace file in the user's editor
-│   │   │   ├── gitRoutes.js            # Git-related HTTP endpoints
-│   │   │   ├── graphifyRoutes.js       # Graph build, status, artifacts, queries
-│   │   │   └── stardustRoutes.js       # Stardust-related HTTP endpoints
+│   │   │   ├── editorRoutes.js         # /api/editor: open a file in the user's editor
+│   │   │   ├── gitRoutes.js            # /api/git
+│   │   │   ├── graphifyRoutes.js       # /api/graphify: build, status, artifacts, queries
+│   │   │   └── stardustRoutes.js       # /api/stardust: run, drift, compose, board, impact
 │   │   └── support/
-│   │       ├── git.js                  # Git helper utilities
-│   │       └── http.js                 # HTTP helper utilities
+│   │       ├── git.js                  # Git subprocess helpers (runGit, readGitContext)
+│   │       ├── http.js                 # Shared validation and JSON error helpers
+│   │       └── workspaces.js           # Workspace resolution and validation for route modules
 │   ├── services/
-│   │   ├── fileUploadService.js        # File upload handling (temp storage, validation)
-│   │   ├── gitService.js               # Git operations (history, heatmap, commit, branch)
+│   │   ├── fileUploadService.js        # Temp file uploads for Chat attachments
+│   │   ├── gitService.js               # Git reads via simple-git (history, heatmap, timeline)
 │   │   └── searchRouter.js             # /api/search endpoints over SearchPipeline
 │   └── stardust/
+│       ├── SpecBaseline.js             # Draft specs for a workspace with none (Draft Specs)
 │       ├── SpecDrift.js                # Architecture drift detection (spec vs. graph)
 │       ├── StardustLive.js             # Real-time WebSocket + chokidar change watcher
 │       └── StardustWrapper.js          # OpenSpec CLI subprocess wrapper
 ├── frontend/
-│   ├── FileUploader.jsx                # Drag-and-drop file upload component
-│   ├── voiceAgentBridge.js             # Voice recognition bridge + hotword detection
+│   ├── FileUploader.jsx                # Chat's attach-files button and file list
+│   ├── voiceAgentBridge.js             # Voice input for Chat, with optional "Hey Yoda" hotword
 │   └── voiceCommands.js                # SpeechRecognition wrapper + transcript normalizer
 ├── src/
 │   ├── App.jsx                         # Root layout + tab navigation
 │   ├── main.jsx                        # Vite entry point (React root)
 │   ├── api/
-│   │   └── api.js                      # HTTP client for all backend endpoints
-│   ├── components/
-│   │   ├── ActivityFeed.jsx            # Live file event slide-over drawer
-│   │   ├── AgentChatTab.jsx            # Chat + agent task UI with streaming
-│   │   ├── AppErrorBoundary.jsx        # React error boundary with reload UX
-│   │   ├── ChangeCard.jsx              # OpenSpec change card (task progress, validation icon)
-│   │   ├── ChangeImpactPanel.jsx       # Visual diff + blast-radius impact preview panel
-│   │   ├── ComposePanel.jsx            # Rich prompt composition panel for agent tasks
-│   │   ├── Dashboard.jsx               # System status overview dashboard
-│   │   ├── GitPanel.jsx                # Git history and commit browser
-│   │   ├── GraphStudio.jsx             # Graphify knowledge graph visualization
-│   │   ├── HealthDashboard.jsx         # Workspace health dashboard
-│   │   ├── HealthIndicator.jsx         # Health status badge/indicator
-│   │   ├── HolocronVrModal.jsx         # VR constellation modal (Three.js integration)
-│   │   ├── ImpactAnalysisTab.jsx       # Tabular impact analysis with fan-out depth control
-│   │   ├── LogsModal.jsx               # Structured log viewer
-│   │   ├── PipelineStrip.jsx           # CI/CD pipeline status strip with stage indicators
-│   │   ├── PluginAuthoringGuide.jsx    # In-app plugin authoring guide + template generator
-│   │   ├── PluginsWindow.jsx           # Plugin list, upload, enable/disable
-│   │   ├── ProjectList.jsx             # Workspace project list sidebar
-│   │   ├── SearchTrace.jsx             # Search result provenance trace + explanation view
-│   │   ├── SearchWindow.jsx            # Semantic search interface
-│   │   ├── SettingsModal.jsx           # Workspace + developer settings
-│   │   ├── SpecDiff.jsx                # Operation-grouped spec delta viewer (side-by-side)
-│   │   ├── SpecDriftPanel.jsx          # Architecture drift detection UI panel
-│   │   ├── Stardust.jsx                # OpenSpec/Stardust dashboard (Board/Drift/Diagnostics/Commands)
-│   │   ├── StardustKit.jsx             # Reusable Stardust UI kit (cards, badges, status icons)
-│   │   ├── StatusBar.jsx               # Bottom status bar
-│   │   ├── TrustDashboard.jsx          # Plugin trust + permission audit dashboard
-│   │   └── WelcomeModal.jsx            # First-run welcome/onboarding modal
+│   │   └── api.js                      # HTTP client for the backend endpoints
+│   ├── components/                     # React views (see Component Descriptions below)
+│   ├── holocron/                       # Holocron constellation: layout, scene, timeline, voice, WebXR
 │   ├── hooks/
 │   │   ├── useHealthCheck.js           # Reusable /api/health polling hook
 │   │   ├── useStardustLive.js          # WebSocket + useSyncExternalStore for Stardust
-│   │   └── useStardustPipeline.js      # Stardust pipeline state management hook
+│   │   └── useStardustPipeline.js      # Three-tool readiness state for Stardust, fetched once
 │   └── index.css                       # Global styles + custom scrollbar
+├── bin/                                # CLI entry points: yodaman, yodaman-mcp
 ├── plugins/                            # Dynamically loaded tool plugins
+├── public/                             # Static assets, in-app manual, vendored libraries
 ├── graphify-out/                       # Generated knowledge graph artifacts
 ├── electron/                           # Electron main process + preload
 ├── extensions/                         # VS Code extension
-├── apps/                               # React Native mobile app
-├── shared/                             # Client protocol definitions
-├── tests/                              # Test suites (mirrors backend structure)
-├── scripts/                            # Build, release, and protocol scripts
-├── dist/                               # Vite production build output
-├── website/                            # Marketing website
+├── apps/                               # React Native (Expo) mobile app
+├── shared/                             # Code shared by runtime and clients: protocol, client, tool capabilities, path lists
+├── tests/                              # Jest suites
+├── scripts/                            # Build, release, smoke-test and protocol scripts
+├── docs/                               # Architecture, API, guides
+├── packaging/                          # Homebrew formula
+├── website/                            # Marketing website and downloads
+├── dist/                               # Vite production build output (not committed)
+├── release/                            # electron-builder output (not committed)
 ├── server.js                           # Express server entry point
 ├── start.js                            # Dev startup script
 ├── package.json                        # Node.js dependencies
@@ -268,89 +307,112 @@ per-user data folder (`backend/infrastructure/DataPaths.js`), so upgrades keep t
 
 ## Layer Responsibilities
 
-### 1. Interface Layer (`backend/interfaces/RestController.js`)
-Handles all HTTP endpoints and SSE streams. Route groups:
-- **Project management**: `GET/POST/PUT/DELETE /api/projects`
-- **Chat & search**: `POST /api/ask`, `GET/POST /api/search`
-- **Agent tasks**: `POST /api/agent/task` (SSE stream), `POST /api/agent/approve`, `POST /api/agent/cancel`
-- **Plugins**: `GET/POST/DELETE /api/plugins`, `POST .../enable|disable`
-- **Git**: `GET /api/git/context|history|heatmap|branch|commit`
-- **Settings**: `GET/PUT /api/settings`
-- **Graphify**: `GET /api/graphify/status|report|map`, `POST .../build|query|explain|path|affected`
-- **Stardust**: `GET /api/stardust/status`, `POST /api/stardust/propose|validate|apply|archive`
-- **Health**: `GET /api/health`
-- **File upload**: `POST /api/upload/temp`, `DELETE /api/upload/temp/:fileId`
+### 1. Interface Layer (`backend/interfaces/`)
 
-Route modules are organised under `backend/interfaces/routes/`:
-- **gitRoutes.js** — Git-related HTTP endpoints (history, heatmap, branch, commit, context)
-- **stardustRoutes.js** — Stardust-related HTTP endpoints (propose, validate, apply, archive, status, live)
+`RestController.js` mounts every HTTP route under `/api`. Its first gate is
+`OriginPolicy.crossSiteGuard` (cross-site browser requests get 403). Then McpClients
+records MCP readers, and non-local clients must present a pairing token
+(`X-YodaMan-Token`) while `requirePairingToken` is on. Route groups:
+
+- **Projects**: `GET/POST/PUT/DELETE /api/projects`, `POST /api/reindex`
+- **Ask & search**: `POST /api/ask`; `GET /api/search`, `/api/search/code`, `/api/search/docs`, `/api/search/stream`
+- **Agent tasks**: `POST /api/agent/task` (SSE stream), `POST /api/agent/approve`, `POST /api/agent/cancel`, `GET /api/agent/pending-approvals`, `GET/DELETE /api/agent/tasks`, `GET /api/agent/tasks/:taskId/events`
+- **Plugins**: `GET/POST /api/plugins`, `DELETE /api/plugins/:name`, `GET /api/plugins/:name/status`, `POST /api/plugins/:name/enable|disable|open`
+- **Git**: `GET /api/git/context|history|heatmap|timeline|branch|commit`, `POST /api/git/branch|commit|pull|push`
+- **Graphify**: `GET /api/graphify/status|report|map|artifact|build/status`, `POST /api/graphify/build|query|explain|path|affected|tree`
+- **Stardust**: `POST /api/stardust/run` (`action`: `propose`, `validate`, `archive`, `list`, `init`, `install`, `diagnose`); `GET /api/stardust/drift|context|diagnose|board|spec|compose`, `GET /api/stardust/deltas/:name`, `GET /api/stardust/change-impact/:name`, `PUT /api/stardust/validation/:name`; WebSocket `/api/stardust/live`
+- **Editor**: `GET /api/editor/options|preview`, `POST /api/editor/open`
+- **Settings & policy**: `GET/PUT /api/settings`, `GET /api/policy`, `GET/POST /api/ctx/config`, `GET/POST /api/ollama/context`
+- **Health & setup**: `GET /api/health|readiness|status|check`, `GET /api/setup/plan`, `POST /api/setup/repair`, `GET /api/desktop/diagnostics`, `GET /api/diagnostics/run`
+- **Pairing**: `GET/POST /api/pairing`, `POST /api/pairing/revoke`
+- **Chat sessions, audit & logs**: `GET/DELETE /api/sessions`, `GET/DELETE /api/audit`, `GET /api/logs`, `POST /api/logs/client-error`, `GET /api/mcp/clients`
+- **File upload**: `POST /api/upload/temp`, `DELETE /api/upload/temp/:fileId`, `POST /api/upload/attach`, `GET /api/upload/task/:taskId/files`
+
+Route modules under `backend/interfaces/routes/`:
+- **editorRoutes.js** — `/api/editor` (open a file at a line, editor options and preview)
+- **gitRoutes.js** — `/api/git`; reads go through gitService, writes run git directly
+- **graphifyRoutes.js** — `/api/graphify`; every handler delegates to GraphifyService
+- **stardustRoutes.js** — `/api/stardust`: the `run` action dispatcher, drift, compose, change impact, spec and board views
 
 Support modules under `backend/interfaces/support/`:
-- **http.js** — HTTP helper utilities (request parsing, response formatting, SSE helpers)
-- **git.js** — Git helper utilities (path validation, diff formatting, branch resolution)
+- **http.js** — shared input validation and errors: `jsonError`, `validateString`, `validateProjectId`, `resolveUserPath`, `isLocalRequest`
+- **git.js** — git subprocess helpers: `runGit`, `readGitContext`
+- **workspaces.js** — workspace resolution and validation shared by the route modules
 
 ### 2. Services Layer (`backend/services/`)
 
 | Module | File | Purpose |
 |--------|------|---------|
-| **fileUploadService** | `fileUploadService.js` | File upload handling with Multer. Validates file types and size (5 MB max), stores temp files with TTL-based cleanup (1 hour), manages task-file associations. Accepted extensions: `.dart`, `.js`, `.ts`, `.json`, `.yaml`, `.md`, `.log`, `.txt`. |
-| **gitService** | `gitService.js` | Git operations via simple-git. Provides history, commit details, branch listing, heatmap data, and file context with workspace-path safety validation. All paths are validated to ensure they resolve within the workspace. |
+| **fileUploadService** | `fileUploadService.js` | Temp uploads for Chat attachments, with Multer. Accepts `.dart`, `.js`, `.ts`, `.json`, `.yaml`, `.md`, `.log`, `.txt` up to 5 MB, deletes temp files after 1 hour, and links files to tasks. |
+| **gitService** | `gitService.js` | Git reads via simple-git: commit history, blame, change frequency, heatmap data, the timeline for Holocron's history slider, commit diffs and branch info. |
 | **searchRouter** | `searchRouter.js` | HTTP endpoints for search (`/api/search`, `/code`, `/docs`, `/stream`). Each calls `SearchPipeline.search` with a retrieval mode and shapes the response; it holds no search logic of its own. `/stream` then hands the same results to `SearchSummary`, which has the local model summarise them. |
 
 ### 3. Core Layer (`backend/core/`)
 
-**AgentReasoningEngine**: The autonomous agent loop. Manages multi-step reasoning (ReAct pattern):
-1. Receives task with Graphify context attached
-2. Loops: ask Context Expert → parse tool call → execute tool → append result → repeat
-3. File writes pause for human approval (SSE event → UI diff → approve/reject)
-4. Streams events: `task_started`, `tool_start`, `awaiting_approval`, `tool_end`, `final_answer`
+**AgentReasoningEngine**: The agent loop.
+1. Builds a `StardustBrief` for the task: what the graph, the specs and drift say about the files involved
+2. Loops for at most 10 steps: send the transcript to Context Expert (`ctx ask`) → parse up to 5 tool calls → run each → append the results
+3. Any tool that changes something (`requiresApproval` in `shared/toolCapabilities.js`) pauses for the user: the UI shows the diff and the ImpactAnalyzer blast radius, and nothing is written unless it is approved
+4. Streams events over SSE: `task_started` (sent by RestController), `tool_start`, `awaiting_approval`, `tool_end`, `final_answer`, `response_truncated`, `task_cancelled`, `error`
 
-**ConversationBuffer**: Agent conversation context buffer and history manager. Maintains the sliding window of conversation turns sent to the LLM, trimming older messages when the token budget is exceeded. Persists conversation history via SessionStore for cross-session continuity. Provides context injection hooks for Graphify results and Stardust change briefs.
+A "Draft baseline specs" task (the Stardust **Draft Specs** button) skips the tool loop: it calls SpecBaseline, then puts `openspec init` (if needed) and each drafted spec through the same approval gate.
 
-**DefaultCodingSkill**: A string constant injected into every agent task as a system prompt. Encodes standard coding guidelines: surface assumptions and tradeoffs, prefer smallest change, keep edits surgical, verify with tests/builds, use Graphify impact analysis for risky edits, remove only self-created dead code, ask before editing when unclear.
+**ConversationBuffer**: The agent's transcript, bounded. `ctx ask` is stateless, so the whole conversation is re-sent every step; the buffer keeps it within a budget so the prompt does not grow quadratically or exceed the operating system's argument-size limit. It lives in memory for one task.
 
-**QueueService**: Manages background indexing jobs. Wraps `ctx index` subprocess. Deduplicates queued paths. Indexes each workspace under a unique name (`ContextEngine.indexNameFor`), so two folders with the same name can both be indexed.
+**DefaultCodingSkill**: The standing coding guidance appended to every system prompt: surface assumptions, prefer the smallest change, keep edits surgical, verify with tests or builds, check drift and impact before risky edits.
+
+**QueueService**: A FIFO queue of indexing jobs. Runs `ctx index` for each queued workspace, skipping paths already queued, under a unique index name (`ContextEngine.indexNameFor`) so two folders with the same name can both be indexed. After indexing it starts a Graphify update build.
 
 **SearchPipeline**: The only place a search is assembled. Context Expert retrieves, duplicates and generated or missing files are dropped, Graphify ranks, OpenSpec tags, and the result reports which of the three contributed (`pillars`). See [Search Flow](#search-flow).
 
-**StardustBrief**: Stardust change summarisation and briefing engine. Reads OpenSpec change proposals and distils them into concise briefs injected into the agent's conversation context. Extracts affected files, acceptance criteria, and validation status so the agent understands the current change without parsing raw spec files.
+**SearchSummary**: The summary under a search. The local model (the one Context Expert is configured with) answers the query from the pipeline's results only, citing them; it never retrieves on its own.
+
+**StardustBrief**: What the workspace already knows, handed to the agent before it starts: graph facts and blast radius for the files the task concerns, the specs that describe them, and drift.
+
+**promptBudget**: How much prompt the agent may use, worked out from the context window Ollama is actually serving rather than a fixed size.
 
 ### 4. Infrastructure Layer (`backend/infrastructure/`)
 
 | Module | File | Purpose |
 |--------|------|---------|
-| **ToolBox** | `ToolBox.js` | Built-in tools + plugin loader + permission validation. Loads `.js` files from `plugins/` directory. Validates against permission allowlist. Its `searchCode` tool is the search pipeline; raw retrieval (`contextExpertSearch`) is private to the pipeline. |
-| **ContextEngine** | `ContextEngine.js` | Wraps `ctx` CLI for search, ask, list, status operations. Handles subprocess spawning and JSON output parsing. Output passes through CliOutput for noise removal. Maps a workspace path to its ctx project name, and never to a different project that shares the folder name. |
+| **ToolBox** | `ToolBox.js` | Built-in agent tools, plugin loader and permission validation. Loads `.js` files from `plugins/` and checks their permissions against `PLUGIN_PERMISSION_ALLOWLIST`. Commands run only from an executable allowlist, via `execFile` with no shell. Its `searchCode` tool is the search pipeline; raw retrieval (`contextExpertSearch`) is private to the pipeline. Records every tool call in AuditLog. |
+| **ContextEngine** | `ContextEngine.js` | Spawns the `ctx` CLI (`ask`, `list`, and any command through `execute`/`executeJson`) and parses its JSON output; answers pass through CliOutput. Maps a workspace path to its ctx project name, and never to a different project that shares the folder name. Stops running ctx processes on shutdown. |
 | **EditorLauncher** | `EditorLauncher.js` | Opens a file at a line in the user's editor: the OS default for the file type, a chosen app, or any command template (`{file}`, `{line}`, `{column}`). Never runs a shell. |
-| **GraphifyService** | `GraphifyService.js` | Builds and queries the knowledge graph. Wraps Graphify CLI. Manages graph cache freshness. Provides `query()`, `build()`, `freshness()`, `explain()`, `path()`, `affected()`. |
-| **Logger** | `Logger.js` | Structured JSON logging with levels (debug, info, warn, error). Logs to file and console. Includes correlation IDs for request tracing. |
-| **AuditLog** | `AuditLog.js` | Records every tool call with parameters, result summary, and duration. Backed by SQLite or JSON file. Queryable by tool name, date range, or user action. |
-| **SessionStore** | `SessionStore.js` | Persists chat messages and agent conversation state. Supports message search and session export. |
-| **TaskStore** | `TaskStore.js` | Persists agent task state including status, progress, and final results. Enables task resumption across restarts. |
-| **SettingsProvider** | `SettingsProvider.js` | Centralised settings manager backed by `config.json`. Provides typed getters/setters with defaults. Notifies subscribers on change. |
-| **PairingService** | `PairingService.js` | LAN pairing token manager. Generates time-limited tokens (24h TTL) for remote API access. Validates tokens on each request. |
-| **FileSystemWatcher** | `FileSystemWatcher.js` | Chokidar-based file-change monitor. Watches configured directories, debounces events, and feeds change notifications to QueueService for re-indexing. |
-| **PluginAPI** | `PluginAPI.js` | Legacy plugin lifecycle API contract. Provides `fetch`, `log`, `ui.*`, `worker.*`, `config.*` methods to plugins using the `onLoad`/`onEnable` pattern. |
-| **CliOutput** | `CliOutput.js` | Strips ANSI escape codes, progress bars, and other noise from CLI subprocess stdout/stderr before passing to consumers. |
-| **Database** | `Database.js` | SQLite / JSON fallback persistence layer. Auto-selects SQLite when available, falls back to JSON files. Provides a unified CRUD interface. |
-| **DependencyChecker** | `DependencyChecker.js` | Cross-platform tool locator and health checker. Verifies Node.js, Python, ctx, Graphify, OpenSpec, Ollama availability. Reports versions and paths. |
-| **DependencyDoctor** | `DependencyDoctor.js` | Runtime dependency health report generator. Runs all checks and produces a structured report for CLI and dashboard. Reads graph.json directly for fast analysis. |
-| **GraphFacts** | `GraphFacts.js` | Workspace-wide structural graph queries. Computes degree centrality, dependency chains, orphan detection, and cross-module coupling metrics. |
-| **GraphRanker** | `GraphRanker.js` | Semantic + structural hybrid search re-ranking. Blends embedding similarity scores with graph structure signals (PageRank, dependency distance). |
-| **GraphifyDoctor** | `GraphifyDoctor.js` | Workspace graph health analysis. Detects broken edges, orphan nodes, stale cache entries, and graph build errors. |
-| **ImpactAnalyzer** | `ImpactAnalyzer.js` | Blast-radius analysis for file changes. Reads `graph.json` directly (millisecond parsing) to answer "if I change this file, what else is affected?" Computes dependency fan-out up to configurable depth (default 2 hops). Identifies whether impacted files have test coverage. Runs synchronously during agent approval prompts. |
-| **WorkspaceReadiness** | `WorkspaceReadiness.js` | Multi-layer readiness verdict collapsing index staleness, graph build state, and spec state into a single grade: `ready`, `stale`, `building`, or `unindexed`. Prevents developers from acting on stale answers. Overall verdict is the weakest layer. |
-| **OriginPolicy** | `OriginPolicy.js` | Cross-origin policy enforcement for remote access. Validates request origins against configured allowlist. Integrates with PairingService for token-bearing requests. Configurable per-environment (development, LAN, production). |
+| **GraphifyService** | `GraphifyService.js` | Wraps the Graphify CLI: `build()`, `status()`, `freshness()`, `query()`, `explain()`, `pathBetween()`, `affected()`. Tracks whether the graph is older than the source. |
+| **Logger** | `Logger.js` | Structured JSON logs (`info`, `warn`, `error`) to the console and `~/.yodaman/logs/runtime.log`, rotated at 5 MB with 3 old files kept (`YODAMAN_LOG_DIR`, `YODAMAN_LOG_MAX_BYTES`, `YODAMAN_LOG_MAX_FILES`). A `requestId` middleware tags each request and logs it as `http_request`. |
+| **AuditLog** | `AuditLog.js` | Records every tool call: tool, status, duration, sanitised parameters, and a result summary or the error. Stored in SQLite (`audit_logs`) when available, otherwise a JSON file; the in-memory list keeps the latest 500, returned newest first. |
+| **SessionStore** | `SessionStore.js` | Chat messages per workspace, in a JSON file: read, append, clear. |
+| **TaskStore** | `TaskStore.js` | Agent task records in SQLite or a JSON file: list, get, upsert, clear, prune. |
+| **SettingsProvider** | `SettingsProvider.js` | Settings from `config.json` in the data folder, with defaults and `YODAMAN_*` environment overrides (`allowPluginUploads` → `YODAMAN_ALLOW_PLUGIN_UPLOADS`). `drift()` lists security settings changed from their defaults, which the server logs at startup. |
+| **PairingService** | `PairingService.js` | Pairing tokens for non-local clients such as the mobile app, valid for 24 hours. Checked on every non-local request while `requirePairingToken` is on (the default). |
+| **FileSystemWatcher** | `FileSystemWatcher.js` | Watches workspace folders with chokidar, ignoring generated, vendored and VCS paths, and queues a re-index in QueueService when files change. |
+| **PluginAPI** | `PluginAPI.js` | The API handed to legacy plugins (Holocron VR style) that use `onLoad`/`onEnable` instead of `execute`: `fetch`, `log`, `ui`, `worker`, `config`. |
+| **CliOutput** | `CliOutput.js` | Cleans CLI output shown to users: drops lines matching known tip and banner patterns (falling back to the raw text if nothing would be left), and summarises error output. |
+| **DataPaths** | `DataPaths.js` | Where the user's data lives: `config.json` and `yodaman.db` in `~/Library/Application Support/YodaMan` (macOS), `%APPDATA%\YodaMan` (Windows) or `$XDG_CONFIG_HOME/YodaMan`, falling back to `~/.config/YodaMan` (Linux). `YODAMAN_DATA_DIR` moves it. Migrates data left next to the code by older versions. |
+| **Database** | `Database.js` | Opens `yodaman.db` with Node's built-in SQLite (`node:sqlite`) and creates the `tasks` and `audit_logs` tables. Exports `db` and `useSqlite`; when SQLite is unavailable, TaskStore and AuditLog fall back to JSON files. |
+| **DependencyChecker** | `DependencyChecker.js` | Finds Ollama, Context Expert, Graphify and OpenSpec on PATH and in each platform's usual install folders (Electron apps get a minimal PATH), reports their versions, checks Ollama is responding, and reports a ctx older than the minimum version as missing. |
+| **DependencyDoctor** | `DependencyDoctor.js` | Turns `DependencyChecker.checkAll()` into the `yodaman doctor` report. |
+| **GraphFacts** | `GraphFacts.js` | Workspace-wide graph queries: orphan files, test coverage by file, the most central files, entry-point detection. |
+| **GraphRanker** | `GraphRanker.js` | Blends Context Expert's semantic rank with Graphify structure (proximity, centrality) and OpenSpec spec coverage. Default weights: semantic 0.50, proximity 0.20, centrality 0.15, spec coverage 0.15. |
+| **GraphifyDoctor** | `GraphifyDoctor.js` | The `yodaman doctor --graph` report: per workspace, whether a graph exists, its build state, node and edge counts, orphaned nodes and the most complex file. |
+| **ImpactAnalyzer** | `ImpactAnalyzer.js` | Blast radius for one file, from the Graphify graph: what depends on it, up to a chosen depth (default 2 hops), and whether any test covers it. Runs at every agent approval prompt. |
+| **McpClients** | `McpClients.js` | Records which MCP clients have read this workspace, and when, so the user can see who looked. |
+| **OllamaConfig** | `OllamaConfig.js` | Reads and changes the context length Ollama serves, which defaults to a small window on many machines. |
+| **SetupPlanner** | `SetupPlanner.js` | Turns a dependency check into an ordered install plan and runs it (`yodaman setup`, the Dashboard's Repair). |
+| **UninstallPlanner** | `UninstallPlanner.js` | Lists what removing YodaMan would delete, without deleting anything (`yodaman uninstall`). |
+| **WorkspaceReadiness** | `WorkspaceReadiness.js` | One verdict per workspace from its graph state (GraphifyService) and index state (QueueService): the weakest of `missing`, `unindexed`, `building`, `stale`, `ready`. For a single workspace it can add spec coverage from SpecDrift. |
+| **OriginPolicy** | `OriginPolicy.js` | Rejects cross-site browser requests: an `Origin` that is not `localhost`, `127.0.0.1` or `[::1]`, or `Sec-Fetch-Site: cross-site`, gets 403 before any route runs. Also supplies the CORS origin rule. Requests without an `Origin` (CLI, mobile) pass on to the pairing-token check. |
 
 ### 5. Stardust Layer (`backend/stardust/`)
 
-The Stardust layer integrates YodaMan with OpenSpec, an external spec-driven change management CLI. It provides three capabilities:
+The Stardust layer connects YodaMan to OpenSpec, an external spec-driven change management CLI. It provides four capabilities:
 
 | Module | File | Purpose |
 |--------|------|---------|
-| **StardustLive** | `StardustLive.js` | Real-time dashboard backend. Watches the `openspec/` directory with chokidar, builds typed snapshots (change board with task progress, validation status, graph freshness), parses operation-grouped spec deltas, and pushes live updates over WebSocket at `/api/stardust/live`. Also provides REST fallbacks (`GET /api/stardust/board`, `GET /api/stardust/deltas/:name`, `PUT /api/stardust/validation/:name`). |
-| **StardustWrapper** | `StardustWrapper.js` | CLI subprocess wrapper for `openspec`. Spawns the official OpenSpec CLI as a child process. Provides 100% functional coverage of OpenSpec's core workflow: propose → validate → apply → archive. Uses DependencyChecker for cross-platform binary resolution, falling back to `npx openspec`. Caches the resolved binary path after first call. |
-| **SpecDrift** | `SpecDrift.js` | Architecture drift detection. Compares intended architecture (prose in OpenSpec specs) against actual architecture (Graphify graph). Detects two drift types: **staleReferences** — a spec cites a file the graph has never seen (renamed/deleted); **undocumented** — a heavily depended-on module no spec mentions. Uses GraphFacts for graph queries. |
+| **StardustLive** | `StardustLive.js` | Real-time dashboard backend. Watches the `openspec/` directory with chokidar, builds change-board snapshots (task progress, validation status, graph freshness), parses operation-grouped spec deltas, and pushes live updates over WebSocket at `/api/stardust/live`. REST fallbacks: `GET /api/stardust/board`, `GET /api/stardust/deltas/:name`, `PUT /api/stardust/validation/:name`. |
+| **StardustWrapper** | `StardustWrapper.js` | Runs the OpenSpec CLI as a child process for `diagnose`, `validate`, `archive`, `list`, `init` and `install`, preferring a global `openspec` and falling back to `npx openspec`. Propose does not call the CLI: `proposeChange` in `stardustRoutes.js` (and `ToolBox.specPropose`) writes the template files itself. |
+| **SpecDrift** | `SpecDrift.js` | Compares intended architecture (file references in OpenSpec specs) with actual architecture (the Graphify graph). Reports `staleReferences` (a spec cites a file the graph has never seen) and `undocumented` (files with at least two dependents that no spec cites). |
+| **SpecBaseline** | `SpecBaseline.js` | Drafts first OpenSpec specs for a workspace that has none: one capability per top-level module from the graph (six by default, at most twelve), its key code from the search pipeline, and the text from the local model through Context Expert. Writes nothing itself; callers put each draft through the approval gate. |
 
 ## MCP Server (`bin/yodaman-mcp.mjs`)
 
@@ -387,23 +449,23 @@ It is ESM (`.mjs`) because the MCP SDK is ESM-only while the runtime is CommonJS
 plugins/*.js
     │  loaded by ToolBox.loadPlugins()
     ▼
-ToolBox validates: name, execute (or onLoad), permissions
+ToolBox.validatePlugin(): an object with a string `name`, and `execute`
+(or a legacy `onLoad`/`onEnable`); uploaded plugins must also declare `permissions`
     │
     ├── execute exists → register directly
-    └── onLoad exists → wrap with PluginAPI, register as execute
+    └── onLoad/onEnable exists → wrap with PluginAPI, register as execute
     │
     ▼
-Available to agent via getToolDefinitions() + callTool()
+Available to the agent via getToolDefinitions() + callTool()
 ```
 
-Plugins are loaded from `plugins/` directory. Each `.js` file must export:
-- `name` (string) — unique identifier
-- `description` (string) — shown to agent + UI
-- `permissions` (string[]) — from allowlist
-- `parameters` (object) — JSON schema for tool params
-- `execute(params)` (async function) — the tool implementation
+Plugins are loaded from the `plugins/` directory. Each `.js` file exports an object with:
+- `name` (string, required) — unique identifier
+- `execute(params)` (async function, required unless the plugin uses the legacy lifecycle) — the tool implementation
+- `permissions` (string[]) — each from `PLUGIN_PERMISSION_ALLOWLIST`; required for plugins uploaded through the UI
+- `description` (string) and `parameters` (JSON schema) — optional; shown to the agent and the UI
 
-Legacy plugins using `onLoad`/`onEnable` lifecycle are auto-wrapped with `PluginAPI` which provides `fetch`, `log`, `ui.*`, `worker.*`, `config.*` methods.
+Legacy plugins using the `onLoad`/`onEnable` lifecycle are auto-wrapped with `PluginAPI`, which provides `fetch`, `log`, `ui`, `worker` and `config`.
 
 ## Key Data Flows
 
@@ -411,21 +473,21 @@ Legacy plugins using `onLoad`/`onEnable` lifecycle are auto-wrapped with `Plugin
 
 ```
 User → POST /api/agent/task { task: "Refactor App.jsx" }
-  → RestController creates SSE stream
-  → AgentReasoningEngine.executeTask()
-    1. Loads Graphify context (graph report + query insights)
-    2. Injects DefaultCodingSkill guidelines
-    3. Assembles system prompt + tools + graph context + user task
-    4. Reasoning loop (max 10 iterations):
-       a. Send conversation to Context Expert (ctx ask)
-       b. Parse response for TOOL_CALL {...} lines
+  → RestController opens an SSE stream (task_started)
+  → AgentReasoningEngine
+    1. Builds a StardustBrief for the task (graph facts, specs, drift)
+    2. Appends DefaultCodingSkill to the system prompt
+    3. Sizes the prompt with promptBudget for the context window Ollama serves
+    4. Reasoning loop (max 10 steps):
+       a. Send the transcript (ConversationBuffer) to Context Expert (ctx ask)
+       b. Parse up to 5 TOOL_CALL {...} lines
           (the older <tool_call> form is still accepted)
        c. Classify via shared/toolCapabilities.requiresApproval()
        d. If it changes anything: run ImpactAnalyzer for blast radius,
           compute the file as it WILL be, and pause for approval
           (SSE awaiting_approval). Read-only tools skip this.
-       e. Execute tool via ToolBox.callTool()
-       f. Append result to conversation
+       e. Execute the tool via ToolBox.callTool()
+       f. Append the result to the transcript
     5. Stream final_answer via SSE
 ```
 
@@ -455,13 +517,14 @@ workspace Context Expert has not indexed falls back to a filesystem scan, and
 ### Workspace Readiness Check
 
 ```
-App startup or health poll → GET /api/health
-  → WorkspaceReadiness.forWorkspace(projectPath)
-    → graphLayer: GraphifyService.freshness() → "ready" | "stale" | "building" | "unindexed"
-    → indexLayer: ContextEngine status check
-    → specLayer: SpecDrift.detectDrift() check
-  → Overall verdict = weakest layer
-  → HealthDashboard displays graded status
+GET /api/health (all workspaces) or GET /api/readiness?projectId=<path> (one)
+  → WorkspaceReadiness.forWorkspaces() / forWorkspace()
+    → folder gone?  → "missing"
+    → graph layer:  GraphifyService.freshness() → "ready" | "stale" | "building" | "unindexed"
+    → index layer:  QueueService status         → "building" while queued or indexing, else "ready"
+    → one workspace only: spec coverage from SpecDrift
+  → Overall verdict = the weakest layer
+  → Shown by Stardust (pipeline strip and Trust tab, via useStardustPipeline)
 ```
 
 ### Plugin Upload (zip)
@@ -474,150 +537,129 @@ User uploads plugin.zip
   → Merge permissions from plugin.json into main.js
   → Copy main.js to plugins/
   → require() the plugin
-  → ToolBox.validatePlugin()
+  → ToolBox.validatePlugin() (permissions array required)
   → ToolBox.loadPlugins() (reloads all)
-  → SSE-ready
 ```
 
 ### Stardust Change Workflow
 
 ```
-User → POST /api/stardust/propose { spec: "...", projectPath: "..." }
-  → StardustWrapper.propose()
-    → Resolves openspec binary via DependencyChecker
-    → Spawns `openspec propose` subprocess
-    → Captures and returns stdout/stderr
-  → User → POST /api/stardust/validate { changeId }
-  → User → POST /api/stardust/apply { changeId }
-  → User → POST /api/stardust/archive { changeId }
+Stardust → Commands → POST /api/stardust/run { action, changeId, projectRoot }
+  propose  → proposeChange(): writes openspec/changes/<changeId>/ with template
+             proposal.md, design.md and tasks.md (no CLI call; existing files kept)
+  validate → StardustWrapper.validate() → openspec validate <changeId>
+  archive  → StardustWrapper.archive()  → openspec archive <changeId>
+             (moves the change to the archive and merges its spec deltas
+              into openspec/specs/)
+  list | init | install | diagnose → the matching StardustWrapper call
+
+Stardust → Commands → Draft Specs
+  → sends "Draft baseline specs" to Chat
+  → AgentReasoningEngine → SpecBaseline drafts one spec per module
+  → openspec init (if needed) and each spec go through the approval gate
 ```
 
 ### Architecture Drift Detection
 
 ```
-User or scheduled check → SpecDrift.detectDrift(projectPath)
-  → Finds OpenSpec root directory
+GET /api/stardust/drift (or the agent's specDrift tool) → SpecDrift.detectDrift(projectRoot)
+  → Finds the OpenSpec root directory
   → Reads all spec files
-  → Extracts file references from prose via regex
-  → Queries GraphFacts for actual graph nodes
-  → Compares: cited but absent → staleReferences
-  → Compares: high-degree but uncited → undocumented
-  → Returns drift report with severity grading
+  → Extracts file references from their text with a regular expression
+  → Loads the graph through GraphFacts
+  → Cited but not in the graph → staleReferences
+  → At least 2 dependents but cited by no spec → undocumented (top 20 returned)
+  → Returns counts and inSync (true only when specs exist and both lists are empty)
 ```
 
 ## Security Architecture
 
-- **Plugin permissions**: Validated against `PLUGIN_PERMISSION_ALLOWLIST` (read, write, command, network, search, unrestricted, plus extended)
-- **Default plugin protection**: `DEFAULT_PLUGINS` set prevents removal/disable of core plugins
-- **File write approvals**: Agent pauses before writing — user must approve in UI; ImpactAnalyzer runs before each write to show blast radius
-- **Command blocking**: Pattern-matching blocks dangerous commands (`rm -rf /`, `sudo`, etc.)
-- **Path validation**: All file paths must resolve within watched workspace directories
-- **Pairing tokens**: Non-local API clients require a pairing token (configurable, 24h TTL)
-- **Origin policy**: Cross-origin requests validated against configured allowlist via OriginPolicy; integrates with PairingService for token-bearing remote access
-- **Audit log**: Every tool call is recorded with parameters and duration (SQLite or JSON)
+- **Cross-site requests**: `OriginPolicy.crossSiteGuard` runs before every route. A browser request whose `Origin` is not `localhost`, `127.0.0.1` or `[::1]`, or that says `Sec-Fetch-Site: cross-site`, gets 403. This stops a web page from driving the runtime over loopback.
+- **Loopback binding**: the server listens on `127.0.0.1` by default (`YODAMAN_HOST`), and logs a warning when bound to anything else.
+- **Pairing tokens**: non-local clients (the mobile app) need a pairing token in `X-YodaMan-Token`, valid for 24 hours, while `requirePairingToken` is on (the default).
+- **File write approvals**: the agent pauses before any tool that changes something; the user approves or rejects in the UI, with the diff and the ImpactAnalyzer blast radius. A rejected write never reaches disk.
+- **Command allowlist**: the agent may run only allowlisted executables, via `execFile` with no shell. Shell metacharacters are refused, and interpreter inline-eval flags (`node -e`, `python3 -c`) are rejected. `allowedCommands` adds executables.
+- **Path validation**: file paths must resolve inside a watched workspace, after resolving symlinks.
+- **Plugin permissions**: validated against `PLUGIN_PERMISSION_ALLOWLIST`; plugin uploads are off unless `allowPluginUploads` is enabled. Default plugins (`DEFAULT_PLUGINS`) cannot be removed or disabled.
+- **Audit log**: every tool call is recorded with its parameters and duration (SQLite or JSON).
+- **Settings drift**: security settings changed from their defaults are logged at startup (`security_setting_non_default`).
 
-> **Design philosophy**: YodaMan is a local-only runtime serving one user on `localhost`. It deliberately omits rate limiting, authentication, TLS, and request logging — these are conscious design choices, not oversights. The threat model does not include a remote attacker; adding these controls would be security theatre.
+> **Design philosophy**: YodaMan is a local runtime serving one user. It has no user accounts, rate limiting or TLS. The threats it does defend against are a web page reaching it through the browser (OriginPolicy), other machines on the network (loopback binding, pairing tokens), and the agent itself (approvals, command allowlist, path checks).
 
 ## Frontend Architecture
 
 ### React Application (`src/`)
 
-```
-src/
-├── App.jsx                         # Root layout + tab navigation
-├── main.jsx                        # Vite entry point (React root)
-├── api/
-│   └── api.js                      # HTTP client for all backend endpoints
-├── components/
-│   ├── ActivityFeed.jsx            # Live file event drawer
-│   ├── AgentChatTab.jsx            # Chat + agent task UI with streaming
-│   ├── AppErrorBoundary.jsx        # React error boundary with reload UX
-│   ├── ChangeCard.jsx              # Change card with progress bar
-│   ├── ChangeImpactPanel.jsx       # Visual diff + blast-radius impact preview
-│   ├── ComposePanel.jsx            # Rich prompt composition panel for agent tasks
-│   ├── Dashboard.jsx               # System status overview
-│   ├── GitPanel.jsx                # Git history and commit browser
-│   ├── GraphStudio.jsx             # Graphify knowledge graph visualization
-│   ├── HealthDashboard.jsx         # Workspace health dashboard
-│   ├── HealthIndicator.jsx         # Health status badge/indicator
-│   ├── HolocronVrModal.jsx         # VR constellation modal (Three.js)
-│   ├── ImpactAnalysisTab.jsx       # Tabular impact analysis with fan-out depth control
-│   ├── LogsModal.jsx               # Structured log viewer
-│   ├── PipelineStrip.jsx           # CI/CD pipeline status strip
-│   ├── PluginAuthoringGuide.jsx    # In-app plugin authoring guide + template generator
-│   ├── PluginsWindow.jsx           # Plugin list, upload, enable/disable
-│   ├── ProjectList.jsx             # Workspace project list sidebar
-│   ├── SearchTrace.jsx             # Search result provenance trace + explanation
-│   ├── SearchWindow.jsx            # Semantic search interface
-│   ├── SettingsModal.jsx           # Workspace + developer settings
-│   ├── SpecDiff.jsx                # Spec delta viewer (side-by-side)
-│   ├── SpecDriftPanel.jsx          # Architecture drift detection panel
-│   ├── Stardust.jsx                # OpenSpec dashboard (Board/Drift/Diagnostics/Commands)
-│   ├── StardustKit.jsx             # Reusable Stardust UI kit (cards, badges, status icons)
-│   ├── StatusBar.jsx               # Bottom status bar
-│   ├── TrustDashboard.jsx          # Plugin trust + permission audit dashboard
-│   └── WelcomeModal.jsx            # First-run welcome/onboarding modal
-├── hooks/
-│   ├── useHealthCheck.js           # Reusable /api/health polling hook (5s interval)
-│   ├── useStardustLive.js          # WebSocket + useSyncExternalStore for Stardust
-│   └── useStardustPipeline.js      # Stardust pipeline state management hook
-└── index.css                       # Global styles + custom scrollbar
-```
+`src/` is laid out as shown in the [Directory Tree](#directory-tree): `App.jsx`
+and `main.jsx`, the API client in `api/`, the views in `components/`, the
+Holocron constellation in `holocron/`, and three hooks in `hooks/`.
 
-The frontend communicates with the backend exclusively through the REST API. Agent tasks use SSE for streaming progress. The `useHealthCheck` hook provides a shared health-polling mechanism used by `HealthDashboard` and `HealthIndicator`. It polls `/api/health` every 5 seconds and exposes `{ checks, services, status, started, loading, error, refresh }`. The `useStardustLive` hook uses React's `useSyncExternalStore` to subscribe to the `/api/stardust/live` WebSocket for real-time change board updates with REST fallback and auto-reconnect. The `useStardustPipeline` hook manages Stardust pipeline state — tracking propose → validate → apply → archive progress with optimistic updates and rollback on failure.
+The frontend talks to the backend over HTTP (`src/api/api.js`), with three
+streaming channels: agent tasks use SSE, the Search view's summary streams over
+`EventSource` (`/api/search/stream`), and Stardust's live board uses the
+`/api/stardust/live` WebSocket. The `useHealthCheck` hook polls `/api/health`
+every 5 seconds for `StatusBar`, `Dashboard` and `HealthDashboard`, and exposes
+`{ checks, services, status, started, loading, error, refresh }`. The
+`useStardustLive` hook uses React's `useSyncExternalStore` to subscribe to the
+WebSocket, falling back to REST polling and reconnecting automatically. The
+`useStardustPipeline` hook fetches the three tools' readiness once, so the
+pipeline strip, the Trust tab and the Drift tab agree.
 
 ### Component Descriptions
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| **ActivityFeed** | `ActivityFeed.jsx` | Live file event slide-over drawer showing real-time file-system changes from the StardustLive WebSocket stream. |
-| **AgentChatTab** | `AgentChatTab.jsx` | Primary chat interface with agent task streaming via SSE. Handles task submission, approval prompts, and conversation history. ~54KB. |
-| **AppErrorBoundary** | `AppErrorBoundary.jsx` | React class-based error boundary. Catches render crashes and displays a reload UI with the error message. Prevents white-screen failures. |
-| **ChangeCard** | `ChangeCard.jsx` | OpenSpec change card showing task progress bar, validation status icon, and action buttons. Used within the Stardust board. |
-| **ChangeImpactPanel** | `ChangeImpactPanel.jsx` | Visual diff viewer paired with a blast-radius impact preview. Shows a side-by-side change diff alongside a dependency fan-out graph so users can assess risk before approving agent file writes. |
-| **ComposePanel** | `ComposePanel.jsx` | Rich prompt composition panel for crafting agent tasks. Supports template selection, context attachment (files, graph nodes, spec changes), and prompt history. |
-| **Dashboard** | `Dashboard.jsx` | System status overview dashboard showing Graphify status, workspace health, and quick actions. ~25KB. |
-| **GitPanel** | `GitPanel.jsx` | Git history browser with commit list, branch view, and heatmap integration. ~7KB. |
-| **GraphStudio** | `GraphStudio.jsx` | Graphify knowledge graph visualization and exploration UI. ~19KB. |
-| **HealthDashboard** | `HealthDashboard.jsx` | Full diagnostic table showing all dependency checks (Node.js, runtime, Graphify, Ollama, Context Expert, OpenSpec, config). Uses useHealthCheck hook. Supports compact mode for sidebar embedding. ~8KB. |
-| **HealthIndicator** | `HealthIndicator.jsx` | Small colored dot showing overall system health. Green = all OK, amber = degraded (some dependencies missing), gray = loading. Used inline in headers and status bars. |
-| **HolocronVrModal** | `HolocronVrModal.jsx` | Modal hosting the Three.js 3D constellation viewer. Integrates with Graphify graph data. ~19KB. |
-| **ImpactAnalysisTab** | `ImpactAnalysisTab.jsx` | Tabular impact analysis view with adjustable fan-out depth control (1–5 hops). Lists all impacted files with test-coverage indicators, dependency paths, and severity ratings. Used during agent approval prompts. |
-| **LogsModal** | `LogsModal.jsx` | Structured log viewer with filtering by level, severity, and user action. ~9KB. |
-| **PipelineStrip** | `PipelineStrip.jsx` | CI/CD pipeline status strip showing stage indicators (lint, test, build, deploy) with live status and duration. Collapses into a compact mini-strip for the status bar. |
-| **PluginAuthoringGuide** | `PluginAuthoringGuide.jsx` | In-app plugin authoring guide with live template generator. Walks developers through the plugin manifest, permissions, and execute/onLoad patterns. Generates a scaffolded plugin.js file ready for installation. |
-| **PluginsWindow** | `PluginsWindow.jsx` | Plugin list, upload, enable/disable management interface. ~13KB. |
-| **ProjectList** | `ProjectList.jsx` | Workspace project list sidebar with add/remove project management. ~12KB. |
-| **SearchTrace** | `SearchTrace.jsx` | Search result provenance trace view. Shows why each result was ranked where it is: semantic score, proximity, centrality and spec coverage. |
-| **SearchWindow** | `SearchWindow.jsx` | Semantic search interface with result listing. ~7KB. |
-| **SettingsModal** | `SettingsModal.jsx` | Workspace and developer settings modal. ~16KB. |
-| **SpecDiff** | `SpecDiff.jsx` | Operation-grouped spec delta viewer with side-by-side before/after rendering. Highlights additions, removals, and modifications per operation. |
-| **SpecDriftPanel** | `SpecDriftPanel.jsx` | Architecture drift detection UI panel showing staleReferences and undocumented modules with severity grading and one-click remediation suggestions. |
-| **Stardust** | `Stardust.jsx` | Full OpenSpec dashboard with real-time change board (WebSocket), drift detection, diagnostics, and CLI command integration. Orchestrates ChangeCard, SpecDiff, SpecDriftPanel, and ActivityFeed sub-components. ~60KB across all Stardust components. |
-| **StardustKit** | `StardustKit.jsx` | Reusable Stardust UI kit exporting shared presentational components: status badges (proposed/validating/applied/archived/failed), change cards, progress indicators, and severity icons. Used across all Stardust views for visual consistency. |
-| **StatusBar** | `StatusBar.jsx` | Bottom status bar showing connection state, health indicator, and quick actions. ~4KB. |
-| **TrustDashboard** | `TrustDashboard.jsx` | Plugin trust and permission audit dashboard. Lists all installed plugins with their requested permissions, usage frequency, last-audited timestamp, and trust tier (trusted/caution/untrusted). Supports one-click permission revocation. |
-| **WelcomeModal** | `WelcomeModal.jsx` | First-run welcome and onboarding modal. ~5KB. |
+| **ActivityFeed** | `ActivityFeed.jsx` | Live file events from the watched `openspec/` directory (StardustLive WebSocket): a header slide-over drawer and an inline feed. |
+| **AgentChatTab** | `AgentChatTab.jsx` | Chat and agent tasks over SSE: task submission, file attachments, voice input, approval prompts with the diff and blast radius, and chat history per workspace. |
+| **AppErrorBoundary** | `AppErrorBoundary.jsx` | React error boundary. Catches render crashes and shows a reload screen with the error instead of a blank page. |
+| **ChangeCard** | `ChangeCard.jsx` | One OpenSpec change on the Stardust board: name, validation icon, task progress bar and status label. |
+| **ChangeImpactPanel** | `ChangeImpactPanel.jsx` | What carrying out a proposed change would disturb: every source file the change refers to, with its blast radius (two hops of reverse dependencies) and test coverage. |
+| **ComposePanel** | `ComposePanel.jsx` | Stardust Compose tab: one file seen through all three tools: the specs that describe it (OpenSpec), its dependents, centrality, blast radius and tests (Graphify), and its semantic neighbours (Context Expert, ranked by Graphify). |
+| **Dashboard** | `Dashboard.jsx` | System overview: health checks, ctx configuration, vector storage, AI engine and embedding settings, indexing, workspaces, environment, the user's data files, and a diagnostics report. |
+| **EditorSettings** | `EditorSettings.jsx` | Settings → Editor: which program opens files from search results and Chat: the system default, an editor found on this machine, or a custom command with `{file}`, `{line}` and `{column}`. |
+| **GitPanel** | `GitPanel.jsx` | Git history and branches: commit list, branch view, commit, pull and push. |
+| **GraphStudio** | `GraphStudio.jsx` | Graphify knowledge graph: build status and the graph visualization. |
+| **HealthDashboard** | `HealthDashboard.jsx` | Table of every dependency check from `/api/health`, via useHealthCheck. Has a compact mode for embedding. |
+| **HealthIndicator** | `HealthIndicator.jsx` | Coloured dot for overall health: green all OK, yellow degraded, red error fetching, gray loading. |
+| **HolocronVrModal** | `HolocronVrModal.jsx` | Holocron VR constellation modal, built on `src/holocron/` (Three.js scene, layout, history slider, voice, WebXR). |
+| **ImpactAnalysisTab** | `ImpactAnalysisTab.jsx` | Stardust Impact tab: the blast radius of any file, 1 to 4 hops, with test coverage and the specs that reference it. |
+| **LogsModal** | `LogsModal.jsx` | Structured log viewer with filtering by level, severity and user action. |
+| **PipelineStrip** | `PipelineStrip.jsx` | The three mandatory tools drawn as a pipeline (Context Expert → Graphify → OpenSpec), with each one's readiness, on every Stardust tab. |
+| **PluginAuthoringGuide** | `PluginAuthoringGuide.jsx` | In-app guide to building a plugin: the manifest, permissions, and the execute/onLoad patterns, with example plugin files. |
+| **PluginsWindow** | `PluginsWindow.jsx` | Plugin list with upload, enable/disable and removal. |
+| **ProjectList** | `ProjectList.jsx` | Workspace sidebar: add, select, sync and remove workspaces. |
+| **SearchTrace** | `SearchTrace.jsx` | Why each search result ranked where it did: semantic score, proximity, centrality and spec coverage. |
+| **SearchWindow** | `SearchWindow.jsx` | Search view: results from the search pipeline and the local model's summary of them. |
+| **SettingsModal** | `SettingsModal.jsx` | Settings: workspace and developer options, the editor, and how to register YodaMan as an MCP server in each client. |
+| **SpecDiff** | `SpecDiff.jsx` | A change's spec deltas grouped by operation (ADDED / MODIFIED / REMOVED / RENAMED), as the proposed text alone or side by side with the published spec. |
+| **SpecDriftPanel** | `SpecDriftPanel.jsx` | Stardust Drift tab: stale spec references and undocumented load-bearing modules from SpecDrift. |
+| **Stardust** | `Stardust.jsx` | The Stardust dashboard over Context Expert, Graphify and OpenSpec, with eight tabs: Board, Drift, Compose, Trust, Trace, Diagnostics, Commands and Impact. |
+| **StardustKit** | `StardustKit.jsx` | Shared building blocks for every Stardust tab: `Panel`, `StatTile`, `StatRow`, `FileChip`, `SignalBar`, `Label`, `EmptyState`, `Spinner`, `ErrorNote`, `Explainer`, `GhostButton`. |
+| **StatusBar** | `StatusBar.jsx` | Bottom status bar: health, runtime and connection state. |
+| **TrustDashboard** | `TrustDashboard.jsx` | Stardust Trust tab: one verdict on whether YodaMan's answers about this workspace can be trusted right now (Ready, Stale, Working, Missing or Unknown), from WorkspaceReadiness and the drift report, plus runtime checks. |
+| **WelcomeModal** | `WelcomeModal.jsx` | First-run welcome and onboarding. |
 
 ### Frontend Modules (`frontend/`)
 
-The `frontend/` directory at the project root contains self-contained modules that are loaded dynamically by the React application or the plugin system:
+The `frontend/` directory at the project root holds modules the React app
+imports directly:
 
 | Module | File | Purpose |
 |--------|------|---------|
-| **FileUploader** | `FileUploader.jsx` | Drag-and-drop file upload component. Accepts `.dart`, `.js`, `.ts`, `.json`, `.yaml`, `.md`, `.log`, `.txt`. Uses the API client for temp file upload with progress tracking. Displays file size and provides remove capability. |
-| **voiceAgentBridge** | `voiceAgentBridge.js` | Voice recognition bridge. Manages SpeechRecognition lifecycle, hotword detection ("Hey Yoda"), silence timeout (10s), auto-submit on pause (2s), and voice agent settings persistence in localStorage. |
-| **voiceCommands** | `voiceCommands.js` | SpeechRecognition constructor wrapper with cross-browser support (webkitSpeechRecognition fallback). Provides `createSpeechRecognition()` factory and `normalizeVoiceTranscript()` for converting spoken punctuation to text (e.g., "new line" → \\n, "question mark" → ?). |
+| **FileUploader** | `FileUploader.jsx` | Chat's attach-files button and file list. Accepts `.dart`, `.js`, `.ts`, `.json`, `.yaml`, `.md`, `.log`, `.txt`, shows each file's size, and lets the user remove it before sending. Used by AgentChatTab. |
+| **voiceAgentBridge** | `voiceAgentBridge.js` | Voice input for Chat. Manages the SpeechRecognition lifecycle, an optional "Hey Yoda" hotword (off by default), a 10-second silence timeout, auto-submit after a 2-second pause, and its settings in `localStorage`. |
+| **voiceCommands** | `voiceCommands.js` | SpeechRecognition constructor wrapper with the `webkitSpeechRecognition` fallback. Provides `createSpeechRecognition()` and `normalizeVoiceTranscript()`, which turns spoken punctuation into text (for example "new line" → a line break, "question mark" → `?`). |
 
 ## External Dependencies
 
 | Dependency | Role | Required |
 |------------|------|----------|
-| **Context Expert** (`ctx`) | Code indexing and semantic search | Yes |
+| **Context Expert** (`yodaman-ctx`, command `ctx`, 1.3.4 or later) | Code indexing, semantic search, and the agent's model calls | Yes |
 | **Graphify** | Knowledge graph construction | Yes |
 | **OpenSpec** (`openspec`) | Spec-driven change management (Stardust) | Yes |
-| **Ollama** | Local LLM execution | Yes |
-| **simple-git** | Git operations | Yes |
-| **Node.js 18+** | Runtime | Yes |
+| **Ollama** | Local model runner used by Context Expert | Yes |
+| **simple-git** | Git reads | Yes (bundled) |
+| **Node.js 24+** | Runtime | Yes |
 | **Python 3.10+** | Graphify runtime | Yes |
-| **Three.js** | 3D VR constellation rendering | Yes (bundled) |
+| **Three.js** | Holocron 3D constellation rendering | Yes (bundled) |
+

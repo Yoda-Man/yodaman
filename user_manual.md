@@ -1,6 +1,6 @@
 # YodaMan User Manual
 
-Version: 0.6.3
+Version: 0.6.4
 
 YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, mandatory Graphify knowledge graph, plugin system, and local runtime API.
 
@@ -40,7 +40,7 @@ Workspaces are absolute local folder paths. Add them by pasting a path, browsing
 
 ### Graphify knowledge graph
 
-Graphify is mandatory in 0.6.3 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
+Graphify is mandatory in 0.6.4 and runs local-only through Ollama for semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend when full extraction is enabled. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat and agent answers include graph report context plus question-specific graph traversal output, and stale graphs rebuild before answer context is gathered.
 
 The Graph tab opens Graph Studio, a project-scoped visual workspace for Graphify outputs. Graph Studio embeds the generated mind-map and Vis.js canvas artifacts, shows graph freshness, renders the markdown report, and keeps graph query plus impact analysis actions close to the visualization.
 
@@ -131,7 +131,7 @@ Plugins are JavaScript modules that extend the agent with custom tools. A plugin
 - **Dashboard**: View runtime status, database/index metrics, environment information, runtime diagnostics, task counts, pending approvals, plugin policy information, and mobile pairing.
 - **Logs**: Open searchable runtime logs, reindex requests, index queue state, and `ctx index` output. Filter by text, level, severity, and user action, then use Copy when sharing an error.
 - **Manual**: Read the in-app version of this guide.
-- **Stardust**: OpenSpec CLI wrapper for structured spec-driven development. Propose, validate, apply, and archive changes with the `openspec` workflow. Includes built-in diagnostics, version checks, and one-click OpenSpec installation.
+- **Stardust**: OpenSpec CLI wrapper for structured spec-driven development. Propose, validate and archive changes with the `openspec` workflow. Includes built-in diagnostics, version checks, and one-click OpenSpec installation.
 - **Plugins**: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, delete non-mandatory plugin files, and manage Graphify graph status, rebuilds, and direct graph queries.
 
 ## 4. Desktop app
@@ -264,7 +264,7 @@ npm run package
 
 ## 11. Project Stardust — OpenSpec Integration
 
-YodaMan 0.6.3 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → apply → archive workflow. The tab has eight views:
+YodaMan 0.6.4 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → validate → archive workflow. The tab has eight views:
 
 - **Board**: Real-time change overview with card-based navigation, task progress bars, validation health icons, and a side-by-side spec diff viewer. Select a change to review its proposed spec deltas grouped by operation (ADDED/MODIFIED/REMOVED/RENAMED), then validate or archive directly from the diff panel. The board updates live via WebSocket — file changes in `openspec/` push instantly.
 - **Drift**: Architecture drift detection comparing OpenSpec specs against the knowledge graph. Shows stale spec references (files cited in specs that no longer exist) and undocumented modules (load-bearing files no spec describes). Unique to YodaMan.
@@ -272,7 +272,7 @@ YodaMan 0.6.3 integrates OpenSpec through the **Stardust** tab. OpenSpec provide
 - **Trust**: Unified health dashboard across Context Expert, Graphify, and OpenSpec with per-tool status cards and the overall WorkspaceReadiness verdict.
 - **Trace**: Search ranking transparency. Every search result shows its semantic×0.50 + proximity×0.20 + centrality×0.15 + specCoverage×0.15 breakdown with colour-coded bars for each signal and a spec coverage indicator showing which OpenSpec specs describe the file.
 - **Diagnostics**: Installation check, version, project initialization status, and one-click install/init buttons.
-- **Commands**: Direct CLI access with Propose, Validate, Archive, List Changes, and List Specs buttons plus a scrollable console output. The Propose button creates `openspec/changes/<name>/` with proposal.md, design.md, and tasks.md.
+- **Commands**: Direct CLI access with Propose, Validate, Archive, List Changes, List Specs and Draft Specs buttons plus a scrollable console output. The Propose button creates `openspec/changes/<name>/` with proposal.md, design.md, and tasks.md.
 - **Impact**: Dedicated blast-radius analysis with configurable hop depth and spec awareness. Enter any file path to see dependents, test coverage, and which OpenSpec specs describe it.
 
 ### Setup
@@ -283,10 +283,26 @@ npm install -g @fission-ai/openspec@latest
 
 ### Workflow
 
-1. **Propose**: Create a new change proposal with a title, description, and spec path.
-2. **Validate**: Check the change against your project's specs (supports `--strict` mode).
-3. **Apply**: Apply the validated change (supports `--dry-run` for safety).
-4. **Archive**: Archive a completed change.
+A project with no specs yet can start with **Draft Specs** (next section).
+
+1. **Propose**: Enter a change name (for example `add-auth-middleware`) in the Commands tab and click **Propose**. Stardust creates `openspec/changes/<name>/` with template `proposal.md`, `design.md` and `tasks.md`. It does not read your code or write specs: fill in the templates, and describe the requirements the change adds, modifies or removes as spec deltas under `openspec/changes/<name>/specs/`.
+2. **Implement**: Make the change yourself or with Yoda-Agent, ticking off `tasks.md` as you go.
+3. **Validate**: Runs `openspec validate <name>` to check the change and its spec deltas.
+4. **Archive**: Runs `openspec archive <name>`. The change moves to the archive and its spec deltas are merged into `openspec/specs/`. This is how specs are created and updated.
+
+There is no separate Apply step: archiving a change is what applies its spec deltas.
+
+### Draft specs for an existing project
+
+A project with code but no specs can get a first set from **Commands → Draft Specs** (or by typing `Draft baseline specs` in Chat). YodaMan:
+
+1. Groups the code into capabilities by top-level module (for example `backend/core` becomes `backend-core`), using the Graphify graph and putting the modules most of the code depends on first. Up to six capabilities, tests left out.
+2. Retrieves each capability's key code through the search pipeline (Context Expert, ranked by Graphify).
+3. Asks your local model (through Context Expert and Ollama; nothing leaves your machine) to write requirements in OpenSpec's format: `### Requirement:` blocks with SHALL statements and `#### Scenario:` blocks.
+
+Nothing is written until you approve it. Chat asks first to run `openspec init` (only if `openspec/` is missing; no AI-tool files are added), then shows each `openspec/specs/<capability>/spec.md` as a diff with its blast radius. Reject a draft and it is not written. An existing spec is never replaced, and a capability the model could not describe is skipped and named in the answer.
+
+Every draft says **DRAFT** in its Purpose section. Read and edit them before you rely on them, then run `openspec validate --specs`. Drafting needs a built graph (run Sync Repository first) and takes about a minute per capability on a 9B model.
 
 ### Diagnostics
 
@@ -297,14 +313,15 @@ The Stardust tab includes a Diagnostics panel that checks:
 
 ### Agent Tools
 
-The Yoda-Agent has four OpenSpec tools available during autonomous tasks:
+The Yoda-Agent has five OpenSpec tools available during autonomous tasks:
 
 - `specPropose(project, changeName, description)` — Creates a new change proposal under `openspec/changes/<name>/`.
+- `specDraft(project, maxCapabilities)` — Drafts baseline specs for a project with none, as described above. It writes nothing; the agent saves each draft with `writeFile`, which asks for approval.
 - `specValidate(project, changeName)` — Validates a change against project specs via the CLI.
 - `specArchive(project, changeName)` — Archives a completed change.
 - `specDrift(project)` — Compares OpenSpec intent against the actual knowledge graph.
 
-The agent is instructed to follow the Propose → Validate → Apply → Archive workflow for any significant feature, and to check drift before proposing new work.
+The agent is instructed to follow the Propose → Validate → Archive workflow for any significant feature, and to check drift before proposing new work.
 
 ### API Endpoints
 

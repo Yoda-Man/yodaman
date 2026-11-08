@@ -18,8 +18,9 @@ on the read-only allowlist.
 | `readFile`, `listFiles` | `writeFile`, `applyPatch` |
 | `searchCode`, `impactOf` | `executeCommand` |
 | `graphifyQuery`, `graphifyExplain` | `specPropose`, `specArchive` |
-| `graphifyPath`, `graphifyAffected` | any tool not on the allowlist |
-| `specDrift`, `specValidate` | any plugin declaring a mutating permission |
+| `graphifyPath`, `graphifyAffected` | `specInit` |
+| `specDrift`, `specValidate`, `specDraft` | any tool not on the allowlist |
+| | any plugin declaring a mutating permission |
 
 A tool added tomorrow is gated until someone deliberately adds it to the
 allowlist. That is the direction this fails in, on purpose.
@@ -30,7 +31,7 @@ Plugins are judged by the `permissions` they declare in their manifest. A plugin
 declaring `write`, `command`, `unrestricted`, `audit:write`, `agent:invoke`,
 `task:create`, or `filesystem:write` is gated. The bundled analysis plugins —
 CodeTrooper, Droid-Sweep, Grand-Inquisitor, Lightsaber, Graphify — declare only
-`read` and `search`, so they run unprompted.
+`read` (Lightsaber and Graphify add `search`), so they run unprompted.
 
 Permissions are compared by exact match, never as substrings. An earlier version
 matched `audit:write` on the substring "write" and told users a read-only plugin

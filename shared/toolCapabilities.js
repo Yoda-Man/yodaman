@@ -36,6 +36,7 @@ const READ_ONLY_TOOLS = [
     'graphifyPath',
     'graphifyAffected',
     'specDrift',
+    'specDraft',
     'specValidate'
 ];
 

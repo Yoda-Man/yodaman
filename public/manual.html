@@ -84,7 +84,7 @@ sh setup.sh</code></pre>
             <li><strong>Dashboard</strong>: View status, database/index metrics, environment info, diagnostics, task counts, approvals, plugin policy, and mobile pairing.</li>
             <li><strong>Logs</strong>: Open searchable runtime logs, reindex requests, index queue state, and <code>ctx index</code> output. Filter by text, level, severity, and user action before copying diagnostics.</li>
             <li><strong>Manual</strong>: Read the in-app guide.</li>
-            <li><strong>Stardust</strong>: OpenSpec CLI wrapper for spec-driven development. Propose, validate, apply, and archive changes. Includes diagnostics, version checks, and one-click OpenSpec installation.</li>
+            <li><strong>Stardust</strong>: OpenSpec CLI wrapper for spec-driven development. Propose, validate and archive changes, or draft specs for a project that has none. Includes diagnostics, version checks, and one-click OpenSpec installation.</li>
             <li id="plugins"><strong>Plugins</strong>: Upload JavaScript plugins, inspect permissions and parameters, refresh loaded plugins, and delete non-mandatory plugin files. The <strong>Docs</strong> button on that page opens the full plugin authoring guide in the app &mdash; the contract, the permission allowlist, worked examples, and how the agent sees your tool. See section 11 for the summary.</li>
             <li><strong>Graph doctor</strong>: Run <code>yodaman doctor --graph</code> to check active graphs, persisted freshness, orphaned nodes, and the most dependency-heavy file.</li>
             <li><strong>Dependency doctor</strong>: Run <code>yodaman doctor</code> to check Ollama, Context Expert (<code>ctx</code>), Graphify, and OpenSpec. Each tool reports its version, resolved path, and reachability, and anything missing lists the install command for your platform. Add <code>--json</code> for machine-readable output; the command exits non-zero when a dependency is missing or unreachable.</li>
@@ -143,7 +143,7 @@ npm run lint
 npm run package</code></pre>
 
         <h2>10. Stardust &mdash; OpenSpec Integration</h2>
-        <p>YodaMan 0.5.0 integrates OpenSpec through the <strong>Stardust</strong> tab with eight views: Board, Drift, Compose, Trust, Trace, Impact, Diagnostics, and Commands — plus agent tools (specPropose, specValidate, specArchive, specDrift) for autonomous OpenSpec workflows.</p>
+        <p>YodaMan integrates OpenSpec through the <strong>Stardust</strong> tab with eight views: Board, Drift, Compose, Trust, Trace, Impact, Diagnostics, and Commands — plus agent tools (specPropose, specValidate, specArchive, specDrift) for autonomous OpenSpec workflows.</p>
         <h3>Setup</h3>
         <pre><code>npm install -g @fission-ai/openspec@latest</code></pre>
         <h3>Workflow</h3>

@@ -2,12 +2,36 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
-## [Unreleased]
+## [0.6.4] - 2026-11-08
+
+### Added
+- **Draft Specs** in Stardust → Commands (or `Draft baseline specs` in Chat)
+  writes a first OpenSpec spec for each top-level module of a project that has
+  none. Modules come from the Graphify graph, their code from the search
+  pipeline, and the text from your local model. Nothing is written until you
+  approve it: Chat asks before `openspec init` and shows each spec as a diff.
+  Drafts say DRAFT in their Purpose, and existing specs are never replaced.
+  The agent gets the same drafting as the `specDraft` tool.
 
 ### Changed
 - **Context Expert 1.3.4 or later is required** (was 1.3.2). ctx 1.3.4 is the
   same code as 1.3.3 (plus commander 15.1.0), rebuilt so `ctx --version` reports the right version,
   which lets the minimum match the latest release.
+- Holocron VR moves to 0.6.4 alongside YodaMan.
+
+### Fixed
+- The user manual's Stardust workflow described an **Apply** step with
+  `--dry-run`, a `--strict` validate, and a Propose that takes a title and spec
+  path. None of those exist. It now says what each button does: Propose
+  creates template files only, and Archive is what merges a change's spec
+  deltas into `openspec/specs/`.
+- `docs/architecture/architecture.md` is checked line by line against the code.
+  It listed Stardust endpoints that never existed (`/api/stardust/propose`,
+  `/apply`, `/status`), described the old command denylist and a threat model
+  that ignored web pages, invented features for several components
+  (TrustDashboard, PipelineStrip, ComposePanel), and left ten modules out. Every
+  route it names now exists with the stated method, every real route is
+  listed, and the dependency diagram is taken from the actual `require()` calls.
 
 ## [0.6.3] - 2026-11-07
 

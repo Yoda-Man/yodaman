@@ -21,6 +21,8 @@ const { hitPath, hitLine, hitPreview, chipPath } = require('../../shared/searchH
 // Tools whose success invalidates the retrieval index and the knowledge graph.
 const MUTATING_TOOLS = new Set(['writeFile']);
 
+const REJECTED = 'User rejected this change.';
+
 /**
  * Most tool calls a model may act on in a single turn.
  *
@@ -166,6 +168,16 @@ const SEARCH_INTENT = /^(?:please\s+)?(?:search(?:\s+for)?|find|locate|look\s+fo
 const NOT_JUST_A_SEARCH = /\b(?:why|how|explain|describe|summari[sz]e|review|compare|fix|change|refactor|rewrite|write|create|add|remove|delete|rename|implement|update|edit|modify|run|install|build|deploy|test|debug|and\s+(?:then|also))\b/i;
 const MAX_DIRECT_SEARCH_CHARS = 160;
 const DIRECT_SEARCH_TOP = 8;
+
+/**
+ * "Draft baseline specs" — the Stardust button's task. Exact, so ordinary prose
+ * about specs still reaches the model.
+ */
+const DRAFT_SPECS_TASK = /^draft\s+baseline\s+specs?(?:\s+for\s+this\s+(?:workspace|project))?\.?$/i;
+
+function resolveDirectSpecDraft(task) {
+    return DRAFT_SPECS_TASK.test(String(task || '').trim());
+}
 
 function resolveDirectSearch(task) {
     const text = String(task || '').trim();
@@ -609,6 +621,197 @@ Rules:
         }
     }
 
+    /**
+     * THE approval gate: show the reviewer the diff, blast radius and covering
+     * specs for one tool call, then wait for their decision. Every write the
+     * engine makes passes through here, whether the model asked for it or a
+     * direct route (runSpecDraftDirectly) did, so there is one gate to audit.
+     *
+     * @returns {Promise<'approved'|'rejected'|'cancelled'>}
+     */
+    async awaitApproval(toolCall, { taskId, onStep, metadata = {} }) {
+        // Both editing tools name a file; anything else may not.
+        const filePath = toolCall.parameters && toolCall.parameters.filePath;
+        const oldContent = filePath ? await toolBox.getFileContent(filePath) : null;
+        const newContent = filePath
+            ? proposedContent(toolCall, oldContent)
+            : null;
+
+        // A line diff says what changed; it never says what it costs.
+        // Attach the graph-derived blast radius so the reviewer is
+        // making a risk decision, not just reading a diff.
+        const impact = metadata.projectId && filePath
+            ? impactAnalyzer.analyzeFile(metadata.projectId, filePath)
+            : { available: false, reason: filePath ? 'no workspace selected' : 'not a file edit' };
+
+        // Goldust: add OpenSpec spec awareness to the impact.
+        // Which specs describe this file, and would the change cause drift?
+        let specImpact = { available: false, reason: 'no projectId' };
+        if (metadata.projectId) {
+            try {
+                const specs = specDrift.readSpecs(metadata.projectId);
+                const mentionedIn = [];
+                for (const spec of specs) {
+                    const refs = specDrift.extractReferences(spec.text);
+                    if (filePath && refs.some(r => filePath.includes(r) || r.includes(filePath))) {
+                        mentionedIn.push(spec.id);
+                    }
+                }
+                specImpact = { available: true, specCount: specs.length, mentionedIn };
+            } catch (_) { /* OpenSpec unavailable */ }
+        }
+
+        logger.info('approval_impact_assessed', {
+            taskId,
+            tool: toolCall.name,
+            filePath: filePath || null,
+            available: impact.available,
+            impactedCount: impact.impactedCount ?? null,
+            testCount: impact.testCount ?? null,
+            risk: impact.risk ?? null,
+            summary: impactAnalyzer.summarize(impact)
+        });
+
+        const pendingApproval = {
+            tool: toolCall.name,
+            params: {
+                filePath: filePath || null,
+                oldContent,
+                newContent,
+                // Tools that touch no file still have to show what
+                // they intend to do, or consent means nothing.
+                arguments: filePath ? undefined : toolBox.sanitizeParameters
+                    ? toolBox.sanitizeParameters(toolCall.parameters)
+                    : toolCall.parameters
+            },
+            impact,
+            specImpact
+        };
+
+        this.recordTask(taskId, {
+            status: 'awaiting_approval',
+            pendingApproval
+        });
+
+        const approvalEvent = {
+            type: 'awaiting_approval',
+            tool: toolCall.name,
+            taskId,
+            params: pendingApproval.params,
+            impact,
+            specImpact
+        };
+        this.recordTaskEvent(taskId, approvalEvent);
+        if (onStep) onStep(approvalEvent);
+
+        // Wait for approval signal
+        const approved = await new Promise((resolve) => {
+            this.pendingApprovals.set(taskId, resolve);
+        });
+
+        if (this.isCancelled(taskId)) {
+            const event = { type: 'task_cancelled', taskId, message: 'Task cancelled.' };
+            this.recordTaskEvent(taskId, event);
+            if (onStep) onStep(event);
+            this.recordTask(taskId, { status: 'cancelled', pendingApproval: null });
+            this.cancelledTasks.delete(taskId);
+            return 'cancelled';
+        }
+
+        if (!approved) {
+            const event = { type: 'tool_end', taskId, tool: toolCall.name, result: { error: REJECTED } };
+            this.recordTaskEvent(taskId, event);
+            if (onStep) onStep(event);
+            this.recordTask(taskId, { status: 'running', pendingApproval: null });
+            return 'rejected';
+        }
+
+        this.recordTask(taskId, { status: 'running', pendingApproval: null });
+        return 'approved';
+    }
+
+    /**
+     * Draft baseline specs, then put every write to the reviewer one at a time.
+     *
+     * The drafting is deterministic plumbing (graph → pipeline → local model), so
+     * there is nothing for the agent loop to decide. The writes are not: each one,
+     * `openspec init` included, goes through awaitApproval, the same gate a
+     * model-requested write passes. A rejected draft is simply not written.
+     */
+    async runSpecDraftDirectly({ taskId, onStep, metadata }) {
+        const project = metadata.projectId;
+        const emit = (event) => {
+            this.recordTaskEvent(taskId, event);
+            if (onStep) onStep(event);
+        };
+        const finish = (answer) => {
+            this.recordTask(taskId, { status: 'completed', finalAnswer: answer });
+            // Not emitted: RestController sends final_answer from the return value.
+            this.recordTaskEvent(taskId, { type: 'final_answer', taskId, answer });
+            return answer;
+        };
+        // Runs one gated tool call; true only when it was approved and succeeded.
+        const gated = async (toolCall) => {
+            const decision = await this.awaitApproval(toolCall, { taskId, onStep, metadata });
+            if (decision !== 'approved') return decision;
+            emit({ type: 'tool_start', taskId, tool: toolCall.name, params: toolBox.sanitizeParameters ? toolBox.sanitizeParameters(toolCall.parameters) : toolCall.parameters });
+            const result = await toolBox.callTool(toolCall.name, toolCall.parameters);
+            emit({ type: 'tool_end', taskId, tool: toolCall.name, result });
+            return 'approved';
+        };
+
+        logger.info('agent_spec_draft_routed_directly', { taskId, path: project });
+
+        try {
+            emit({ type: 'tool_start', taskId, tool: 'specDraft', params: { project }, routed: 'direct' });
+            const drafted = await toolBox.callTool('specDraft', { project });
+            emit({ type: 'tool_end', taskId, tool: 'specDraft', result: drafted.message });
+            // Drafting takes minutes on a local model; honour a Stop pressed meanwhile.
+            if (this.isCancelled(taskId)) {
+                emit({ type: 'task_cancelled', taskId, message: 'Task cancelled.' });
+                this.recordTask(taskId, { status: 'cancelled' });
+                this.cancelledTasks.delete(taskId);
+                return null;
+            }
+
+            const skippedLines = (drafted.skipped || []).map(entry => `- ${entry.capability}: skipped, ${entry.reason}`);
+            if (!drafted.available || drafted.drafts.length === 0) {
+                return finish([drafted.message || 'No drafts.', ...skippedLines].join('\n'));
+            }
+
+            if (!drafted.openSpecInitialized) {
+                const decision = await gated({ name: 'specInit', parameters: { project } });
+                if (decision === 'cancelled') return null;
+                if (decision === 'rejected') {
+                    return finish('Nothing written: OpenSpec initialization was rejected, and the drafts need an openspec/ folder.');
+                }
+            }
+
+            const written = [];
+            const rejected = [];
+            for (const draft of drafted.drafts) {
+                const decision = await gated({ name: 'writeFile', parameters: { filePath: draft.filePath, content: draft.content } });
+                if (decision === 'cancelled') return null;
+                (decision === 'approved' ? written : rejected).push(draft.relativePath);
+            }
+            if (written.length) this.refreshTouchedWorkspaces(new Set([project]), taskId);
+
+            return finish([
+                written.length
+                    ? `Wrote ${written.length} draft spec(s). Each is marked DRAFT in its Purpose: review and edit them, then run \`openspec validate --specs\`.`
+                    : 'No draft specs were written.',
+                ...written.map(file => `- \`${file}\``),
+                ...rejected.map(file => `- ${file}: rejected, not written`),
+                ...skippedLines,
+            ].join('\n'));
+        } catch (err) {
+            logger.error('agent_spec_draft_failed', err, { taskId, path: project });
+            this.recordTask(taskId, { status: 'error', error: err.message });
+            emit({ type: 'error', taskId, message: err.message });
+            return null;
+        }
+    }
+
     async executeTask(task, taskId, onStep, metadata = {}) {
         const now = new Date().toISOString();
         this.recordTask(taskId, {
@@ -651,6 +854,10 @@ Rules:
         const routed = this.resolveDirectPluginCall(task);
         if (routed && metadata.projectId) {
             return this.runPluginDirectly(routed, { taskId, task, onStep, metadata });
+        }
+
+        if (metadata.projectId && resolveDirectSpecDraft(task)) {
+            return this.runSpecDraftDirectly({ taskId, onStep, metadata });
         }
 
         // A plain search runs as a search: one read-only call, no model, no
@@ -1021,105 +1228,12 @@ Rules:
                         : null;
 
                     if (requiresApproval(toolCall.name, toolDescriptor || {})) {
-                        // Both editing tools name a file; anything else may not.
-                        const filePath = toolCall.parameters && toolCall.parameters.filePath;
-                        const oldContent = filePath ? await toolBox.getFileContent(filePath) : null;
-                        const newContent = filePath
-                            ? proposedContent(toolCall, oldContent)
-                            : null;
-
-                        // A line diff says what changed; it never says what it costs.
-                        // Attach the graph-derived blast radius so the reviewer is
-                        // making a risk decision, not just reading a diff.
-                        const impact = metadata.projectId && filePath
-                            ? impactAnalyzer.analyzeFile(metadata.projectId, filePath)
-                            : { available: false, reason: filePath ? 'no workspace selected' : 'not a file edit' };
-
-                        // Goldust: add OpenSpec spec awareness to the impact.
-                        // Which specs describe this file, and would the change cause drift?
-                        let specImpact = { available: false, reason: 'no projectId' };
-                        if (metadata.projectId) {
-                            try {
-                                const specs = specDrift.readSpecs(metadata.projectId);
-                                const mentionedIn = [];
-                                for (const spec of specs) {
-                                    const refs = specDrift.extractReferences(spec.text);
-                                    if (filePath && refs.some(r => filePath.includes(r) || r.includes(filePath))) {
-                                        mentionedIn.push(spec.id);
-                                    }
-                                }
-                                specImpact = { available: true, specCount: specs.length, mentionedIn };
-                            } catch (_) { /* OpenSpec unavailable */ }
+                        const decision = await this.awaitApproval(toolCall, { taskId, onStep, metadata });
+                        if (decision === 'cancelled') return null;
+                        if (decision === 'rejected') {
+                            conversation.addToolResult(toolCall.name, { error: REJECTED });
+                            continue;
                         }
-
-                        logger.info('approval_impact_assessed', {
-                            taskId,
-                            tool: toolCall.name,
-                            filePath: filePath || null,
-                            available: impact.available,
-                            impactedCount: impact.impactedCount ?? null,
-                            testCount: impact.testCount ?? null,
-                            risk: impact.risk ?? null,
-                            summary: impactAnalyzer.summarize(impact)
-                        });
-
-                        const pendingApproval = {
-                            tool: toolCall.name,
-                            params: {
-                                filePath: filePath || null,
-                                oldContent,
-                                newContent,
-                                // Tools that touch no file still have to show what
-                                // they intend to do, or consent means nothing.
-                                arguments: filePath ? undefined : toolBox.sanitizeParameters
-                                    ? toolBox.sanitizeParameters(toolCall.parameters)
-                                    : toolCall.parameters
-                            },
-                            impact,
-                            specImpact
-                        };
-
-                        this.recordTask(taskId, {
-                            status: 'awaiting_approval',
-                            pendingApproval
-                        });
-
-                        const approvalEvent = {
-                            type: 'awaiting_approval',
-                            tool: toolCall.name,
-                            taskId,
-                            params: pendingApproval.params,
-                            impact,
-                            specImpact
-                        };
-                        this.recordTaskEvent(taskId, approvalEvent);
-                        if (onStep) onStep(approvalEvent);
-
-                        // Wait for approval signal
-                        const approved = await new Promise((resolve) => {
-                            this.pendingApprovals.set(taskId, resolve);
-                        });
-
-                        if (this.isCancelled(taskId)) {
-                            const event = { type: 'task_cancelled', taskId, message: 'Task cancelled.' };
-                            this.recordTaskEvent(taskId, event);
-                            if (onStep) onStep(event);
-                            this.recordTask(taskId, { status: 'cancelled', pendingApproval: null });
-                            this.cancelledTasks.delete(taskId);
-                            return null;
-                        }
-
-                        if (!approved) {
-                            const result = { error: "User rejected this change." };
-                            conversation.addToolResult(toolCall.name, result);
-                            const event = { type: 'tool_end', taskId, tool: toolCall.name, result };
-                            this.recordTaskEvent(taskId, event);
-                            if (onStep) onStep(event);
-                            this.recordTask(taskId, { status: 'running', pendingApproval: null });
-                            continue; 
-                        }
-
-                        this.recordTask(taskId, { status: 'running', pendingApproval: null });
                     }
                     // ---------------------------
 
@@ -1286,5 +1400,6 @@ module.exports = new AgentReasoningEngine();
 module.exports.extractToolCalls = extractToolCalls;
 module.exports.MAX_PARALLEL_TOOL_CALLS = MAX_PARALLEL_TOOL_CALLS;
 module.exports.resolveDirectSearch = resolveDirectSearch;
+module.exports.resolveDirectSpecDraft = resolveDirectSpecDraft;
 module.exports.formatSearchAnswer = formatSearchAnswer;
 module.exports.MAX_STEPS_FALLBACK = MAX_STEPS_FALLBACK;

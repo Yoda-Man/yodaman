@@ -8,29 +8,55 @@ YodaMan reads persistent workspace configuration from `config.json` and runtime 
 {
   "watchedDirectories": [
     "/Users/username/projects/my-app"
-  ]
+  ],
+  "removedDirectories": [],
+  "settings": {
+    "requirePairingToken": true,
+    "allowAgentCommands": false
+  }
 }
 ```
 
-| Key | Type | Required | Description |
+| Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `watchedDirectories` | `string[]` | Yes | Absolute workspace paths that YodaMan should watch, index, and expose to chat, search, and agent tasks. |
-| `removedDirectories` | `string[]` | No | Deleted workspace paths that should not be re-added from stale Context Expert project metadata. |
+| `watchedDirectories` | `string[]` | `[]` | Absolute workspace paths that YodaMan should watch, index, and expose to chat, search, and agent tasks. |
+| `removedDirectories` | `string[]` | `[]` | Deleted workspace paths that should not be re-added from stale Context Expert project metadata. |
+| `settings` | object | see below | Security and editor settings. Settings writes this block; missing keys take the defaults below. |
 
 Use absolute paths. The API validates submitted paths and normalizes them before storing or queueing work.
+
+### `settings`
+
+Each setting can also be overridden by an environment variable named after it (`allowPluginUploads` → `YODAMAN_ALLOW_PLUGIN_UPLOADS`). An environment value wins over `config.json`; `true`/`false` become booleans and `allowedCommands` takes a comma-separated list.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `requirePairingToken` | `true` | Non-local clients must send `X-YodaMan-Token` from the pairing flow. |
+| `allowUnrestrictedPlugins` | `false` | Allows plugins that declare unrestricted permissions. Keep disabled for normal use. |
+| `allowPluginUploads` | `false` | Enables plugin uploads. Keep disabled except during trusted local support sessions. |
+| `allowAgentCommands` | `false` | Enables agent shell command execution. Keep disabled except during trusted local support sessions. |
+| `allowSelfHealInstall` | `false` | Lets **Repair** on the Dashboard run the npm and pip installs for Context Expert, Graphify and OpenSpec (never Ollama, never sudo), from this computer only. |
+| `allowedCommands` | `[]` | Extra executable names the agent may run, on top of the built-in allowlist. Bare names only. |
+| `editorCommand` | `""` | How files open from search results and chat links. Empty or `system` uses the OS default app for the file type; an app bundle path opens that app; anything else is a command template such as `idea --line {line} {file}`. Can only be changed from this computer. |
 
 ## Environment variables
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `YODAMAN_PORT` | `3090` | Express runtime port. |
-| `YODAMAN_REQUIRE_PAIRING_TOKEN` | `true` | Non-local clients must send `X-YodaMan-Token` from the pairing flow. |
-| `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `false` | Allows plugins that declare unrestricted permissions. Keep disabled for normal use. |
-| `YODAMAN_ALLOW_PLUGIN_UPLOADS` | `false` | Enables plugin uploads. Keep disabled except during trusted local support sessions. |
-| `YODAMAN_ALLOW_AGENT_COMMANDS` | `false` | Enables agent shell command execution. Keep disabled except during trusted local support sessions. |
+| `YODAMAN_HOST` | `127.0.0.1` | Address the runtime binds. Set `0.0.0.0` only to let paired mobile or LAN clients reach it. |
+| `YODAMAN_DATA_DIR` | per-OS data folder | Moves the data folder (`config.json`, `yodaman.db`). |
+| `YODAMAN_CONFIG_PATH` | `<data folder>/config.json` | Points at a single config file. |
+| `YODAMAN_DB_PATH` | `<data folder>/yodaman.db` | Points at a single database file. |
+| `YODAMAN_LOG_TO_FILE` | `true` (off under Jest) | Writes `runtime.log`. |
+| `YODAMAN_LOG_DIR` | `~/.yodaman/logs` | Folder for `runtime.log`. |
+| `YODAMAN_LOG_MAX_BYTES` / `YODAMAN_LOG_MAX_FILES` | `5242880` / `3` | Log rotation size and number of rotated files kept. |
+| `YODAMAN_UPLOAD_ROOT` | `<os tmpdir>/yodaman-agent-uploads` | Where files attached to agent tasks are stored. |
+| `YODAMAN_CTX_ASK_TIMEOUT_MS` | `12000` | Timeout for the `ctx ask` call behind `POST /api/ask` before it falls back. |
 | `YODAMAN_WATCH_DEBOUNCE_MS` | `1500` | Debounce window for filesystem watcher reindex queueing. |
-| `YODAMAN_GRAPHIFY_BIN` | `graphify` | Graphify executable path. Use this when `graphifyy` installs into a user Python bin directory outside `PATH`. |
+| `YODAMAN_GRAPHIFY_BIN` | auto-detected | Graphify executable path. Without it YodaMan searches `PATH` and the user Python bin directories, then falls back to `graphify`. Set it when `graphifyy` is installed somewhere else. |
 | `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Timeout for Graphify build, query, explain, and path subprocesses. |
+| `YODAMAN_GRAPHIFY_RUNNING_STALE_MS` | twice the timeout + 60000 | Age after which a build still marked running is treated as stale. |
 | `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | `25000` | Default Graphify HTML visualization node limit passed as `GRAPHIFY_VIZ_NODE_LIMIT`. Lower it for slower machines or raise it when large mind maps are acceptable. |
 | `YODAMAN_GRAPHIFY_FULL_EXTRACT` | `false` | When `true`, use Graphify full semantic extraction through Ollama instead of the no-LLM update path. |
 | `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | `qwen3:5b` | Local Ollama model passed to Graphify when full extraction is enabled. |

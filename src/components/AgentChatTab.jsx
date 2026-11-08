@@ -584,11 +584,17 @@ export default function AgentChatTab({ selectedProject }) {
 
   // Holocron's "Ask Agent" pre-fills a question about a node. It is never
   // sent automatically: the user reads it, edits it if they like, and sends.
+  // A fixed command (Stardust's Draft Specs) sets `send`, because its writes
+  // still each stop at the approval gate.
   useEffect(() => {
     const onAsk = (event) => {
       const prompt = event.detail?.prompt
       if (!prompt) return
       setWorkspaceView('chat')
+      if (event.detail.send) {
+        sendAgentRef.current?.(prompt)
+        return
+      }
       setInputText(prompt)
       setTimeout(() => composerRef.current?.focus(), 0)
     }
@@ -598,6 +604,9 @@ export default function AgentChatTab({ selectedProject }) {
   const [searchRequest, setSearchRequest] = useState({ id: 0, query: '' })
   const [isSearchPending, setIsSearchPending] = useState(false)
   const [pendingApproval, setPendingApproval] = useState(null)
+  // The listener above is registered once; this keeps it calling the current send.
+  const sendAgentRef = useRef(null)
+  sendAgentRef.current = sendAgentMessage
   const [activeTaskId, setActiveTaskId] = useState(null)
   const [lastPrompt, setLastPrompt] = useState(null)
   const [readiness, setReadiness] = useState(null)
