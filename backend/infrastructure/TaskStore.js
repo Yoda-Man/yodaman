@@ -1,10 +1,10 @@
 const fs = require('fs');
-const path = require('path');
 const { db, useSqlite } = require('./Database');
+const { dataFile } = require('./DataPaths');
 const logger = require('./Logger');
 
-const TASK_HISTORY_FILE = path.join(__dirname, '../../task-history.json');
-const TASK_HISTORY_JSONL_FILE = path.join(__dirname, '../../task-history.jsonl');
+const TASK_HISTORY_FILE = dataFile('task-history.json');
+const TASK_HISTORY_JSONL_FILE = dataFile('task-history.jsonl');
 const MAX_TASKS = 100;
 const MAX_EVENTS_PER_TASK = 250;
 

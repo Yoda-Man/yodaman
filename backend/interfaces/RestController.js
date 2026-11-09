@@ -45,7 +45,7 @@ const storage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         try {
-            cb(null, safePluginFilename(file.originalname));
+            cb(null, newPluginFilename(file.originalname));
         } catch (err) {
             cb(err);
         }
@@ -103,10 +103,7 @@ function validateProjectId(projectId) {
     return validateString(projectId, 'projectId', { required: false, max: 4096 });
 }
 
-function isLocalRequest(req) {
-    const ip = req.ip || req.socket?.remoteAddress || '';
-    return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-}
+const { isLocalRequest } = require('./support/http');
 
 
 function isPairingRequiredByDefault() {
@@ -126,6 +123,18 @@ function safePluginFilename(originalName) {
     }
     if (!/^[a-zA-Z0-9_-]+\.(js|zip)$/.test(filename)) {
         throw new Error('Plugin upload must be a .js or .zip file with a safe filename');
+    }
+    return filename;
+}
+
+/**
+ * An upload may add a plugin, never replace one: an archive's main.js would
+ * otherwise overwrite Holocron's, and a graphify.js a default plugin.
+ */
+function newPluginFilename(originalName) {
+    const filename = safePluginFilename(originalName);
+    if (fs.existsSync(path.join(PLUGINS_DIR, filename))) {
+        throw Object.assign(new Error(`A plugin file named ${filename} is already installed. Delete it first to replace it.`), { status: 409 });
     }
     return filename;
 }
@@ -703,6 +712,10 @@ router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (r
         return res.status(400).send('No file uploaded');
     }
     const startTime = Date.now();
+    // What this upload put in place, so a failure removes it rather than
+    // leaving a half-checked plugin to load, unrestricted, on the next start.
+    let installedPath = null;
+    let extractDir = null;
 
     try {
         let pluginFilename = req.file.originalname;
@@ -713,7 +726,7 @@ router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (r
         if (pluginFilename.endsWith('.zip')) {
             logger.info('plugin_upload_extract_begin', { filename: pluginFilename, size: req.file?.size });
             const { execFileSync } = require('child_process');
-            const extractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-extract-'));
+            extractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-extract-'));
             // argv form, not a shell string: paths reach unzip as literal
             // arguments, so quoting and metacharacters can never be reinterpreted.
             execFileSync('unzip', ['-o', pluginPath, '-d', extractDir], { stdio: 'pipe' });
@@ -724,9 +737,10 @@ router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (r
             const mainEntry = jsFiles.find(f => path.basename(f) === 'main.js') || jsFiles[0];
             if (!mainEntry) throw new Error('No .js plugin file found in the zip archive');
 
-            const safeName = safePluginFilename(path.basename(mainEntry));
+            const safeName = newPluginFilename(path.basename(mainEntry));
             const targetPath = path.join(PLUGINS_DIR, safeName);
-            fs.copyFileSync(mainEntry, targetPath);
+            fs.copyFileSync(mainEntry, targetPath, fs.constants.COPYFILE_EXCL);
+            installedPath = targetPath;
 
             // Merge plugin.json fields into the plugin if present
             logger.info('plugin_merge_looking_for_json', { extractDir });
@@ -754,6 +768,7 @@ router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (r
 
             // Cleanup
             fs.rmSync(extractDir, { recursive: true, force: true });
+            extractDir = null;
             fs.unlinkSync(pluginPath);
             pluginFilename = safeName;
             pluginPath = targetPath;
@@ -779,6 +794,8 @@ router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (r
         if (req.file?.path && fs.existsSync(req.file.path)) {
             fs.unlinkSync(req.file.path);
         }
+        if (installedPath && fs.existsSync(installedPath)) fs.unlinkSync(installedPath);
+        if (extractDir) fs.rmSync(extractDir, { recursive: true, force: true });
         logger.error('plugin_upload_failed', err, { filename: req.file?.originalname, step: 'extract/validate', userAction: 'plugin_upload', severity: 'high' });
         res.status(400).json({ error: err.message });
     }
@@ -1014,6 +1031,20 @@ router.get('/desktop/diagnostics', (req, res) => {
 
 router.use(require('./routes/graphifyRoutes'));
 
+// Pairing is exempt from the token gate above, so it must be limited to this
+// computer itself: otherwise any device on the LAN could mint its own token.
+function pairingLocalOnly(req, res, next) {
+    return isLocalRequest(req) ? next() : jsonError(res, 403, 'Pairing can only be managed from this computer', 'pairing_local_only');
+}
+
+// Settings decide what a paired device may do (the token requirement itself,
+// agent commands, uploads), and the model settings restart or reconfigure local
+// services, so a pairing token must not be enough to change them.
+function configLocalOnly(req, res, next) {
+    return isLocalRequest(req) ? next() : jsonError(res, 403, 'Settings can only be changed from this computer', 'settings_local_only');
+}
+router.use('/pairing', pairingLocalOnly);
+
 router.post('/pairing', (req, res) => {
     const host = req.get('host');
     const protocol = req.protocol || 'http';
@@ -1103,7 +1134,7 @@ router.get('/settings', (req, res) => {
     res.json(settings.getAll());
 });
 
-router.put('/settings', (req, res) => {
+router.put('/settings', configLocalOnly, (req, res) => {
     const settings = require('../infrastructure/SettingsProvider');
     const booleanKeys = [
         'allowPluginUploads',
@@ -1227,7 +1258,7 @@ router.get('/ctx/config', async (req, res) => {
     }
 });
 
-router.post('/ctx/config', async (req, res) => {
+router.post('/ctx/config', configLocalOnly, async (req, res) => {
     const { key, value } = req.body || {};
     if (!key || value === undefined) {
         return res.status(400).json({ ok: false, error: 'key and value are required' });
@@ -1272,7 +1303,7 @@ router.get('/ollama/context', (req, res) => {
     }
 });
 
-router.post('/ollama/context', async (req, res) => {
+router.post('/ollama/context', configLocalOnly, async (req, res) => {
     const tokens = Number(req.body?.tokens);
     try {
         const result = await ollamaConfig.setContextLength(tokens);
@@ -1456,8 +1487,11 @@ router.use(require('./routes/stardustRoutes'));
 // Test-facing handles. These belong on the top-level router, not on any
 // sub-router: tests/interfaces/RestController.test.js reaches for them.
 router.isPairingRequiredByDefault = isPairingRequiredByDefault;
+router.pairingLocalOnly = pairingLocalOnly;
+router.configLocalOnly = configLocalOnly;
 router.arePluginUploadsEnabled = arePluginUploadsEnabled;
 router.safePluginFilename = safePluginFilename;
+router.newPluginFilename = newPluginFilename;
 router.isGeneratedTempWorkspace = isGeneratedTempWorkspace;
 
 module.exports = router;

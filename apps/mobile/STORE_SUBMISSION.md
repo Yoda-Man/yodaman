@@ -31,8 +31,8 @@ These need account access and cannot be scripted from here.
    uses standard networking. Confirm it matches your legal position before the
    first submission.
 5. **Complete Google Play Data safety.** Declare that the app transmits the
-   user's questions and search terms to a server the user nominates, and that
-   nothing is collected by the developer.
+   user's questions, search terms and the file paths they analyse to a server
+   the user nominates, and that nothing is collected by the developer.
 
 ## Apple review will fail without a reachable runtime
 
@@ -68,8 +68,10 @@ npm run submit:android   # to the internal track
 npm run submit:ios       # to App Store Connect
 ```
 
-`production` sets `autoIncrement`, so build numbers rise without editing
-`app.json`. The marketing version is `expo.version`; bump it there.
+`production` sets `autoIncrement` and `eas.json` uses
+`"appVersionSource": "local"`, so EAS raises `ios.buildNumber` and
+`android.versionCode` in `app.json` itself on each build. The marketing version
+is `expo.version`; bump it there.
 
 ## Known gap: typefaces
 
@@ -77,4 +79,5 @@ The desktop self-hosts Inter, Outfit, and JetBrains Mono through Fontsource,
 which ships `woff2` only — a format React Native cannot load. The app therefore
 uses the system UI face for body text and the platform monospace for the
 readout labels. To close this, vendor the TTFs and load them with `expo-font`,
-which is already an installed dependency.
+which is already installed as a dependency of `expo` (add it to `package.json`
+with `npx expo install expo-font` before importing it directly).

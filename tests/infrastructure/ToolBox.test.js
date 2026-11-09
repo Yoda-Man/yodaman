@@ -203,3 +203,23 @@ describe('ToolBox', () => {
         expect(hit.lineStart).toBeGreaterThan(0);
     });
 });
+
+describe('plugin loading skips scaffolded test files', () => {
+    test('a plugins/<name>.test.js written by create-plugin is never loaded as a plugin', () => {
+        const fs = require('fs');
+        const path = require('path');
+        const toolBox = require('../../backend/infrastructure/ToolBox');
+        const logger = require('../../backend/infrastructure/Logger');
+        const file = path.resolve(__dirname, '../../plugins', `scaffold-${process.pid}.test.js`);
+        // Stands in for a scaffolded Jest file, which cannot run as a plugin.
+        fs.writeFileSync(file, "throw new Error('a test file was loaded as a plugin');\n");
+        const failed = jest.spyOn(logger, 'error');
+        try {
+            toolBox.loadPlugins();
+            expect(failed.mock.calls.filter(([message, , meta]) => message === 'toolbox_plugin_load_failed' && meta?.file === path.basename(file))).toEqual([]);
+        } finally {
+            failed.mockRestore();
+            fs.rmSync(file, { force: true });
+        }
+    });
+});

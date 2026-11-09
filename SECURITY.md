@@ -36,7 +36,8 @@ The latest minor release only. There are no long-term support branches.
 
 Reports against these are in scope:
 
-- **The local runtime**, which listens on `127.0.0.1:3090` — request handling,
+- **The local runtime**, which listens on `127.0.0.1:3090` by default
+  (`YODAMAN_HOST`, `YODAMAN_PORT`) — request handling, the pairing-token gate,
   path traversal, or anything that reads or writes outside a watched workspace.
 - **The MCP server** (`bin/yodaman-mcp.mjs`) — in particular any way to make it
   perform a write, since it is read-only by design and enforced by tests.
@@ -49,18 +50,29 @@ Reports against these are in scope:
 - **The Ollama context-length setting**, which writes a launchd plist and
   restarts a service. Anything that lets an unvalidated value reach that file.
 - **Any unexpected network egress.** YodaMan is local-first; traffic to anywhere
-  other than the local runtime and your configured local model is a bug.
+  other than the local runtime and your configured local model is a bug. Two
+  exceptions are expected: a package install you start yourself, through
+  `yodaman setup` or the Dashboard's Repair (off unless you enable it in
+  Settings), which reaches the npm and pip registries; and Context Expert's
+  one-time download of its embedding model weights from Hugging Face, which
+  sends no code or queries.
 
 ## Not vulnerabilities
 
 To save you the effort, these are known and intentional:
 
 - **The runtime opens a local port.** It binds loopback (`127.0.0.1`) and is not
-  reachable from the network.
+  reachable from the network unless you set `YODAMAN_HOST` (for example
+  `0.0.0.0` for the mobile companion). Then any request not from the machine
+  itself needs a pairing token, which `requirePairingToken` enforces by default.
+  Tokens are created, and settings changed, only from the machine itself; a
+  device that can create its own token, or change a setting with one, is in
+  scope.
 - **Any local process can reach the runtime.** There is no authentication on
-  loopback. YodaMan's trust boundary is the machine; a hostile process already
-  running as your user has better options than the YodaMan API. If you need a
-  stronger boundary, do not run untrusted code as your own user.
+  loopback; only requests from web pages on non-local origins are refused.
+  YodaMan's trust boundary is the machine; a hostile process already running as
+  your user has better options than the YodaMan API. If you need a stronger
+  boundary, do not run untrusted code as your own user.
 - **The MCP client header is self-reported.** `X-YodaMan-MCP-Client` carries
   whatever a client claims to be, so the Settings list is an honest record of
   what was claimed, not an authenticated identity. It is bounded and sanitised

@@ -1,6 +1,6 @@
 # YodaMan Mobile — Privacy Policy
 
-_Last updated: 18 August 2026_
+_Last updated: 8 November 2026_
 
 YodaMan Mobile is a companion app for the YodaMan runtime, which you run on your
 own computer. This policy describes what the app does with your data.
@@ -14,7 +14,8 @@ They do not pass through us.
 
 ## What the app stores
 
-Held in memory on your device for the duration of a session:
+Held in memory on your device while the app is running, and never written to
+storage:
 
 - The runtime URL you enter.
 - The pairing token you enter or receive from a `yodaman://pair` link.
@@ -29,11 +30,15 @@ crash reporting SDK, and no third-party trackers.
 Every request goes to the runtime URL you configured, and nowhere else. That is
 normally a private address on your own local network, such as
 `http://192.168.1.20:3090`. Content sent there can include the questions you
-type, your search terms, and the identifier of the project you selected —
-because answering them requires your runtime to read your indexed code.
+type, your search terms, the file paths you analyse on the Impact tab, the
+identifier of the project you selected, your approve, reject and cancel
+decisions, and your pairing token — because answering them requires your
+runtime to read your indexed code.
 
 If you point the app at a remote address you control, traffic goes to that
-address instead. The app never chooses a destination for you.
+address instead. The Runtime URL field starts as `http://127.0.0.1:3090`, which
+on a phone is the phone itself; beyond that, the app never chooses a destination
+for you.
 
 ## Local network access
 
@@ -43,7 +48,7 @@ permission is not used for discovery, scanning, or profiling of other devices.
 
 ## Data you can delete
 
-Uninstalling the app removes everything it holds. Anything your runtime stored —
+Everything the app holds is gone once the app is closed or uninstalled. Anything your runtime stored —
 sessions, task history, audit logs — lives on your own computer and is managed
 there, not by this app.
 

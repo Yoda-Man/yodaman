@@ -18,7 +18,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Zap, Activity, CheckCircle2, XCircle, Play, FileCheck, Archive,
     FolderOpen, Terminal, Download, RefreshCw, Loader2, GitCompare,
-    LayoutGrid, Link2, Shield, Search, Trash2, BarChart3,
+    LayoutGrid, Link2, Shield, Search, Trash2, BarChart3, Sparkles,
 } from 'lucide-react';
 import { api } from '../api/api';
 import { useStardustLive } from '../hooks/useStardustLive';
@@ -94,6 +94,11 @@ function ActionButton({ icon: Icon, label, color, loading, disabled, onClick }) 
             {label}
         </button>
     );
+}
+
+// Hands the task to Chat, where every draft passes the approval gate.
+function draftSpecs() {
+    window.dispatchEvent(new CustomEvent('yodaman:ask-agent', { detail: { prompt: 'Draft baseline specs', send: true } }));
 }
 
 // ── Main ──
@@ -654,10 +659,12 @@ function CommandsTab({
                         <ActionButton icon={Play} label="Propose" color="emerald" loading={running && currentAction === 'propose'} disabled={running || !changeId} onClick={() => runAction('propose')} />
                         <ActionButton icon={RefreshCw} label="List Changes" color="indigo" loading={running && currentAction === 'list'} disabled={running} onClick={() => runAction('list')} />
                         <ActionButton icon={FileCheck} label="List Specs" color="emerald" loading={running && currentAction === 'list'} disabled={running} onClick={() => runAction('list', { specs: true })} />
+                        <ActionButton icon={Sparkles} label="Draft Specs" color="amber" disabled={running} onClick={draftSpecs} />
                     </div>
                     <p className="mt-3 text-[10px] text-slate-600 leading-relaxed">
                         Validate records its verdict against the change, so the board's health icon reflects the last real run
-                        rather than staying unknown.
+                        rather than staying unknown. Draft Specs writes a first spec per module with the local model; each
+                        file waits for your approval in Chat.
                     </p>
                 </Panel>
             </div>

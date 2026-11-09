@@ -38,6 +38,11 @@ function configPath(env = process.env) {
     return env.YODAMAN_CONFIG_PATH || path.join(dataDir(env), 'config.json');
 }
 
+/** Any other state file kept beside config.json, such as sessions.json. */
+function dataFile(name, env = process.env) {
+    return path.join(dataDir(env), name);
+}
+
 function databasePath(env = process.env) {
     return env.YODAMAN_DB_PATH || path.join(dataDir(env), 'yodaman.db');
 }
@@ -57,7 +62,8 @@ function migrateLegacyData({ from = INSTALL_ROOT, env = process.env } = {}) {
     const result = { copied: [], failed: [] };
     const targets = [
         { file: 'config.json', to: configPath(env), copy: (source, target) => fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL) },
-        { file: 'yodaman.db', to: databasePath(env), copy: snapshotDatabase }
+        { file: 'yodaman.db', to: databasePath(env), copy: snapshotDatabase },
+        { file: 'sessions.json', to: dataFile('sessions.json', env), copy: (source, target) => fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL) }
     ];
     for (const { file, to, copy } of targets) {
         const source = path.join(from, file);
@@ -117,6 +123,7 @@ module.exports = {
     dataDir,
     configPath,
     databasePath,
+    dataFile,
     migrateLegacyData,
     prepareDataDir,
     describeDataFiles

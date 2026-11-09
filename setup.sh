@@ -75,7 +75,7 @@ if check_cmd ctx; then
 else
     echo -e "${YELLOW}Missing${NC}"
     echo -e "📦 Installing yodaman-ctx (YodaMan's Context Expert) globally..."
-    npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,onnxruntime-node
+    npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node
 fi
 
 # 6. Check for Graphify

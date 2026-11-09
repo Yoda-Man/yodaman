@@ -2,7 +2,7 @@
 
 **Local-first code intelligence that understands your workspace the way you do: what the code says, how it fits together, and what it was meant to do.**
 
-![Version](https://img.shields.io/badge/Version-0.6.2-gold) ![License](https://img.shields.io/badge/License-MIT-green) ![Node](https://img.shields.io/badge/Node-22%2B-339933) ![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
+![Version](https://img.shields.io/badge/Version-0.6.4-gold) ![License](https://img.shields.io/badge/License-MIT-green) ![Node](https://img.shields.io/badge/Node-24%2B-339933) ![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
 
 YodaMan combines three tools into one search and one agent:
 
@@ -129,8 +129,8 @@ installed automatically**: it is a system service with its own installer, so
 `setup` prints the command and leaves the decision to you. `yodaman setup
 --dry-run` shows exactly what would run, without running it.
 
-Desktop builds (`.dmg`, `.AppImage`) are on the
-[releases page](https://github.com/Yoda-Man/yodaman/releases).
+Desktop apps (`.dmg`, `.AppImage`, Windows installer) are built from source
+with `npm run desktop:dist:all`; see [Desktop app](docs/clients/desktop-app.md).
 
 ### Check your setup
 
@@ -148,7 +148,7 @@ where a missing component offers a one-click install.
 
 ```bash
 git clone https://github.com/Yoda-Man/yodaman.git
-cd yodaman/core
+cd yodaman
 sh setup.sh
 npm run desktop          # or: npm start, then open http://localhost:3090
 ```
@@ -249,7 +249,9 @@ actually being served.
 
 ## Configuration
 
-Copy `config.example.json` to `config.json` and add your workspace paths:
+Workspaces are usually added in the app. They are stored in `config.json` in
+your data folder (see `YODAMAN_DATA_DIR` below); to write it by hand, start from
+`config.example.json`:
 
 ```json
 {
@@ -264,7 +266,8 @@ it in **Settings**.
 
 ### Settings
 
-These live under `settings` in `config.json` and are editable in the app.
+These live under `settings` in `config.json` and are editable in the app, from
+this computer only: a paired device cannot change them.
 **Every security setting defaults to the safe value.**
 
 | Setting | Default | Effect |
@@ -273,9 +276,9 @@ These live under `settings` in `config.json` and are editable in the app.
 | `allowAgentCommands` | `false` | Lets the agent run shell commands, restricted to an executable allowlist. |
 | `allowPluginUploads` | `false` | Accepts plugin uploads over `POST /api/plugins`. |
 | `allowUnrestrictedPlugins` | `false` | Loads plugins that declare no `permissions` array. |
-| `allowSelfHealInstall` | `false` | Lets `POST /api/health/install` install missing dependencies. |
+| `allowSelfHealInstall` | `false` | Lets Repair (`POST /api/setup/repair`) install missing tools. Repair only runs from this computer. |
 | `allowedCommands` | `[]` | Extra executables the agent may run. Bare names only, for example `["docker", "kubectl"]`. |
-| `editorCommand` | `""` | How files are opened. Empty means the system default; see [Using YodaMan](#using-yodaman). Can only be changed from this computer. |
+| `editorCommand` | `""` | How files are opened. Empty means the system default; see [Using YodaMan](#using-yodaman). |
 
 Agent shell commands run without a shell, so `;`, `|`, `&`, backticks, `$(…)`
 and redirection are rejected rather than interpreted, and inline evaluation
@@ -293,23 +296,23 @@ Any setting can be overridden by an environment variable named after it with a
 |----------|---------|---------|
 | `YODAMAN_PORT` | `3090` | HTTP and WebSocket port. |
 | `YODAMAN_HOST` | `127.0.0.1` | Bind address. **Loopback by default.** Set `0.0.0.0` only to pair a phone on your LAN; the API then reaches every device on that network. |
-| `YODAMAN_DATA_DIR` | your data folder | Where `config.json` and `yodaman.db` live: `~/Library/Application Support/YodaMan` on macOS, `%APPDATA%\YodaMan` on Windows, `~/.config/YodaMan` on Linux. Outside the install, so upgrades keep them. |
+| `YODAMAN_DATA_DIR` | your data folder | Where `config.json`, `yodaman.db` and `sessions.json` live: `~/Library/Application Support/YodaMan` on macOS, `%APPDATA%\YodaMan` on Windows, `~/.config/YodaMan` on Linux. Outside the install, so upgrades keep them. |
 | `YODAMAN_CONFIG_PATH` | `<data folder>/config.json` | Config file location. |
 | `YODAMAN_DB_PATH` | `<data folder>/yodaman.db` | SQLite database location. |
-| `YODAMAN_UPLOAD_ROOT` | OS temp dir | Where uploaded files are staged. |
+| `YODAMAN_UPLOAD_ROOT` | `<OS temp>/yodaman-agent-uploads` | Where uploaded files are staged. |
 | `YODAMAN_WATCH_DEBOUNCE_MS` | `1500` | File-watcher debounce before re-indexing. |
 | `YODAMAN_LOG_DIR` | `~/.yodaman/logs` | Directory for `runtime.log`. |
 | `YODAMAN_LOG_TO_FILE` | `true` | Set `false` to log to stdout only. |
 | `YODAMAN_LOG_MAX_BYTES` | `5242880` | Rotate `runtime.log` at this size. |
 | `YODAMAN_LOG_MAX_FILES` | `3` | Rotated files to keep. |
-| `YODAMAN_AGENT_PROMPT_CHARS` | | Caps the character budget for agent prompts. |
-| `YODAMAN_CTX_ASK_TIMEOUT_MS` | | Timeout for `ctx ask` calls. |
-| `YODAMAN_GRAPHIFY_BIN` | `graphify` | Path to the Graphify binary. |
+| `YODAMAN_AGENT_PROMPT_CHARS` | sized to the served context window | Sets the agent's prompt budget in characters instead (at most 120,000). |
+| `YODAMAN_CTX_ASK_TIMEOUT_MS` | `12000` | Timeout for `ctx ask` calls. |
+| `YODAMAN_GRAPHIFY_BIN` | found on `PATH`, or in `~/Library/Python` on macOS | Path to the Graphify binary. |
 | `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Graphify subprocess timeout. Raise it for very large workspaces. |
-| `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | | Model Graphify uses for enrichment. |
-| `YODAMAN_GRAPHIFY_FULL_EXTRACT` | | Forces a full re-extract instead of an incremental one. |
+| `YODAMAN_GRAPHIFY_OLLAMA_MODEL` | `qwen3:5b` | Model Graphify uses for enrichment. |
+| `YODAMAN_GRAPHIFY_FULL_EXTRACT` | | Set `true` to force a full re-extract instead of an incremental one. |
 | `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | `25000` | Largest graph rendered as an HTML visualisation. |
-| `YODAMAN_GRAPHIFY_RUNNING_STALE_MS` | | When a running Graphify job is treated as abandoned. |
+| `YODAMAN_GRAPHIFY_RUNNING_STALE_MS` | twice the timeout plus 60 s | When a running Graphify job is treated as abandoned. |
 
 Frontend build-time variables (Vite): `VITE_YODAMAN_API_BASE`,
 `VITE_YODAMAN_FETCH_TIMEOUT_MS`.

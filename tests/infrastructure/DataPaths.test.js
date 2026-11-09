@@ -68,6 +68,15 @@ describe('bringing data over from an older install', () => {
         copy.close();
     });
 
+    test('brings chat sessions over too, which used to stay behind and vanish on upgrade', () => {
+        const from = scratch();
+        fs.writeFileSync(path.join(from, 'sessions.json'), JSON.stringify({ '/work/naboo': [{ role: 'user', content: 'hi' }] }));
+        const env = { YODAMAN_DATA_DIR: scratch() };
+
+        expect(dataPaths.prepareDataDir({ from, env }).copied).toEqual(['sessions.json']);
+        expect(JSON.parse(fs.readFileSync(dataPaths.dataFile('sessions.json', env), 'utf8'))['/work/naboo']).toHaveLength(1);
+    });
+
     test('copies, never moves: an older version run again still finds its data', () => {
         const { from, db } = oldInstall();
         db.close();
@@ -148,7 +157,7 @@ describe('what the Dashboard shows', () => {
 });
 
 describe('nothing reads them from the install any more', () => {
-    test('no module builds a config.json or yodaman.db path beside the code', () => {
+    test('no module builds a state-file path beside the code', () => {
         const root = path.join(__dirname, '../..');
         const files = ['server.js', 'bin/yodaman.js', 'electron/main.js'];
         const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).forEach((e) => {
@@ -158,7 +167,7 @@ describe('nothing reads them from the install any more', () => {
         });
         walk(path.join(root, 'backend'));
         const offenders = files.filter((file) => file !== 'backend/infrastructure/DataPaths.js'
-            && /(__dirname|process\.cwd\(\))[^\n;]*['"](\.\.?\/)*(config\.json|yodaman\.db)['"]/.test(fs.readFileSync(path.join(root, file), 'utf8')));
+            && /(__dirname|process\.cwd\(\))[^\n;]*['"](\.\.?\/)*(config\.json|yodaman\.db|sessions\.json|audit-log\.jsonl?|task-history\.jsonl?)['"]/.test(fs.readFileSync(path.join(root, file), 'utf8')));
         expect(offenders).toEqual([]);
     });
 });

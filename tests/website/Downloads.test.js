@@ -59,6 +59,22 @@ describe('Website downloads', () => {
         expect(joined).toContain(`vscode-yodaman-${version}.vsix`);    // VS Code
     });
 
+    test('the VS Code extension carries the shared client it loads', () => {
+        // extension.js needs core's shared/yodamanClient. vsce only packages
+        // the extension folder, so every .vsix through 0.6.4 shipped without
+        // it and could not start once installed.
+        const extDir = path.join(rootDir, 'extensions', 'vscode-yodaman');
+        const manifest = require(path.join(extDir, 'package.json'));
+        expect(manifest.scripts['vscode:prepublish']).toContain('copy-shared.js');
+        expect(fs.readFileSync(path.join(extDir, '.vscodeignore'), 'utf8')).not.toMatch(/^src\//m);
+
+        const vsix = path.join(downloadsDir, `vscode-yodaman-${version}.vsix`);
+        if (!fs.existsSync(vsix)) return; // nothing built yet; the page test above says so
+        const listing = require('child_process').execFileSync('unzip', ['-l', vsix], { encoding: 'utf8' });
+        expect(listing).toContain('extension/src/shared/yodamanClient.js');
+        expect(listing).toContain('extension/src/shared/yodamanProtocol.js');
+    });
+
     test('Windows is pointed at CI rather than shipped from a cross-build', () => {
         // A cross-built Windows installer is a truncated stub, and a stale ZIP
         // from an earlier commit would give Windows users different software

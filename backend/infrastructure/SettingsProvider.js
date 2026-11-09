@@ -10,7 +10,7 @@ const DEFAULTS = {
   allowUnrestrictedPlugins: false,
   allowAgentCommands: false,
   requirePairingToken: true,
-  // Installing software is privileged, so POST /api/health/install is opt-in.
+  // Installing software is privileged, so Repair (POST /api/setup/repair) is opt-in.
   allowSelfHealInstall: false,
   // Extra executables the agent may run, on top of ToolBox's baseline allowlist.
   allowedCommands: [],

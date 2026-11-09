@@ -18,7 +18,7 @@ Infrastructure Layer (ToolBox, ContextEngine, GraphifyService, Logger)
 
 ### Interface Layer — `backend/interfaces/RestController.js`
 
-The REST controller handles all HTTP endpoints. Key route groups:
+The REST controller mounts every HTTP endpoint under `/api`; route groups also live in `backend/interfaces/routes/` (editor, git, graphify, stardust) and in the search and upload routers in `backend/services/`. Key route groups:
 
 | Prefix | Purpose |
 |--------|---------|
@@ -28,12 +28,12 @@ The REST controller handles all HTTP endpoints. Key route groups:
 | `GET/POST/DELETE /api/plugins` | Plugin lifecycle (list, upload, delete) |
 | `POST /api/plugins/:name/enable\|disable` | Plugin toggle |
 | `GET /api/settings`, `PUT /api/settings` | Developer settings |
-| `GET /api/git/*` | Git history, heatmap, blame, branch |
+| `GET/POST /api/git/*` | Git history, timeline, heatmap, context, branch, commit, pull, push |
 | `POST /api/reindex` | Trigger workspace reindexing |
 
 ### Core Layer — `backend/core/`
 
-- **AgentReasoningEngine.js**: Orchestrates the autonomous agent loop. Loads tools from ToolBox, manages conversation state, streams SSE events, handles approval gates for file writes.
+- **AgentReasoningEngine.js**: Orchestrates the autonomous agent loop. Loads tools from ToolBox, manages conversation state, streams SSE events, pauses every tool call that can change something at the approval gate.
 - **QueueService.js**: Manages background indexing jobs. Wraps Context Expert `ctx index` subprocess.
 
 ### Infrastructure Layer — `backend/infrastructure/`
@@ -45,7 +45,7 @@ The REST controller handles all HTTP endpoints. Key route groups:
 | **GraphifyService.js** | Builds/queries knowledge graphs via `graphify` CLI |
 | **Logger.js** | Structured JSON logging to memory buffer + file |
 | **AuditLog.js** | Audit trail for tool calls and agent actions |
-| **SessionStore.js** | Chat session persistence (SQLite or JSON) |
+| **SessionStore.js** | Chat session persistence (`sessions.json` in the data folder) |
 | **TaskStore.js** | Agent task state persistence |
 | **SettingsProvider.js** | Centralized settings from config.json |
 | **PluginAPI.js** | Lifecycle API for legacy plugins (onLoad/onEnable) |
@@ -89,9 +89,9 @@ Plugins using the older `onLoad`/`onEnable` lifecycle format are automatically w
 | `command` | Execute shell commands |
 | `network` | Network access |
 | `search` | Semantic search |
-| `unrestricted` | Full system access |
+| `unrestricted` | Full system access (needs `allowUnrestrictedPlugins`) |
 
-Extended permissions for legacy plugins: `graphify:read`, `agent:invoke`, `audit:write`, `webxr`, `speech`, `git:read`, etc.
+Also allowed, used by Holocron VR: `graphify:read`, `agent:invoke`, `audit:write`, `task:create`, `desktop:openFile`, `storage:indexeddb`, `webxr`, `speech`, `git:read`, `upload:temp`, `filesystem:read-selected`. Any other permission is rejected at load. A plugin with no `permissions` array is treated as `unrestricted`. `write`, `command`, `unrestricted`, `audit:write`, `agent:invoke`, `task:create` and `filesystem:write` make its calls pause for approval (`shared/toolCapabilities.js`).
 
 ### Pre-Installed Plugins
 
@@ -101,8 +101,9 @@ Extended permissions for legacy plugins: `graphify:read`, `agent:invoke`, `audit
 | Droid-Sweep | Find unused files | `plugins/Droid-Sweep.js` |
 | Grand Inquisitor | Scan dependencies | `plugins/Grand-Inquisitor.js` |
 | Lightsaber | Git hotspot analysis | `plugins/lightsaber.js` |
+| Graphify | Knowledge-graph build and query | `plugins/graphify.js` |
 
-Default plugins cannot be deleted or disabled through the API.
+These five are default plugins: they cannot be deleted or disabled through the API. Holocron VR (`plugins/main.js`) is bundled too but can be disabled.
 
 ## Frontend
 
@@ -126,7 +127,6 @@ The frontend API client is at `src/api/api.js`. It provides methods for all back
 api.ask(question, projectId, mode)
 api.agentTask(task, projectId, onStep, context)
 api.uploadPlugin(file)
-api.setMode(mode, projectId)
 api.getProjects()
 api.getSessions(projectId)
 ```
@@ -137,15 +137,20 @@ Tests use Jest and live in `tests/`. Test suites mirror the backend structure:
 
 ```
 tests/
-├── core/           # AgentReasoningEngine, QueueService
-├── infrastructure/ # ToolBox, Graphify, Logger, AuditLog, etc.
-├── interfaces/     # RestController
+├── architecture/   # Module boundaries, dead-module check
+├── core/           # AgentReasoningEngine, QueueService, SearchPipeline
+├── infrastructure/ # ToolBox, Graphify, Logger, AuditLog, docs accuracy, etc.
+├── interfaces/     # RestController, MCP server, CLI, security boundary
 ├── services/       # GitService, SearchRouter, FileUpload
-├── plugins/        # CodeTrooper, Droid-Sweep, lightsaber
-├── components/     # AgentChatTab, PluginsWindow, GraphStudio
-├── frontend/       # FileUploader, VoiceAgentBridge
-├── utils/          # DocPreprocessor, QueryClassifier
-└── website/        # Downloads page
+├── shared/         # ToolCapabilities (the approval rule)
+├── stardust/       # SpecBaseline, SpecDrift, StardustLive
+├── plugins/        # CodeTrooper, Droid-Sweep, lightsaber, Holocron
+├── components/     # AgentChatTab, PluginsWindow, GraphStudio, Dashboard
+├── frontend/       # FileUploader, Holocron, displayed version
+├── electron/       # Desktop render and startup smoke tests
+├── website/        # Downloads page
+├── helpers/        # Shared test helpers
+└── fixtures/       # Test fixtures
 ```
 
 ### Running tests
@@ -158,7 +163,7 @@ npx jest tests/plugins/     # Plugin tests
 
 ### Writing tests
 
-Tests should import modules directly from `backend/`:
+Tests should import modules directly from `backend/`. `ToolBox` exports a ready instance:
 
 ```javascript
 describe('ToolBox', () => {
@@ -177,7 +182,7 @@ product working, and the difference is not academic: 0.4.5 shipped with the agen
 unable to call a single tool while 492 tests passed, because every gate inspected
 artifacts and none drove the product.
 
-Four gates close that. They need the full local stack and are slower than the
+Four gates close that (plus `npm run release:smoke`). They need the full local stack and are slower than the
 unit suite, so they run before a release rather than on every save.
 
 | Command | What it proves |
@@ -190,7 +195,7 @@ unit suite, so they run before a release rather than on every save.
 Run them all in ascending cost:
 
 ```bash
-npm run release:verify   # lint, tests, both audits, release smoke, then the four gates
+npm run release:verify   # version check, build, lint, tests, coverage, both audits, release smoke, then the four gates
 ```
 
 **Order matters after a version bump.** `Downloads.test.js` and
@@ -198,7 +203,7 @@ npm run release:verify   # lint, tests, both audits, release smoke, then the fou
 build before `release:verify` is meaningful:
 
 ```bash
-npm version <next> --no-git-tag-version
+npm run version:bump <next>   # moves every version reference, not just package.json
 npm run desktop:dist:all     # regenerates dist/ and website/downloads/
 npm run release:verify
 ```
@@ -224,23 +229,24 @@ question "is silence actually correct here?", which is the question nobody asked
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `YODAMAN_PORT` | `3090` | Runtime port |
+| `YODAMAN_HOST` | `127.0.0.1` | Bind address |
 | `YODAMAN_REQUIRE_PAIRING_TOKEN` | `true` | Require token for remote clients |
-| `YODAMAN_GRAPHIFY_BIN` | `graphify` | Graphify CLI binary |
+| `YODAMAN_GRAPHIFY_BIN` | auto-detected | Graphify CLI binary |
 | `YODAMAN_GRAPHIFY_TIMEOUT_MS` | `300000` | Graphify timeout |
 | `YODAMAN_GRAPHIFY_FULL_EXTRACT` | `false` | Enable full semantic extraction |
 | `YODAMAN_ALLOW_PLUGIN_UPLOADS` | `false` | Allow plugin .zip uploads |
 | `YODAMAN_ALLOW_UNRESTRICTED_PLUGINS` | `false` | Allow plugins with unrestricted permissions |
 | `YODAMAN_ALLOW_AGENT_COMMANDS` | `false` | Allow agent to execute shell commands |
 
-Most settings are now managed through the Settings API. Environment variables override the saved config values.
+The settings are managed through the Settings API and saved in `config.json`. Environment variables override the saved values. The full list is in [Configuration](configuration.md).
 
 ## Building for Distribution
 
 ```bash
 npm run build               # Build frontend
-npm run desktop:dist        # Build macOS desktop app
-npm run desktop:dist:all    # Build macOS + Windows + Linux
-npm run website:downloads   # Sync builds to website/downloads/
+npm run desktop:dist        # Build the desktop app for this platform, with render and packaged smoke tests
+npm run desktop:dist:all    # Build macOS (arm64) + Windows and Linux (x64)
+npm run website:downloads   # Sync builds to website/downloads/ (both dist scripts run this)
 ```
 
 ### VS Code Extension
@@ -253,15 +259,15 @@ npm run package             # Create .vsix file
 ## Contribution Workflow
 
 1. Fork the repository
-2. Create a feature branch from `main`
+2. Work on `dev`, never `main` (see `CONTRIBUTING.md`)
 3. Make changes with tests
-4. Run `npm test` to verify all tests pass
+4. Run `npm test` (and `npm run release:verify` before a release)
 5. Submit a pull request
 
 ### Code Style
 
-- JavaScript with CommonJS modules (`require`/`module.exports`)
-- 2-space indentation
+- CommonJS (`require`/`module.exports`) in `backend/`, `shared/` and `server.js`; ES modules in `src/` and `bin/yodaman-mcp.mjs`
+- 4-space indentation in most files; match the file you are editing
 - Async/await for asynchronous code
 - JSDoc comments for public API methods
 - Error objects with `status` and `code` properties for API handlers

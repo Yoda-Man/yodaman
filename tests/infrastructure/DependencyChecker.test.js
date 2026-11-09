@@ -87,6 +87,14 @@ describe('Health self-heal coverage', () => {
         expect(code).not.toContain("'/bin/sh'");
     });
 
+    test('the desktop startup screen installs through Repair, not the removed route', () => {
+        // Its Install buttons posted to /api/health/install for months after
+        // that route was removed, so every click was a 404.
+        const main = fs.readFileSync(path.resolve(__dirname, '../../electron/main.js'), 'utf8');
+        expect(main).not.toContain('/api/health/install');
+        expect(main).toContain("postJson('/api/setup/repair')");
+    });
+
     test('GET /health reports openspec as a first-class check', () => {
         expect(restControllerSource).toContain('openspec: enrich(checks.openspec)');
     });
@@ -146,5 +154,43 @@ describe('model awareness', () => {
         expect(dependencyChecker.isWeakModel('model-with-no-b')).toBeNull();
         expect(dependencyChecker.isWeakModel('13B')).toBe(true);        // 13B < 14, uppercase
         expect(dependencyChecker.isWeakModel('my-model-14b-v2')).toBe(false);
+    });
+});
+
+describe('Context Expert minimum version', () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+
+    test('isOlder compares numeric parts, not strings', () => {
+        expect(dependencyChecker.isOlder('1.1.0', '1.3.3')).toBe(true);
+        expect(dependencyChecker.isOlder('1.3.2', '1.3.3')).toBe(true);
+        expect(dependencyChecker.isOlder('1.3.3', '1.3.3')).toBe(false);
+        expect(dependencyChecker.isOlder('1.3.2', dependencyChecker.SERVICES.ctx.minVersion)).toBe(true);
+        expect(dependencyChecker.isOlder('1.10.0', '1.3.3')).toBe(false);
+        expect(dependencyChecker.isOlder('2.0', '1.3.3')).toBe(false);
+        expect(dependencyChecker.isOlder('installed', '1.3.3')).toBe(false);
+        expect(dependencyChecker.isOlder(null, '1.3.3')).toBe(false);
+    });
+
+    // A real fake `ctx` on PATH, so the gate is proven through locate() itself.
+    (process.platform === 'win32' ? test.skip : test).each([
+        ['1.1.0', false],
+        [dependencyChecker.SERVICES.ctx.minVersion, true],
+    ])('ctx %s is found=%s', async (version, found) => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-ctx-'));
+        fs.writeFileSync(path.join(dir, 'ctx'), `#!/bin/sh\necho ${version}\n`, { mode: 0o755 });
+        const oldPath = process.env.PATH;
+        process.env.PATH = `${dir}${path.delimiter}${oldPath}`;
+        try {
+            const result = await dependencyChecker.locate('ctx');
+            expect(result.path).toBe(path.join(dir, 'ctx'));
+            expect(result.version).toBe(version);
+            expect(result.found).toBe(found);
+            if (!found) expect(result.error).toContain(`needs ${dependencyChecker.SERVICES.ctx.minVersion} or newer`);
+        } finally {
+            process.env.PATH = oldPath;
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

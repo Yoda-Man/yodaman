@@ -4,13 +4,14 @@
 
 Only Node.js is needed to start. Everything else unlocks a capability, and the
 runtime starts without any of them — a missing tool disables its features and
-says so, rather than stopping the process.
+says so, rather than stopping the process. (`npm start` is stricter: see
+[Installation](#installation).)
 
 **Start here, and you get something in about five seconds:**
 
 | Install | Unlocks | Cost |
 | --- | --- | --- |
-| **Node.js** v18+ | The runtime itself | — |
+| **Node.js** v24+ | The runtime itself | — |
 | **Graphify** — `python3 -m pip install graphifyy` | The knowledge graph, impact analysis, and the coverage finding: which load-bearing modules carry your codebase and what nothing describes | Small. Graph builds take **0–5 seconds** on a typical repo. |
 
 That pair is enough to see the thing YodaMan does that other tools do not. It
@@ -20,7 +21,8 @@ needs no model download and no AI service.
 
 | Install | Unlocks | Cost |
 | --- | --- | --- |
-| **Context Expert** — `npm install -g yodaman-ctx` | Semantic code search, and the retrieval behind agent answers | Small |
+| **Context Expert** — `npm install -g yodaman-ctx` (1.3.4 or later; `yodaman setup` and `setup.sh` add the `--allow-scripts=...` list its native modules need) | Semantic code search, and the retrieval behind agent answers | Small |
+| **OpenSpec** — `npm install -g @fission-ai/openspec@latest` | The Stardust spec workflow and spec coverage | Small |
 | **Ollama** + a model | Chat and agent tasks, and Graphify's optional full semantic extraction | **Several GB** for the model. See [Choosing a model](../../README.md#choosing-a-model). |
 
 Ollama is genuinely optional for the graph: extraction defaults to a local
@@ -39,21 +41,25 @@ no-LLM path, and only `YODAMAN_GRAPHIFY_FULL_EXTRACT=true` reaches for a model.
    npm install
    ```
 
-3. Initialize the ecosystem (Mac only):
+3. Install the tools (Mac only, uses Homebrew):
    ```bash
    sh setup.sh
    ```
+   It installs whatever is missing of Homebrew, Node.js, Python 3, Ollama,
+   Context Expert, Graphify and OpenSpec, runs `npm install`, then `npm start`.
 
 4. Start the runtime and web UI:
    ```bash
    npm start
    ```
+   `npm start` first checks for `ctx`, `graphify` and `ollama` and exits if any
+   is missing. To start with only Node.js, run `npm run dev` instead.
 
-The backend runtime listens on `http://localhost:3090`. The development web UI listens on `http://localhost:5190`.
+The backend runtime listens on `http://127.0.0.1:3090`. The development web UI listens on `http://localhost:5190`.
 
 ## Configuration
 
-YodaMan stores local workspace configuration in `config.json` at the root of the project. Releases ship `config.example.json`; copy it to `config.json` or use the app Settings screen to create local workspace configuration.
+YodaMan stores workspace configuration in `config.json` in the user's data folder (`~/Library/Application Support/YodaMan` on macOS, `%APPDATA%\YodaMan` on Windows, `~/.config/YodaMan` on Linux), not in the project. It is created when you add a workspace or change a setting; `config.example.json` shows the shape.
 
 ```json
 {
@@ -66,7 +72,7 @@ YodaMan stores local workspace configuration in `config.json` at the root of the
 - **watchedDirectories**: A list of absolute paths that YodaMan will monitor for changes.
 - **removedDirectories**: A local tombstone list for workspaces deleted from YodaMan so they are not re-added from stale index metadata.
 
-YodaMan 0.6.2 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
+YodaMan 0.6.4 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
 
 Check Graphify graph health across configured workspaces:
 
@@ -74,7 +80,7 @@ Check Graphify graph health across configured workspaces:
 yodaman doctor --graph
 ```
 
-Runtime state files such as `audit-log.json`, `audit-log.jsonl`, `task-history.json`, and `task-history.jsonl` are local machine artifacts and are ignored by git.
+Runtime state (`sessions.json`, and `audit-log.json(l)` and `task-history.json(l)` when SQLite cannot be opened) is written to the same data folder, never to the install folder.
 
 ## Verification
 
@@ -88,10 +94,11 @@ npm run release:smoke
 
 ## Optional Safety Flags
 
-Require pairing tokens for non-local clients:
+Pairing tokens for non-local clients are required by default. The runtime
+binds `127.0.0.1`; to let a paired phone or LAN client reach it:
 
 ```bash
-YODAMAN_REQUIRE_PAIRING_TOKEN=true npm start
+YODAMAN_HOST=0.0.0.0 npm start
 ```
 
 Allow intentionally trusted unrestricted plugins:

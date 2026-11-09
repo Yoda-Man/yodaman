@@ -15,7 +15,7 @@ const graphFacts = require('../../infrastructure/GraphFacts');
 const impactAnalyzer = require('../../infrastructure/ImpactAnalyzer');
 const searchPipeline = require('../../core/SearchPipeline');
 const logger = require('../../infrastructure/Logger');
-const { jsonError } = require('../support/http');
+const { jsonError, isLocalRequest } = require('../support/http');
 
 const router = express.Router();
 
@@ -195,6 +195,11 @@ router.post('/stardust/run', async (req, res) => {
                 result = await stardustWrapper.init(projectRoot, { tools: req.body.tools || 'all' });
                 break;
             case 'install':
+                // Installing software is Repair's job and carries Repair's gate.
+                if (!require('../../infrastructure/SettingsProvider').get('allowSelfHealInstall')) {
+                    return jsonError(res, 403, 'Installing is turned off. Turn on "Repair can install missing tools" in Settings, or run: npm install -g @fission-ai/openspec', 'self_heal_install_disabled');
+                }
+                if (!isLocalRequest(req)) return jsonError(res, 403, 'Installs can only be started from this computer', 'repair_local_only');
                 result = await stardustWrapper.install();
                 break;
             case 'propose':

@@ -1,24 +1,43 @@
 # YodaMan API Reference
 
-All API endpoints are prefixed with `/api`.
+All API endpoints are prefixed with `/api`. Every response carries an
+`X-Request-Id` header (a client may send its own), and runtime log entries for
+the request include the same ID.
 
 Other agents can reach the read paths without HTTP: `yodaman-mcp` exposes
 search, graph queries, impact and spec drift over MCP's stdio transport,
 proxying the routes below. See [MCP](../guides/mcp.md). Writes are deliberately
 absent from that surface — they are available here, behind the approval gate.
 
+## Access
+
+- Browser requests from another site are rejected before any route runs
+  (OriginPolicy). Requests from this computer are trusted.
+- When `requirePairingToken` is on (the default), a request from another
+  machine must send a valid pairing token in `X-YodaMan-Token`. See
+  [Pairing](#pairing).
+- Some actions only work from this computer whatever the token: pairing,
+  changing settings, Context Expert and Ollama configuration, opening files in
+  the editor, the editor picker, and Repair.
+
+Errors are JSON of the form `{ "error": "...", "code": "..." }` unless noted.
+
 ## Project Management
 
 ### `GET /projects`
-Returns a list of all indexed workspaces and watched directories.
+Returns every indexed workspace from Context Expert, merged with watched
+directories that are not indexed yet. Removed and generated temporary
+workspaces are left out. If Context Expert cannot be reached, the watched
+directories are returned with `indexed: false`.
 
 **Response:**
 ```json
 [
   {
-    "id": "project-path",
     "name": "project-name",
+    "indexName": "project-name-bbc91a",
     "path": "/absolute/path/to/project",
+    "id": "/absolute/path/to/project",
     "files": 42,
     "chunks": 150,
     "indexed": true
@@ -26,18 +45,27 @@ Returns a list of all indexed workspaces and watched directories.
 ]
 ```
 
+`name` is the folder name; `indexName` is Context Expert's index key. Watched
+directories that are not indexed have no `indexName`.
+
 ### `POST /projects`
-Adds a new directory to the watched list and triggers initial indexing.
+Adds a directory to the watched list, starts watching it, and queues it for
+indexing.
 
 **Body:** `{ "path": "/path/to/dir" }`
+**Response:** `201 { "message": "Project added", "path": "/path/to/dir" }`, or
+`200 { "message": "Already exists" }`.
 
 ### `DELETE /projects`
-Removes a directory from the watched list.
+Removes a directory from the watched list, stops watching it, and removes it
+from the Context Expert index.
 
 **Body:** `{ "path": "/path/to/dir" }`
+**Response:** `{ "message": "Project removed", "path": "...", "wasWatched": true, "ctxRemoved": true }`
 
 ### `PUT /projects`
-Moves a watched project to a new path. The watcher and index are transferred; the old path is cleaned up.
+Moves a watched project to a new path. The old path is unwatched and removed
+from the index; the new path is watched and queued for indexing.
 
 **Body:** `{ "path": "/old/path", "nextPath": "/new/path" }`
 
@@ -50,30 +78,44 @@ Moves a watched project to a new path. The watcher and index are transferred; th
 }
 ```
 
+Returns `404` (`project_not_found`) if `path` is not watched, and `409`
+(`project_exists`) if `nextPath` already is.
+
 ## Intelligence & AI
 
 ### `POST /ask`
-Queries the AI engine about the current project context. When `projectId` resolves to a workspace path, YodaMan injects Graphify graph report context and question-specific graph traversal output before calling Context Expert.
+Answers a question about a workspace. When `projectId` resolves to a workspace,
+YodaMan adds the Graphify report and a question-specific graph traversal to the
+question before passing it to Context Expert (`ctx ask`). If Context Expert
+fails or takes longer than `YODAMAN_CTX_ASK_TIMEOUT_MS` (default 12000 ms),
+no model answers: the reply says so and returns the graph context and the top
+five search-pipeline matches instead.
+The question and answer are saved to the workspace's session and to its graph.
 
 **Body:** `{ "question": "What does the auth service do?", "projectId": "/absolute/path/to/project" }`
 **Response:** `{ "answer": "The auth service handles..." }`
 
 ### `POST /agent/task`
-Starts an autonomous agent task. The agent loads the default coding skill, receives Graphify graph context when a workspace is provided, and streams progress over **Server-Sent Events (SSE)**.
+Starts an agent task. The agent's system prompt includes the default coding
+skill, and graph context when a workspace is given. Progress streams back as
+**Server-Sent Events**; every event carries the `taskId`.
 
 **Body:** `{ "task": "Implement a login form", "projectId": "/path/to/project", "fileIds": ["abc123"] }`
+(`fileIds`: up to 20 uploaded temp files, see [File Upload](#file-upload))
+
 **Events:**
 - `data: {"type": "task_started", "taskId": "abc123", "projectId": "/path/to/project"}`
-- `data: {"type": "tool_start", "tool": "searchCode", "params": {...}}`
-- `data: {"type": "tool_end", "tool": "searchCode", "result": {...}}`
-- `data: {"type": "awaiting_approval", "taskId": "abc123", "tool": "writeFile", "params": {...}}`
-- `data: {"type": "final_answer", "answer": "I have created the login form..."}`
+- `data: {"type": "tool_start", "taskId": "abc123", "tool": "searchCode", "params": {...}}`
+- `data: {"type": "tool_end", "taskId": "abc123", "tool": "searchCode", "result": {...}}`
+- `data: {"type": "awaiting_approval", "taskId": "abc123", "tool": "writeFile", "params": {...}, "impact": {...}, "specImpact": {...}}`
+- `data: {"type": "response_truncated", "taskId": "abc123", "iteration": 2, "message": "..."}`
+- `data: {"type": "final_answer", "taskId": "abc123", "answer": "I have created the login form..."}`
 - `data: {"type": "task_cancelled", "taskId": "abc123", "message": "Task cancelled."}`
 - `data: {"type": "error", "taskId": "abc123", "message": "..."}`
-- `data: {"type": "upload_error", "fileId": "abc123", "message": "..."}`
+- `data: {"type": "upload_error", "taskId": "abc123", "fileId": "abc123", "message": "..."}`
 
 ### `POST /agent/approve`
-Approves or rejects an agent write request.
+Approves or rejects a pending agent write.
 
 **Body:** `{ "taskId": "abc123", "approved": true }`
 **Response:** `{ "message": "Signal sent" }`
@@ -85,23 +127,33 @@ Requests cancellation of an active agent task.
 **Response:** `{ "message": "Cancellation requested", "taskId": "abc123" }`
 
 ### `GET /agent/tasks`
-Returns recent persisted agent task state for external clients. Task history is retained locally in `task-history.json` and appended to `task-history.jsonl`.
+Returns recent agent tasks, newest first. Task history is stored in
+`yodaman.db` in the YodaMan data folder (`task-history.json` and
+`task-history.jsonl` in the same folder are used only if the database cannot be
+opened).
 
 ### `GET /agent/tasks/:taskId/events`
-Returns recent persisted task events for a specific agent task.
+Returns the recorded events for one agent task.
 
 ### `GET /agent/pending-approvals`
-Returns active write approvals that are waiting for a human decision.
+Returns writes waiting for a human decision:
+`[{ "taskId", "task", "projectId", "createdAt", "updatedAt", "approval" }]`.
 
 ### `DELETE /agent/tasks`
-Clears all persisted agent task history.
+Clears all agent task history.
 
 **Response:** `{ "message": "Task history cleared" }`
 
-### `GET /search`
-Unified semantic search that always returns both code and documentation results. Results are graph-ranked when a project is provided.
+## Search
 
-**Query Params:** `query`, `project` (optional), `top` (default: 15), `activeFile` (optional — used by GraphRanker to bias results)
+Every search endpoint runs the search pipeline: Context Expert retrieves,
+missing and generated files and duplicates are dropped, Graphify ranks, and
+OpenSpec tags each result.
+
+### `GET /search`
+Code and documentation together.
+
+**Query Params:** `query` (required), `project` (optional), `top` (default 15, max 50), `activeFile` (optional — lets graph proximity count in the ranking)
 
 **Response:**
 ```json
@@ -109,6 +161,8 @@ Unified semantic search that always returns both code and documentation results.
   "results": [
     {
       "_source": "code",
+      "graphSignal": { "...": "..." },
+      "graphRank": 0.8123,
       "specFlag": { "covered": true, "specs": ["auth-spec", "api-design"] }
     },
     {
@@ -123,13 +177,34 @@ Unified semantic search that always returns both code and documentation results.
     "centrality": 0.15,
     "specCoverage": 0.15
   },
-  "activeFile": "src/auth.js"
+  "activeFile": "src/auth.js",
+  "pillars": { "contextExpert": true, "graphify": true, "openspec": true },
+  "dropped": { "generated": 0, "missing": 0, "duplicates": 1 }
 }
 ```
 
+Each result also keeps Context Expert's own fields for the hit. `graphSignal`
+and `graphRank` are present only when Graphify ranked the results, and
+`specFlag` only when the workspace has specs. `pillars` says which of the three
+actually contributed. A `project` whose folder no longer exists returns `404`
+(`workspace_missing`).
+
+### `GET /search/code` and `GET /search/docs`
+The same, restricted to code or to documentation. Same query params; `top`
+defaults to 10. The response adds `"mode": "code"` or `"mode": "doc"`.
+
+### `GET /search/stream`
+The Search view's search, as Server-Sent Events: the results as soon as they
+exist, then the local model's summary of those results. Same query params as
+`GET /search`.
+
+**Events:** `results` (the `GET /search` response), `summary_start`
+(`{ "model": "..." }`), `summary` (`{ "text": "..." }`, repeated),
+`summary_error`, `search_error`, `done`. Closing the connection stops the model.
+
 ## Sessions
 
-Session storage persists chat and agent conversation history per project.
+Session storage keeps chat and agent conversation history per project.
 
 ### `GET /sessions`
 Returns all stored messages for a project.
@@ -139,10 +214,12 @@ Returns all stored messages for a project.
 **Response:**
 ```json
 [
-  { "role": "user", "content": "What does the auth service do?", "timestamp": "2025-01-15T10:30:00Z" },
-  { "role": "ai", "content": "The auth service handles...", "timestamp": "2025-01-15T10:30:05Z" }
+  { "role": "user", "content": "What does the auth service do?", "timestamp": "2026-01-15T10:30:00Z" },
+  { "role": "ai", "content": "The auth service handles...", "timestamp": "2026-01-15T10:30:05Z" }
 ]
 ```
+
+Agent answers also carry `"isAgent": true` and the task's `steps`.
 
 ### `DELETE /sessions`
 Clears all stored messages for a project.
@@ -153,10 +230,12 @@ Clears all stored messages for a project.
 
 ## Git API
 
-Git endpoints provide workspace-level version control from the UI. All paths must resolve to an accessible directory.
+Git endpoints run `git` in the given workspace directory, without a shell.
 
 ### `GET /git/context`
-Returns a compact git status snapshot: current branch, ahead/behind counts, and the 8 most recent commits.
+A compact status snapshot: current branch, ahead/behind counts, and the 8 most
+recent commits. If git fails, it still answers `200` with `branch: "Unavailable"`
+and an `error`.
 
 **Query Params:** `path` (required — workspace directory)
 
@@ -173,7 +252,7 @@ Returns a compact git status snapshot: current branch, ahead/behind counts, and 
 ```
 
 ### `GET /git/history`
-Returns paginated commit history for a workspace, optionally filtered to a single file.
+Commit history for a workspace, optionally for a single file inside it.
 
 **Query Params:** `path` (required), `file` (optional), `limit` (default: 100, max: 500)
 
@@ -181,13 +260,13 @@ Returns paginated commit history for a workspace, optionally filtered to a singl
 ```json
 {
   "commits": [
-    { "hash": "a1b2c3d", "subject": "...", "author": "...", "date": "...", "body": "..." }
+    { "hash": "<full hash>", "author": "Jane Doe", "date": "2026-01-15T10:30:00.000Z", "message": "Add login form", "filesChanged": 3 }
   ]
 }
 ```
 
 ### `GET /git/heatmap`
-Returns per-file change-frequency data for heatmap visualisations.
+Per-file change counts over the last 30 days, most-changed first.
 
 **Query Params:** `path` (required)
 
@@ -195,29 +274,54 @@ Returns per-file change-frequency data for heatmap visualisations.
 ```json
 {
   "files": [
-    { "path": "src/auth.js", "changes": 42, "lastModified": "2025-01-15" }
+    { "filePath": "src/auth.js", "changeCount": 42, "lastChangeDate": "2026-01-15T10:30:00.000Z", "authorCount": 2 }
   ]
 }
 ```
 
-### `GET /git/branch`
-Returns detailed branch information for a workspace.
+### `GET /git/timeline`
+Commits and the files each touched, oldest first, for Holocron's time slider.
+Limited to the workspace folder and to at most 3000 commits.
 
-**Query Params:** `path` (required)
-
-**Response:** `{ "current": "main", "branches": ["main", "feature/login"], ... }`
-
-### `GET /git/commit`
-Returns detailed information for a specific commit.
-
-**Query Params:** `path` (required), `hash` (required — full or abbreviated commit hash)
+**Query Params:** `path` (required), `days` (default: 365, max: 3650)
 
 **Response:**
 ```json
 {
-  "hash": "a1b2c3d",
+  "commits": [
+    { "hash": "a1b2c3d4e5", "author": "Jane Doe", "date": "2026-01-15T10:30:00.000Z", "files": [{ "path": "src/auth.js", "status": "M" }] }
+  ],
+  "truncated": false
+}
+```
+
+### `GET /git/branch`
+Branch information for a workspace.
+
+**Query Params:** `path` (required)
+
+**Response:**
+```json
+{
+  "currentBranch": "main",
+  "branches": ["main", "feature/login"],
+  "ahead": 0,
+  "behind": 0,
+  "latestCommit": { "hash": "<full hash>", "author": "Jane Doe", "date": "...", "message": "Add login form" }
+}
+```
+
+### `GET /git/commit`
+Details for one commit.
+
+**Query Params:** `path` (required), `hash` (required — 7 to 40 hex characters)
+
+**Response:**
+```json
+{
+  "hash": "<full hash>",
   "author": "Jane Doe",
-  "date": "2025-01-15T10:30:00Z",
+  "date": "2026-01-15T10:30:00.000Z",
   "message": "Add login form",
   "files": [
     { "filePath": "src/auth.js", "additions": 42, "deletions": 5 },
@@ -226,8 +330,11 @@ Returns detailed information for a specific commit.
 }
 ```
 
+`additions` and `deletions` are `null` for binary files.
+
 ### `POST /git/commit`
-Stages files and creates a commit. Falls back to `--allow-empty` when there is nothing to commit.
+Stages files (all of them when `files` is omitted) and commits. Falls back to
+`--allow-empty` when there is nothing to commit.
 
 **Body:** `{ "path": "/path/to/workspace", "message": "feat: add login", "files": ["src/auth.js"] }`
 
@@ -241,7 +348,7 @@ Stages files and creates a commit. Falls back to `--allow-empty` when there is n
 ```
 
 ### `POST /git/push`
-Pushes the current branch to its upstream remote.
+Runs `git push` for the current branch.
 
 **Body:** `{ "path": "/path/to/workspace" }`
 
@@ -254,7 +361,7 @@ Pushes the current branch to its upstream remote.
 ```
 
 ### `POST /git/pull`
-Pulls from the upstream remote with `--rebase`.
+Runs `git pull --rebase`.
 
 **Body:** `{ "path": "/path/to/workspace" }`
 
@@ -279,12 +386,43 @@ Creates and checks out a new branch.
 }
 ```
 
+Git mutations report failures as `500 { "ok": false, "error": "..." }`.
+
+## Editor
+
+### `POST /editor/open`
+Opens a workspace file in the user's editor: the OS default for the file type,
+or the editor set in Settings (`editorCommand`). From this computer only.
+
+**Body:** `{ "workspace": "/registered/workspace", "path": "src/auth.js", "line": 42 }` (`line` optional)
+**Response:** `{ "opened": true, "file": "/abs/path/src/auth.js", "line": 42, "editor": "...", "atLine": true }`
+
+The workspace must be registered, and the file must be a real file inside it
+(symlinks that lead outside are refused).
+
+### `GET /editor/preview`
+A read-only window of up to 40 lines of a workspace file, starting at `line`.
+Same containment as `/editor/open`; text files of at most 1 MB only (`413` if
+larger, `415` for binary files).
+
+**Query Params:** `workspace`, `path`, `line` (default 1)
+**Response:** `{ "file": "...", "startLine": 1, "totalLines": 120, "lines": ["..."] }`
+
+### `GET /editor/options`
+What the Settings editor picker offers. From this computer only.
+
+**Response:** `{ "editorCommand": "", "systemDefault": "Visual Studio Code", "detected": [...], "placeholders": ["{file}", "{line}", "{column}"] }`
+
 ## Plugins API
 
-Plugin management covers listing, uploading, deleting, opening, enabling, and disabling plugins. Plugin uploads are disabled by default; enable them with `YODAMAN_ALLOW_PLUGIN_UPLOADS=true` (local trusted sessions only). Default plugins (`graphify`, `Grand-Inquisitor`, `CodeTrooper`, `Droid-Sweep`, `lightsaber`) cannot be deleted or disabled.
+Plugin management covers listing, uploading, deleting, opening, enabling, and
+disabling plugins. Plugin uploads are off by default; turn them on with the
+`allowPluginUploads` setting or `YODAMAN_ALLOW_PLUGIN_UPLOADS=true` (trusted
+local sessions only). Default plugins (`graphify`, `Grand-Inquisitor`,
+`CodeTrooper`, `Droid-Sweep`, `lightsaber`) cannot be deleted or disabled.
 
 ### `GET /plugins`
-Lists all loaded plugins with name, description, parameters, and permissions.
+Lists loaded plugins with name, description, parameters, and permissions.
 
 **Response:**
 ```json
@@ -300,7 +438,12 @@ Lists all loaded plugins with name, description, parameters, and permissions.
 ```
 
 ### `POST /plugins`
-Uploads a new plugin file (`.js` or `.zip`). Zip archives are extracted; `plugin.json` permissions inside the archive are merged into the plugin. Requires `allowPluginUploads` to be enabled.
+Uploads a plugin file (`.js` or `.zip`). A zip is extracted and its `main.js`
+(or first `.js` file) installed; `permissions` from a `plugin.json` inside the
+archive are added to the plugin. An uploaded plugin must declare its
+permissions, and may not replace an installed plugin file (`409` for a file name
+already in `plugins/`; delete the old one first). A plugin that fails
+validation is removed again. Returns `403` (`plugin_uploads_disabled`) unless uploads are on.
 
 **Body:** multipart/form-data with field `plugin` (the file).
 
@@ -313,7 +456,7 @@ Uploads a new plugin file (`.js` or `.zip`). Zip archives are extracted; `plugin
 ```
 
 ### `DELETE /plugins/:name`
-Removes a plugin from disk. Default plugins are protected and return 403.
+Removes a plugin from disk. Default plugins return `403`; unknown plugins `404`.
 
 **Response:** `{ "message": "Plugin deleted" }`
 
@@ -331,9 +474,11 @@ Returns whether a plugin is loaded, enabled, or disabled.
 ```
 
 ### `POST /plugins/:name/open`
-Invokes the plugin's `open` action, typically to launch its viewer or UI surface.
+Runs the plugin's `open` action, which launches its viewer. Returns `404` if the
+plugin is missing or disabled, and `501` (`plugin_open_not_implemented`) if it
+finished without reporting `opened: true`.
 
-**Body:** `{ "project": "/path/to/workspace", "diagnostics": {...} }` (optional)
+**Body:** `{ "project": "/path/to/workspace", "diagnostics": {...} }` (optional; `diagnostics` is only logged)
 
 **Response:**
 ```json
@@ -346,12 +491,12 @@ Invokes the plugin's `open` action, typically to launch its viewer or UI surface
 ```
 
 ### `POST /plugins/:name/enable`
-Re-enables a previously disabled plugin.
+Re-enables a disabled plugin.
 
 **Response:** `{ "message": "Plugin Grand-Inquisitor enabled", "name": "Grand-Inquisitor", "enabled": true }`
 
 ### `POST /plugins/:name/disable`
-Disables a plugin without removing its file. Default plugins are protected and return 403.
+Disables a plugin without removing its file. Default plugins return `403`.
 
 **Response:** `{ "message": "Plugin my-plugin disabled", "name": "my-plugin", "disabled": true }`
 
@@ -360,91 +505,120 @@ Disables a plugin without removing its file. Default plugins are protected and r
 Graphify builds the knowledge graph. The runtime **starts without it** — every
 dependency check is wrapped, and a missing tool disables its features rather
 than stopping the process. Graphify endpoints then return an error naming what
-is missing. Graphify endpoints require a registered workspace path.
+is missing. Every Graphify endpoint requires a registered workspace path.
 
 ### `GET /graphify/status`
-Returns graph availability, artifact health, stale status, and the last persisted build summary. Large graphs can return `build.state: "partial"` when `graph.json` and the report exist but full HTML artifacts were skipped.
+Graph availability, artifact health, staleness, and the last build summary.
+Large graphs can report `build.state: "partial"` when `graph.json` and the
+report exist but HTML artifacts were skipped.
 
 **Query Params:** `path`
 
 ### `POST /graphify/build`
-Queues a workspace graph build and returns immediately with a build job id.
+Queues a graph build and returns at once with `202`. A build already running for
+the workspace is returned instead of starting another.
 
 **Body:** `{ "path": "/absolute/path/to/project" }`
+**Response:** `{ "message": "Graphify build queued", "path": "...", "jobId": "...", "job": {...}, "build": {...} }`
 
 ### `GET /graphify/build/status`
-Returns the in-memory build job state, the last persisted build summary, and graph freshness.
+The build job (`queued`, `running`, `succeeded`, `partial` or `failed`), the
+last build summary, and graph freshness. Without `jobId`, the latest job for the
+workspace. Jobs are kept in memory, so none survive a restart.
 
 **Query Params:** `path`, `jobId` (optional)
+**Response:** `{ "path": "...", "job": {...}, "build": {...}, "graph": {...} }`
 
 ### `GET /graphify/artifact`
-
-Serves a generated Graphify HTML artifact for a registered workspace. Query parameters:
+Serves a generated Graphify HTML artifact for a registered workspace, from its
+`graphify-out/` directory only.
 
 - `path`: absolute registered workspace path.
 - `type`: `mindmap` for `graph.html` or `visualizer` for `graph_visualizer.html`.
 
-The route only serves known Graphify artifacts from the workspace's `graphify-out/` directory.
-
 ### `GET /graphify/report`
-
-Returns the Graphify markdown report for a registered workspace.
+The Graphify markdown report for a registered workspace (`404` if none).
 
 **Query Params:** `path`
+**Response:** `{ "path": "...", "report": "# Graph report ...", "reportPath": "/path/to/project/graphify-out/graph_report.md" }`
 
 ### `POST /graphify/query`
 Runs a natural-language graph traversal query.
 
 **Body:** `{ "path": "/absolute/path/to/project", "query": "How does auth connect to sessions?" }`
+**Response:** `{ "path": "...", "insights": "...", "graphPath": "..." }`
 
 ### `POST /graphify/explain`
-Explains a node and its neighboring graph context.
+Explains a node and its neighbouring graph context.
 
 **Body:** `{ "path": "/absolute/path/to/project", "node": "AuthService" }`
+**Response:** `{ "path": "...", "node": "AuthService", "explanation": "...", "graphPath": "..." }`
 
 ### `POST /graphify/path`
 Finds a graph path between two entities.
 
 **Body:** `{ "path": "/absolute/path/to/project", "source": "LoginForm", "target": "SessionStore" }`
+**Response:** `{ "path": "...", "source": "...", "target": "...", "graphPath": "...", "result": ... }`
 
 ### `POST /graphify/affected`
-Runs impact analysis for a node by reverse-traversing related graph edges.
+Impact analysis for a node, walking its graph edges in reverse.
 
-**Body:** `{ "path": "/absolute/path/to/project", "node": "AuthService", "depth": 3, "relations": [] }`
+**Body:** `{ "path": "/absolute/path/to/project", "node": "AuthService", "depth": 2, "relations": [] }` (`depth` defaults to 2)
+**Response:** `{ "path": "...", "node": "...", "depth": 2, "relations": [], "graphPath": "...", "impact": ... }`
 
 ### `GET /graphify/map`
-Returns a compact graph summary for architecture map views.
+A compact graph summary for architecture map views.
 
-**Query Params:** `path`, `limit` (default: 80)
+**Query Params:** `path`, `limit` (default: 80), `rank` (`order`, the default, or `degree`)
 
 ### `POST /graphify/tree`
-Generates Graphify's D3 collapsible tree HTML artifact.
+Generates Graphify's collapsible tree artifact (`graphify-out/GRAPH_TREE.html`).
 
 **Body:** `{ "path": "/absolute/path/to/project" }`
 
 ## Stardust API
 
-Stardust wraps the OpenSpec CLI for spec-driven development. It compares intended architecture (OpenSpec specs) against actual structure (Graphify knowledge graph) to detect drift, supply graph-grounded authoring context, and run spec workflows.
+Stardust is YodaMan's OpenSpec workspace. It runs the OpenSpec CLI for
+validate, archive, list, init and diagnose, and compares intended architecture
+(OpenSpec specs) with actual structure (the Graphify graph). Every Stardust
+endpoint takes `projectRoot`; when it is omitted, the runtime's working
+directory is used.
 
 ### `GET /stardust/drift`
-Diffs OpenSpec specs against the Graphify knowledge graph. Flags specs that cite files that no longer exist, and load-bearing modules that no spec describes.
+Diffs OpenSpec specs against the knowledge graph: spec references to files that
+no longer exist, and load-bearing modules no spec describes.
 
-**Query Params:** `projectRoot` (defaults to `cwd`), `minDependents` (default: 2)
+**Query Params:** `projectRoot`, `minDependents` (default: 2)
 
 **Response:**
 ```json
 {
   "available": true,
-  "orphanedSpecs": [],
-  "undocumentedModules": ["src/new-auth.js"],
-  "summary": "1 undocumented module, 0 orphaned specs"
+  "covered": true,
+  "openSpecInitialized": true,
+  "specCount": 4,
+  "graphFileCount": 200,
+  "documentedFiles": 31,
+  "staleReferences": [{ "spec": "auth", "reference": "src/old-auth.js" }],
+  "staleCount": 1,
+  "undocumented": [{ "file": "src/new-auth.js", "dependents": 6 }],
+  "undocumentedCount": 1,
+  "inSync": false,
+  "summary": "..."
 }
 ```
 
-### `GET /stardust/context`
-Supplies graph-grounded context for authoring a change proposal. For each file in the change, returns its blast radius, covering tests, risk level, and top dependents — plus the architectural hubs in the workspace. Requires a built Graphify graph.
+`undocumented` lists at most 20 files, most depended-on first. Without a graph
+the response is `{ "available": false, "reason": "..." }`. `covered` is `false`
+when the workspace has no specs, and `inSync` is never `true` without specs.
 
-**Query Params:** `projectRoot` (defaults to `cwd`), `files` (comma-separated, max 25)
+### `GET /stardust/context`
+Graph-grounded context for writing a change proposal: for each file the change
+touches, its blast radius, covering tests, risk and top dependents, plus the
+workspace's ten most central files. Requires a built graph; otherwise
+`{ "available": false, "reason": "...", "hint": "..." }`.
+
+**Query Params:** `projectRoot`, `files` (comma-separated, max 25)
 
 **Response:**
 ```json
@@ -461,31 +635,37 @@ Supplies graph-grounded context for authoring a change proposal. For each file i
       "coveringTests": ["test/auth.test.js"],
       "risk": "high",
       "dependents": ["src/login.js", "src/session.js"],
-      "summary": "12 dependents · high risk · 1 covering test"
+      "summary": "..."
     }
   ]
 }
 ```
 
 ### `GET /stardust/diagnose`
-Runs the OpenSpec diagnose command to surface environment and configuration issues.
+Checks the OpenSpec setup for the workspace.
 
-**Query Params:** `projectRoot` (defaults to `cwd`)
-
-**Response:** (OpenSpec diagnose output — structure varies by OpenSpec version)
+**Query Params:** `projectRoot`
 
 ### `POST /stardust/run`
-Executes an arbitrary OpenSpec CLI action. Supported actions: `diagnose`, `validate`, `archive`, `list`, `init`, `install`, `propose`.
+Runs one Stardust action. Supported actions: `diagnose`, `validate` (needs
+`changeId`), `archive` (needs `changeId`), `list` (optional `specs: true`),
+`init` (needs `projectRoot`; optional `tools`, default `"all"`), `install`
+(`npm install -g @fission-ai/openspec`, with Repair's gate: `403` unless
+`allowSelfHealInstall` is on and the request comes from this computer), and
+`propose` (needs `changeId`).
 
-`propose` creates a new change directory under `openspec/changes/<changeId>/` with `proposal.md`, `design.md`, and `tasks.md`. Existing files are not overwritten — the response reports what was created vs already existed.
+`propose` does not call the OpenSpec CLI. It creates
+`openspec/changes/<changeId>/` with template `proposal.md` (holding
+`description` when given), `design.md` and `tasks.md`. Existing files are not
+overwritten, and the response says what was created and what already existed.
+`changeId` may not contain path separators or `..`.
 
 **Body:**
 ```json
 {
   "action": "validate",
   "changeId": "add-login",
-  "projectRoot": "/path/to/project",
-  "dryRun": false
+  "projectRoot": "/path/to/project"
 }
 ```
 
@@ -499,10 +679,13 @@ Executes an arbitrary OpenSpec CLI action. Supported actions: `diagnose`, `valid
 }
 ```
 
-### `GET /stardust/board`
-Returns a real-time change-board snapshot. This is the REST fallback for the WebSocket `/api/stardust/live` feed — the UI seeds from this endpoint before upgrading to live updates.
+For `diagnose` the response also carries the full result in `diagnostics`.
 
-**Query Params:** `projectRoot` (default: server CWD)
+### `GET /stardust/board`
+A change-board snapshot: the REST fallback for the `/api/stardust/live`
+WebSocket, and what the UI shows before the socket connects.
+
+**Query Params:** `projectRoot`
 
 **Response:**
 ```json
@@ -522,10 +705,15 @@ Returns a real-time change-board snapshot. This is the REST fallback for the Web
 }
 ```
 
-### `GET /stardust/deltas/:name`
-Returns operation-grouped spec deltas for a change. Parses `## ADDED/MODIFIED/REMOVED/RENAMED Requirements` sections from spec files under `openspec/changes/<name>/specs/`.
+Changes are newest first. `validation` is the last result stored with
+`PUT /stardust/validation/:name`, or `unknown`. `graphStatus` is `current`,
+`stale` or `unavailable`.
 
-**Query Params:** `projectRoot` (default: server CWD)
+### `GET /stardust/deltas/:name`
+The spec deltas of a change, from the `## ADDED/MODIFIED/REMOVED/RENAMED
+Requirements` sections of its files under `openspec/changes/<name>/specs/`.
+
+**Query Params:** `projectRoot`
 
 **Response:**
 ```json
@@ -543,129 +731,169 @@ Returns operation-grouped spec deltas for a change. Parses `## ADDED/MODIFIED/RE
 ```
 
 ### `PUT /stardust/validation/:name`
-Stores the last validation result for a change so the change board can show health icons.
+Stores the last validation result for a change so the change board can show it.
+Results are kept in memory until the runtime restarts.
 
 **Body:** `{ "status": "ok" | "warn" | "error" }`
+**Response:** `{ "ok": true, "change": "add-login", "validation": "ok" }`
 
 ### `WS /api/stardust/live`
-WebSocket endpoint for real-time OpenSpec dashboard updates. Pushes `snapshot` messages (full board state) on connect and on every file change, and `activity` messages for individual file events. Query with `?projectRoot=<path>` to watch a specific workspace.
+WebSocket for live change-board updates. Sends a `snapshot` (the
+`GET /stardust/board` shape) on connect and after every change under
+`openspec/`, and an `activity` message for each file event. Connect with
+`?projectRoot=<path>` to watch a specific workspace.
 
 **Message types:**
 - `{ "type": "snapshot", "data": { "changes": [...], "ready": true, "graphStatus": "current" } }`
-- `{ "type": "activity", "data": { "event": "modified", "path": "changes/add-login/tasks.md", "detail": "tasks.md was modified", "timestamp": 1722672000000 } }`
+- `{ "type": "activity", "data": { "event": "modified", "path": "changes/add-login/tasks.md", "detail": "...", "timestamp": 1722672000000 } }`
+- `{ "type": "error", "message": "..." }`
 
 ### `GET /stardust/compose`
-File-centric cross-reference aggregating data from all three mandatory tools for a single file. Returns which OpenSpec specs mention it, its Graphify structural metrics (dependents, centrality, blast radius, test coverage), and Context Expert ranking context with actual neighbour details.
+Everything the three tools know about one file: which OpenSpec specs mention it,
+its Graphify metrics (dependents, centrality, blast radius, test coverage,
+risk), and its nearest semantic neighbours from the search pipeline. Each part
+reports its own `available` and `reason`, so one missing tool empties only its
+part.
 
-**Query Params:** `projectRoot`, `file` (repo-relative path, required), `depth` (default: 2, range: 1–4), `limit` (default: 5)
+**Query Params:** `projectRoot`, `file` (required; repo-relative or absolute), `depth` (default: 2, clamped to 1–4), `limit` (default: 5, max 200)
 
-**Response:**
+**Response (abridged):**
 ```json
 {
   "file": "backend/interfaces/RestController.js",
+  "projectRoot": "/path/to/project",
+  "depth": 2,
   "available": true,
-  "openspec": { "mentionedIn": [{ "spec": "api-design", "file": "..." }], "specCount": 3 },
-  "graphify": { "dependents": 12, "centrality": 45, "blastRadius": 5, "nearestDependents": [...], "coveredByTests": true, "testFiles": [...] },
+  "openspec": { "available": true, "mentionedIn": [...], "specCount": 3, "reason": null },
+  "graphify": { "available": true, "inGraph": true, "dependents": 12, "centrality": 45, "blastRadius": 5, "nearestDependents": [...], "coveredByTests": true, "testCount": 2, "testFiles": [...], "risk": "high", "stale": false },
   "contextExpert": {
+    "available": true,
+    "graphRanked": true,
     "neighbours": [
-      { "file": "backend/services/AuthService.js", "similarity": 0.92, "source": "code" },
-      { "file": "docs/api-design.md", "similarity": 0.87, "source": "docs" }
-    ]
+      { "file": "backend/services/searchRouter.js", "score": 0.92, "signal": {...} }
+    ],
+    "reason": null
   }
 }
 ```
 
 ### `GET /stardust/spec`
-Returns the current text of a published spec by ID. Used by the SpecDiff side-by-side view as its left-hand "current" column.
+The current text of a published spec, for the SpecDiff view's "current" column.
+The spec ID is confined to `openspec/specs/`.
 
-**Query Params:** `projectRoot`, `spec` (spec ID, e.g. `auth`)
+**Query Params:** `projectRoot`, `spec` (spec ID, e.g. `auth` or `auth/session`)
+**Response:** `{ "available": true, "id": "auth", "path": "openspec/specs/auth.md", "text": "..." }`, or
+`{ "available": false, "id": "auth", "reason": "..." }` when OpenSpec is not set up or the spec does not exist yet.
 
 ### `GET /stardust/change-impact/:name`
-Resolves every file a change's spec deltas cite against the knowledge graph. Returns per-file blast radius, risk level, test coverage, and staleness. Includes aggregated totals (`untested`, `highestRisk`).
+Resolves every file a change's spec deltas cite against the knowledge graph:
+per file, its dependents, centrality, blast radius, risk and test coverage,
+riskiest first. Cited files the graph does not know are listed as `stale`.
 
 **Query Params:** `projectRoot`
+**Response:** `{ "change", "available", "deltaCount", "citedCount", "files": [...], "totals": { "inGraph", "stale", "blastRadius", "untested", "highestRisk" } }`
 
-## Health & Readiness
+## Health, Readiness & Repair
 
 ### `GET /health`
-Returns a full health report for all runtime dependencies. Polled by the Electron diagnostics page on load.
+A health report for every runtime dependency, polled by the Electron
+diagnostics page.
 
-Checks include `node`, `runtime`, `graphify`, `ollama`, `ctx`, `openspec`, and `config`. Each check reports `ok`, `version`, and a human-readable `message`. The top-level `status` is `starting`, `ok`, or `degraded`; `degraded` and `pending` arrays name checks that need attention (without repeating success or pending reports).
+Checks are `node`, `runtime`, `graphify`, `ollama`, `ctx`, `openspec`, and
+`config`; each has `ok` (`true`, `false`, or `null` while still being checked),
+`version`, and `message`. The top-level `status` is `starting`, `ok`, or
+`degraded`; `degraded` and `pending` name the checks that failed or are still
+pending. `contextWindow` is the context window Ollama serves (`null` if it could
+not be read).
 
 **Response:**
 ```json
 {
   "status": "ok",
+  "contextWindow": { "...": "..." },
   "started": true,
   "uptimeSeconds": 3600,
   "checks": {
     "node": { "ok": true, "version": "v24.11.0", "message": "v24.11.0 on darwin arm64" },
     "runtime": { "ok": true, "version": null, "message": "PID 12345, listening on port 3090" },
-    "graphify": { "ok": true, "version": "1.2.0", "message": "ready" },
-    "ollama": { "ok": true, "version": "0.1.0", "message": "ready" },
-    "ctx": { "ok": true, "version": "2.1.0", "message": "ready" },
-    "openspec": { "ok": true, "version": "1.5.0", "message": "ready" },
-    "config": { "ok": true, "version": null, "message": "config valid" }
+    "graphify": { "ok": true, "version": "...", "message": "..." },
+    "ollama": { "ok": true, "version": "...", "message": "..." },
+    "ctx": { "ok": true, "version": "1.3.4", "message": "..." },
+    "openspec": { "ok": true, "version": "...", "message": "..." },
+    "config": { "ok": true, "version": null, "message": "..." }
   },
   "degraded": [],
   "pending": [],
   "services": { "ollama": { "running": true } },
   "projects": { "total": 3, "indexed": 3, "synced": true },
-  "readiness": { "/path/to/project": { "ready": true, "reason": "..." } },
+  "readiness": { "overall": "ready", "trustworthy": true, "workspaces": [...] },
   "memory": { "rss": 123456789, "heapTotal": 98765432, "heapUsed": 54321098, "external": 1234567, "arrayBuffers": 12345 },
-  "platform": { "hostname": "machine", "release": "23.0.0", "arch": "arm64" },
+  "platform": { "hostname": "machine", "release": "25.0.0", "arch": "arm64" },
   "tasks": { "total": 3, "pendingApprovals": 1 },
-  "plugins": []
-}
-```
-
-### `POST /health/install`
-Attempts to self-heal a missing dependency by running its install command. Returns **403** with code `self_heal_install_disabled` unless `allowSelfHealInstall` is enabled in settings.
-
-**Body:** `{ "component": "ollama" }` — supported values: `ollama`, `ctx`, `openspec`
-
-**Success Response:**
-```json
-{
-  "ok": true,
-  "component": "ollama",
-  "message": "Ollama installed. Restart the runtime."
-}
-```
-
-**Error Response (403):**
-```json
-{
-  "ok": false,
-  "code": "self_heal_install_disabled",
-  "message": "Self-heal install is disabled. Enable allowSelfHealInstall in settings."
+  "plugins": [{ "name": "graphify", "permissions": [...], "restricted": true }]
 }
 ```
 
 ### `GET /readiness`
-Collapses Context Expert index state and Graphify build state into a single trust verdict per workspace, so a client never has to reconcile them itself. Returns readiness for every watched workspace, or a single one when `projectId` is given.
+One trust verdict per workspace, combining the Context Expert index state and
+the Graphify graph state, so a client never has to reconcile them. Each layer is
+`missing`, `unindexed`, `building`, `stale` or `ready`, and the workspace takes
+the weakest.
 
 **Query Params:** `projectId` (optional — absolute path)
 
-**Response:**
+Without `projectId`, every watched workspace:
+```json
+{ "overall": "ready", "trustworthy": true, "workspaces": [ { "path": "...", "state": "ready", "trustworthy": true, "layers": {...}, "action": null, "coverage": null } ] }
+```
+
+With `projectId`, that workspace alone, including `coverage` (spec count,
+undocumented and stale counts, and the top three undocumented hubs) once it is
+ready:
 ```json
 {
-  "/path/to/project": { "ready": true, "reason": "indexed and graph up to date" }
+  "path": "/path/to/project",
+  "state": "stale",
+  "trustworthy": false,
+  "layers": {
+    "graph": { "state": "stale", "detail": "source has changed since the last graph build" },
+    "index": { "state": "ready", "detail": "no pending index work" }
+  },
+  "action": "Run Sync Repository to refresh the graph before relying on answers.",
+  "coverage": null
 }
 ```
+
+### `GET /setup/plan`
+What is missing and what Repair would install. Nothing runs.
+
+**Response:** `{ "satisfied": ["ollama"], "automatic": [{ "name": "ctx", "command": "npm install -g yodaman-ctx ..." }], "manual": [...], "ok": false }`
+
+### `POST /setup/repair`
+Installs what is missing, as `yodaman setup` does: only the user-space packages
+(Context Expert, Graphify, OpenSpec), by fixed commands, without a shell or
+sudo, then checks again. Returns `403` (`self_heal_install_disabled`) unless
+`allowSelfHealInstall` is on in Settings, `403` (`repair_local_only`) from
+another machine, and `409` while a repair is running.
+
+**Response:** `{ "installed": [...], "manual": [...], "failed": [...], "stillMissing": [...] }`
+
+### `GET /diagnostics/run`
+Runs the dependency doctor now.
+
+**Response:** `{ "ok": true, "report": {...}, "text": "..." }`
 
 ## System
 
 ### `GET /status`
-Returns Context Expert telemetry: CLI version, database stats, embedding provider, and LLM configuration.
-
-Responses include an `X-Request-Id` header. Runtime logs include the same request ID for incident correlation.
+Context Expert status: CLI version, database stats, embedding provider, and
+model configuration.
 
 **Response:**
 ```json
 {
-  "version": "2.1.0",
-  "nodeVersion": "v20.0.0",
+  "version": "1.3.4",
+  "nodeVersion": "v24.11.0",
   "platform": "darwin",
   "database": { "sizeFormatted": "12.3 MB", "path": "/path/to/ctx/db" },
   "totalChunks": 15000,
@@ -676,11 +904,11 @@ Responses include an `X-Request-Id` header. Runtime logs include the same reques
 }
 ```
 
-When Context Expert is unavailable the response degrades gracefully:
+When Context Expert is unavailable the response degrades instead of failing:
 ```json
 {
   "version": "ctx-unavailable",
-  "nodeVersion": "v20.0.0",
+  "nodeVersion": "v24.11.0",
   "platform": "darwin",
   "database": { "sizeFormatted": "—", "path": "—" },
   "totalChunks": 0,
@@ -689,34 +917,43 @@ When Context Expert is unavailable the response degrades gracefully:
   "llm": { "model": "Not Available", "provider": "none" },
   "ok": false,
   "error": "spawn ctx ENOENT",
-  "hint": "Context Expert is not working. Use Repair on the Dashboard, or run: npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,onnxruntime-node"
+  "hint": "Context Expert is not working. Use Repair on the Dashboard, or run: npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node"
 }
 ```
 
 ### `GET /policy`
-Returns runtime safety policy details, including allowed workspace roots, blocked command patterns, and plugin permissions.
+The agent's safety policy: allowed workspace roots, allowed executables, blocked
+command patterns, the audit log setting, and each plugin's permissions.
+
+**Response:** `{ "allowedRoots": [...], "allowedExecutables": [...], "blockedCommandPatterns": [...], "auditLog": { "enabled": true, "maxEntries": 500 }, "plugins": [...] }`
 
 ### `GET /audit`
-Returns recent tool audit log entries.
+Recent tool audit log entries.
 
 **Query Params:** `limit` (default: 100)
 
-Audit entries are retained in `audit-log.json` and appended to `audit-log.jsonl`.
+The audit log is stored in `yodaman.db` in the YodaMan data folder
+(`audit-log.json` and `audit-log.jsonl` in the same folder are used only if the
+database cannot be opened).
 
 ### `DELETE /audit`
-Clears all persisted audit log entries.
+Clears the audit log.
 
 **Response:** `{ "message": "Audit logs cleared" }`
 
 ### `GET /desktop/diagnostics`
-Returns desktop/runtime diagnostics for control surfaces, including runtime telemetry, host info, task counts, plugin list, and dependency health states.
+Runtime diagnostics for the desktop app: process info and memory, host, task
+counts, where the data files are kept, plugins, and dependency health.
+
+**Response:** `{ "runtime": {...}, "host": {...}, "tasks": {...}, "data": { "dataDir": "...", "config": {...}, "database": {...} }, "plugins": [...], "dependencies": { "ollama", "ctx", "graphify", "openspec" } }`
 
 ### `GET /logs`
-Returns recent structured runtime logs plus index queue state.
+Recent structured runtime logs plus index queue state:
+`{ "logs": [...], "queue": {...} }`.
 
 Optional query filters:
 
-- `limit`: Maximum entries to return.
+- `limit`: Maximum entries to return (default 200).
 - `level`: `error`, `warn`, or `info`.
 - `severity`: `critical`, `high`, `medium`, or `low`.
 - `query`: Case-insensitive search across message, metadata, and stack traces.
@@ -725,62 +962,76 @@ Optional query filters:
 - `since` / `until`: ISO timestamps for time-window filtering.
 
 ### `POST /logs/client-error`
-Records a frontend-side failure in the same live log stream. Use this for UI catches that would otherwise only appear in the browser console.
+Records a frontend failure in the same log stream, for UI errors that would
+otherwise only reach the browser console.
 
 Body fields:
 
-- `message`: Error message.
-- `stack`: Optional client stack trace.
-- `userAction`: Workflow such as `code_search`, `chat_ask`, or `agent_task`.
+- `message` (required): Error message.
+- `stack`: Client stack trace.
+- `userAction`: Workflow such as `code_search`, `chat_ask`, or `agent_task` (default `client`).
 - `component`: UI component or client surface.
-- `severity`: `critical`, `high`, `medium`, or `low`.
-- `context`: Small structured object with query, project, mode, or other reproduction context.
+- `severity`: `critical`, `high`, `medium`, or `low` (default `medium`).
+- `context`: Small object with query, project, mode, or other reproduction context.
+
+**Response:** `{ "ok": true }`
 
 ### `GET /check`
-Runs a health check on a specific workspace path via Context Expert.
+Checks a workspace path with Context Expert (`ctx check`). A path Context
+Expert does not manage is reported `healthy` with `ctxManaged: false` if it
+exists, and `404` if it does not.
 
 **Query Params:** `path` (required)
 
 ### `POST /reindex`
-Manually queues a workspace for re-indexing.
+Queues a registered workspace for re-indexing and a graph update (`404` if the
+workspace is not registered).
 
 **Body:** `{ "path": "/path/to/workspace" }`
+**Response:** `{ "message": "Indexing and Graphify graph update queued" }`
 
-## Settings & CTX Config
+## Settings & Configuration
 
 ### `GET /settings`
-Returns all runtime settings (plugin uploads, unrestricted plugins, agent commands, pairing token requirement).
+Returns all runtime settings. The defaults:
 
-**Response:**
 ```json
 {
   "allowPluginUploads": false,
   "allowUnrestrictedPlugins": false,
-  "allowAgentCommands": true,
-  "requirePairingToken": false
+  "allowAgentCommands": false,
+  "requirePairingToken": true,
+  "allowSelfHealInstall": false,
+  "allowedCommands": [],
+  "editorCommand": ""
 }
 ```
 
 ### `PUT /settings`
-Updates one or more runtime settings. Accepted keys: `allowPluginUploads`, `allowUnrestrictedPlugins`, `allowAgentCommands`, `requirePairingToken`, `allowSelfHealInstall`, `allowedCommands`. Boolean keys are coerced to boolean. Plugin permissions are reloaded immediately after a save.
+Updates one or more settings, from this computer only (`403
+settings_local_only` otherwise). Accepted keys: `allowPluginUploads`,
+`allowUnrestrictedPlugins`, `allowAgentCommands`, `requirePairingToken`,
+`allowSelfHealInstall` (coerced to boolean), `allowedCommands` (bare executable
+names only), and `editorCommand` (`"system"` or `""` means the OS default). Plugin permissions are reloaded after a save.
 
 **Body:** `{ "allowPluginUploads": true, "requirePairingToken": true }`
 
-**Response:** (same shape as `GET /settings`, reflecting the new state)
+**Response:** (same shape as `GET /settings`, with the new values)
 
 ### `GET /ctx/config`
-Lists all Context Expert CLI configuration values.
+Lists Context Expert's configuration (`ctx config list`).
 
 **Response:**
 ```json
 {
   "ok": true,
-  "config": { "model": "llama3", "embedding_model": "nomic-embed-text", "..." : "..." }
+  "config": { "...": "..." }
 }
 ```
 
 ### `POST /ctx/config`
-Sets a single Context Expert configuration key.
+Sets one Context Expert configuration key (`ctx config set`). From this
+computer only.
 
 **Body:** `{ "key": "model", "value": "llama3" }`
 
@@ -793,16 +1044,44 @@ Sets a single Context Expert configuration key.
 }
 ```
 
+Failures are reported as `{ "ok": false, "error": "..." }`.
+
+### `GET /ollama/context`
+The context window Ollama is configured to serve.
+
+**Response:** `{ "managed": true, "manager": "brew", "plistPath": "...", "configured": 8192, "recommended": 32768, "allowed": [8192, 16384, 32768, 65536, 131072] }`
+
+### `POST /ollama/context`
+Sets Ollama's context window and restarts Ollama. From this computer only, and
+only when Ollama is
+managed by Homebrew (otherwise `409`, with the environment variable to set
+yourself). The value must be one of `allowed`; the service file is backed up
+first.
+
+**Body:** `{ "tokens": 32768 }`
+**Response:** `{ "ok": true, "applied": 32768, "restarted": true, "backupPath": "..." }`
+
+### `GET /mcp/clients`
+Agents that have read this runtime through MCP, most recent first. Reports when
+each was last seen, not whether it is connected.
+
+**Response:** `{ "clients": [{ "label": "...", "calls": 12, "firstSeen": "...", "lastSeen": "..." }] }`
+
 ## Pairing
 
-### `POST /pairing`
-Creates a temporary mobile pairing payload.
+Pairing tokens let another device (the mobile app) call the runtime. Tokens are
+kept in memory, last 24 hours, and are lost when the runtime restarts. Pairing
+routes answer only requests from this computer (`403 pairing_local_only`
+otherwise), so a device on the network cannot mint its own token.
 
-**Body:** `{ "runtimeUrl": "http://192.168.1.20:3090" }` (optional)
-**Response:** `{ "runtimeUrl": "...", "token": "...", "expiresAt": "...", "link": "yodaman://pair?..." }`
+### `POST /pairing`
+Creates a pairing token and link.
+
+**Body:** `{ "runtimeUrl": "http://192.168.1.20:3090" }` (optional; defaults to the request's host). A loopback URL (`localhost`, `127.0.0.1`) is replaced by this machine's LAN address on the same port, since on a phone it would mean the phone.
+**Response:** `201 { "runtimeUrl": "...", "token": "...", "expiresAt": "...", "link": "yodaman://pair?url=...&token=...", "deepLink": "..." }`
 
 ### `GET /pairing`
-Lists active pairing token metadata.
+Lists active tokens' `createdAt` and `expiresAt` (not the tokens themselves).
 
 ### `POST /pairing/revoke`
 Revokes a pairing token.
@@ -812,14 +1091,17 @@ Revokes a pairing token.
 
 ## File Upload
 
-File uploads are handled by a dedicated sub-router (`fileUploadService.router`). Routes under `/api/upload` accept multipart file uploads and manage temporary file storage for agent tasks. Allowed extensions: `.dart`, `.js`, `.ts`, `.json`, `.yaml`, `.md`, `.log`, `.txt`. Maximum file size: 5 MB. Temp files expire after 60 minutes.
+Routes under `/api/upload` store files for agent tasks. Allowed extensions:
+`.dart`, `.js`, `.ts`, `.json`, `.yaml`, `.md`, `.log`, `.txt`. Maximum file
+size: 5 MB (`413` if larger). Unattached temp files expire after 60 minutes.
 
 ### `POST /upload/temp`
-Uploads a single file to temporary storage. Returns a `fileId` used to attach the file to an agent task.
+Uploads one file to temporary storage. Returns a `fileId` for attaching it to an
+agent task.
 
 **Body:** multipart/form-data with field `file`.
 
-**Response:**
+**Response (`201`):**
 ```json
 {
   "fileId": "abc123-uuid",
@@ -831,7 +1113,7 @@ Uploads a single file to temporary storage. Returns a `fileId` used to attach th
 ```
 
 ### `POST /upload/attach`
-Moves a temporary file into a task's persistent storage, associating it with the given `taskId`.
+Moves a temporary file into a task's storage.
 
 **Body:** `{ "taskId": "agent-task-123", "fileId": "abc123-uuid" }`
 
@@ -847,12 +1129,12 @@ Moves a temporary file into a task's persistent storage, associating it with the
 ```
 
 ### `DELETE /upload/temp/:fileId`
-Deletes a temporary file by id.
+Deletes a temporary file.
 
 **Response:** `{ "deleted": true }`
 
 ### `GET /upload/task/:taskId/files`
-Lists all files attached to a task.
+Lists the files attached to a task.
 
 **Response:**
 ```json
@@ -869,4 +1151,5 @@ Lists all files attached to a task.
 }
 ```
 
-Uploaded files can also be attached directly to agent tasks via the `fileIds` array in `POST /agent/task`.
+Uploaded files can also be attached when starting a task, through the `fileIds`
+array of `POST /agent/task`.

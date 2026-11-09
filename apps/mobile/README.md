@@ -6,7 +6,8 @@ The mobile companion for the YodaMan runtime. It is built for oversight and revi
 
 Six tabs, mirroring the desktop so both clients teach the same model of the
 product. Everything Stardust exposes here is read-only: the phone can watch
-specs and drift, but the approval gate is the only thing that mutates state.
+specs and drift. The only actions that change runtime state are approval
+decisions and task cancellation.
 
 - **Connect** — runtime URL, pairing token or `yodaman://pair` link, dependency
   health for all three pillar tools plus Ollama, workspace readiness, and
@@ -17,12 +18,12 @@ specs and drift, but the approval gate is the only thing that mutates state.
   and runtime diagnostics.
 - **Impact** — blast radius for any file at a hop depth of 1 to 4, cross-
   referenced across all three tools.
-- **Tasks** — task timeline with faction-coloured status, event streams, event
-  payload inspection, and cancellation.
+- **Tasks** — task timeline with faction-coloured status, each task's recorded
+  events, event payload inspection, and cancellation.
 - **Approvals** — pending write proposals with dependents and test coverage,
   behind a confirmation step.
 
-Styling is a direct port of the desktop theme in `core/src/index.css`, including
+Styling is a direct port of the desktop theme in `src/index.css`, including
 the semantic faction palette and the HUD corner brackets the desktop reserves
 for the approval gate. See `theme.js`.
 
@@ -43,7 +44,10 @@ For a physical phone, set the runtime URL to the desktop machine's LAN address, 
 http://192.168.1.20:3090
 ```
 
-The desktop runtime must allow the phone to reach port `3090` on the local network.
+The runtime binds `127.0.0.1` by default, so the phone cannot reach it until
+you start it listening on the network, for example `YODAMAN_HOST=0.0.0.0 yodaman`.
+Requests from anywhere but the desktop itself then need a pairing token (see
+below); `requirePairingToken` is on by default.
 
 The Expo mobile bundler uses `metro.config.js` to include the repository-level `shared/` API client.
 
@@ -57,6 +61,8 @@ curl -X POST http://127.0.0.1:3090/api/pairing \
   -d '{"runtimeUrl":"http://YOUR-MAC-LAN-IP:3090"}'
 ```
 
-Paste the returned `link` or `deepLink` into the Runtime URL field and tap Use Pairing Link.
+Paste the returned `link` (`deepLink` is the same value) into the Runtime URL
+field and tap **Use pairing link**. A token expires after 24 hours and is held
+only in the runtime's memory, so restarting the runtime means pairing again.
 
 Native push notifications are not enabled. They require Expo notification dependencies and provider credentials, and nothing in the app claims otherwise.

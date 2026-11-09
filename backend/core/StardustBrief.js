@@ -258,7 +258,6 @@ async function build(projectRoot, task) {
         '',
         'Use these facts directly; they are current as of the start of this task.',
         'Call impactOf(file, project) before editing any file this brief does not already cover.',
-        'When you cite structure from the graph, append a "[view graph](http://localhost:5190)" link.',
         '=== END STARDUST BRIEF ===',
     ].join('\n');
 

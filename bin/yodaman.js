@@ -318,27 +318,6 @@ describe('${pluginName} plugin', () => {
         console.log(`✅ Updated plugin README: ${readmeFile}`);
     }
 
-    // Auto-register in config.json
-    const configPath = runtimeConfigPath();
-
-    if (fs.existsSync(configPath)) {
-        try {
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            if (!config.plugins) config.plugins = {};
-            if (!config.plugins[pluginName]) {
-                config.plugins[pluginName] = { enabled: true };
-                fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
-                console.log(`✅ Registered "${pluginName}" in ${configPath}`);
-            } else {
-                console.log(`ℹ️  "${pluginName}" already registered in config.json`);
-            }
-        } catch (err) {
-            console.log(`⚠️  Could not register in config.json: ${err.message}`);
-        }
-    } else {
-        console.log(`ℹ️  No config.json found — skipping auto-registration.`);
-    }
-
     console.log('');
     console.log('📦 Plugin scaffold complete. Next steps:');
     console.log(`   1. Edit ${targetFile} to implement your tool logic`);

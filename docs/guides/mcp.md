@@ -10,10 +10,10 @@ Five tools, all read-only:
 
 | Tool | What it answers |
 | --- | --- |
-| `yodaman_projects` | Which workspaces are indexed, and how fresh each is. Call this first — everything else needs an absolute workspace path. |
+| `yodaman_projects` | Which workspaces YodaMan knows, whether each is indexed, and its file count. Call this first — everything else needs an absolute workspace path. |
 | `yodaman_search` | Semantic search ranked by four signals: similarity, proximity to the file you are in, centrality in the dependency graph, and spec coverage. |
 | `yodaman_graph_query` | Relationships between code, docs and diagrams from the Graphify knowledge graph. |
-| `yodaman_impact` | What depends on a file or symbol, how far the effect reaches, which tests cover it. |
+| `yodaman_impact` | What depends on a file or symbol, how far the effect reaches (1-4 hops, default 2), which tests cover it. |
 | `yodaman_spec_drift` | Where OpenSpec intent and the code disagree — specs citing files that no longer exist, and load-bearing modules no spec describes. |
 
 `yodaman_spec_drift` is the one worth reaching for first. It is the thing a
@@ -89,8 +89,9 @@ path instead:
 which yodaman-mcp    # use this path in the client's config
 ```
 
-The same panel is in the app: **Settings → Connect other agents**, with a copy
-button per client.
+The app has the same snippets under **Settings → Connect other agents**, with a
+copy button per client (Claude Code, Cursor, Zed, and the common `mcpServers`
+shape).
 
 ## Seeing which agents have read your workspace
 
@@ -151,7 +152,8 @@ are verified to match the HTTP API: same count, same ordering, same weights.
 ## Privacy
 
 stdio only. Nothing listens on a port, nothing is sent anywhere, and there are
-no API keys or accounts. The server talks to `127.0.0.1` and nowhere else. The
+no API keys or accounts. The server talks only to the YodaMan runtime at
+`YODAMAN_URL`, which is `127.0.0.1` unless you change it. The
 client you connect may have its own data policies — that is between you and it —
 but YodaMan adds no egress of its own.
 

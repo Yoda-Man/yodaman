@@ -2,18 +2,29 @@
 
 ## Upgrading
 
-**Nothing to do by hand in 0.5.x.** Upgrade in place:
+Upgrade in place:
 
 ```bash
 npm install -g yodaman@latest
 ```
 
-If you use the desktop app, download the new `.dmg` or `.AppImage` and replace
-the old one. If you run from source, `git pull && npm install`.
+If you use the desktop app, download the new `.dmg`, `.AppImage` or Windows
+installer and replace the old one. If you run from source, `git pull && npm install`.
 
 Restart the runtime afterwards so the new version is the one serving requests.
 Anything connected over MCP picks up the new server the next time it spawns it;
-no client configuration changes between 0.5.x versions.
+no client configuration changes across 0.5.x and 0.6.x.
+
+### Coming from 0.5.x to 0.6.x
+
+Two things need doing once:
+
+- **Node.js 24 or later** is required from 0.6.2 (`engines` says `>=24`).
+- **Context Expert is now the `yodaman-ctx` package** (from 0.6.1), version
+  1.3.4 or later. It keeps the `ctx` command and the `~/.ctx` index, so nothing
+  is re-indexed. An older `ctx`, or the original `@contextexpert/cli`, is
+  reported as missing; run `yodaman setup` (or Repair on the Dashboard) to
+  install the current release.
 
 ### Where your settings and history live (0.5.9 and later)
 
@@ -40,7 +51,7 @@ source or from a folder you kept, they come across.
 ### Do I need to re-index?
 
 **No.** There is no index or graph schema version, and nothing about the on-disk
-formats changed across 0.5.x — your existing index stays valid.
+formats changed across 0.5.x and 0.6.x — your existing index stays valid.
 
 One exception, worth doing once if it applies to you:
 
@@ -88,11 +99,14 @@ The manual route below does the same thing, if you would rather see it yourself.
 npm uninstall -g yodaman
 ```
 
-For the desktop app, delete `YodaMan.app` (macOS) or the `.AppImage` (Linux).
+For the desktop app, delete `YodaMan.app` (macOS) or the `.AppImage` (Linux),
+or uninstall it from Windows Settings.
 
-This also removes the runtime's own state, which lives inside the install
-directory: `config.json`, `sessions.json`, `audit-log.json`,
-`audit-log.jsonl`, `task-history.json`, and `task-history.jsonl`.
+This also removes any state an older version left inside the install
+directory: `config.json` and `yodaman.db` from before 0.5.9, and
+`sessions.json` from before 0.6.4. From 0.6.4 every state file, chat sessions
+included, lives in the data folder below; the first start copies an older
+install's `sessions.json` across.
 
 ### 2. Remove state kept outside the install directory
 

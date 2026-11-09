@@ -24,6 +24,7 @@ describe('tool capabilities', () => {
             ['applyPatch', 'writes to disk — the bug this exists for'],
             ['executeCommand', 'runs a command on the machine'],
             ['specPropose', 'creates an OpenSpec change'],
+            ['specInit', 'runs openspec init in the workspace'],
             ['specArchive', 'moves an OpenSpec change']
         ])('%s (%s)', (tool) => {
             expect(requiresApproval(tool)).toBe(true);
@@ -34,7 +35,7 @@ describe('tool capabilities', () => {
         it.each([
             'readFile', 'listFiles', 'searchCode', 'impactOf',
             'graphifyQuery', 'graphifyExplain', 'graphifyPath', 'graphifyAffected',
-            'specDrift', 'specValidate'
+            'specDrift', 'specDraft', 'specValidate'
         ])('%s', (tool) => {
             expect(requiresApproval(tool)).toBe(false);
             expect(isReadOnlyTool(tool)).toBe(true);

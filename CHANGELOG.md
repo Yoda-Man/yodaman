@@ -2,6 +2,111 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **The VS Code extension could not start once installed.** It loads core's
+  shared client from outside its own folder, which `vsce` never packaged, so
+  every `.vsix` failed on activation. `vscode:prepublish` now copies the client
+  into the package, and the website's `vscode-yodaman-0.6.4.vsix` is rebuilt
+  with it.
+
+## [0.6.4] - 2026-11-08
+
+### Added
+- **Draft Specs** in Stardust → Commands (or `Draft baseline specs` in Chat)
+  writes a first OpenSpec spec for each top-level module of a project that has
+  none. Modules come from the Graphify graph, their code from the search
+  pipeline, and the text from your local model. Nothing is written until you
+  approve it: Chat asks before `openspec init` and shows each spec as a diff.
+  Drafts say DRAFT in their Purpose, and existing specs are never replaced.
+  The agent gets the same drafting as the `specDraft` tool.
+
+### Changed
+- **Context Expert 1.3.4 or later is required** (was 1.3.2). ctx 1.3.4 is the
+  same code as 1.3.3 (plus commander 15.1.0), rebuilt so `ctx --version` reports the right version,
+  which lets the minimum match the latest release.
+- Holocron VR moves to 0.6.4 alongside YodaMan.
+
+### Security
+- **A device on the network could pair itself.** The pairing routes skip the
+  token check, so with `YODAMAN_HOST=0.0.0.0` any device could create a token
+  and then use the whole API. Pairing now answers only this computer.
+- **A paired device could change settings**, including turning off the token
+  requirement or turning on agent shell commands. `PUT /api/settings`,
+  `POST /api/ctx/config` and `POST /api/ollama/context` now answer only this
+  computer, as Repair and the editor setting already did.
+- **A plugin upload could replace an installed plugin**: a zip's `main.js`
+  overwrote Holocron's, and a `graphify.js` the default plugin. An upload may
+  only add a plugin now (`409` for a name already installed), and one that fails
+  validation is removed instead of loading, unrestricted, on the next start.
+- **Stardust's OpenSpec Install Now skipped Repair's gate.** It ran
+  `npm install -g` for any caller; it now needs "Repair Can Install Missing
+  Tools" on and a request from this computer, like Repair.
+
+### Fixed
+- The desktop startup screen's **Install** buttons posted to
+  `/api/health/install`, removed in 0.6.1, so every click failed. They now run
+  Repair, and Ollama's button shows its install command.
+- **Chat history survives upgrades.** `sessions.json` was the last state file
+  kept inside the install folder, which an upgrade replaces. It now lives in the
+  data folder with `config.json` and `yodaman.db`, and the first start copies an
+  older install's file across. The JSON fallbacks for task history and the
+  audit log moved too.
+- **Mobile pairing links point at this machine's LAN address.** The desktop
+  menu and the Dashboard produced links to `127.0.0.1`, which on a phone means
+  the phone.
+- `YODAMAN_AGENT_PROMPT_CHARS` did nothing since the prompt budget began
+  following the context window. It now sets the budget, as documented.
+- The shared client threw on two events the runtime sends, `upload_error` and
+  `response_truncated`, ending the task stream for the mobile app and the VS Code
+  extension. Both are in the protocol now.
+- `yodaman_projects` (MCP) no longer claims to report freshness it does not
+  return, and `yodaman_search` states its real default of 15 results.
+- **`yodaman create-plugin` broke plugin loading**: the loader required the
+  `<name>.test.js` it writes beside the plugin as a plugin. Test files are
+  skipped now, and the `config.json` entry it wrote, which nothing read, is
+  gone.
+- The agent was told to link `[view graph](http://localhost:5190)`, the
+  development server, which is not running under `npm start` or in the desktop
+  app. It no longer adds the link.
+- **All documentation checked line by line against the code**: the API
+  reference, README, guides, runbooks, client docs, mobile store and privacy
+  documents, SECURITY, CONTRIBUTING and UPGRADING. Among what was wrong: response
+  shapes for most git, Stardust, drift and readiness endpoints; a removed
+  install route; Node 18; the npm package's contents; a desktop download page
+  that stopped at 0.4.3; and a website telling users to unzip Holocron into a
+  folder nothing reads. The five draw.io diagrams, last accurate at 0.4.4 and
+  linked from nowhere, are deleted.
+- The user manual's Stardust workflow described an **Apply** step with
+  `--dry-run`, a `--strict` validate, and a Propose that takes a title and spec
+  path. None of those exist. It now says what each button does: Propose
+  creates template files only, and Archive is what merges a change's spec
+  deltas into `openspec/specs/`.
+- `docs/architecture/architecture.md` is checked line by line against the code.
+  It listed Stardust endpoints that never existed (`/api/stardust/propose`,
+  `/apply`, `/status`), described the old command denylist and a threat model
+  that ignored web pages, invented features for several components
+  (TrustDashboard, PipelineStrip, ComposePanel), and left ten modules out. Every
+  route it names now exists with the stated method, every real route is
+  listed, and the dependency diagram is taken from the actual `require()` calls.
+
+## [0.6.3] - 2026-11-07
+
+### Changed
+- **YodaMan now requires Context Expert (`yodaman-ctx`) 1.3.2 or later.** An
+  older `ctx` is reported as missing, so setup and Repair install the latest
+  release instead of searching with an outdated one. (The published 1.3.3
+  reports its version as 1.3.2, so that is the floor until ctx republishes.)
+- The `yodaman-ctx` install command now allows the `tree-sitter-go` and
+  `tree-sitter-rust` install scripts. ctx 1.3 added both parsers, and npm 11
+  blocked their native builds, leaving Go and Rust files unparsed.
+- Holocron VR moves to 0.6.3 alongside YodaMan.
+
+### Fixed
+- The README badge said Node 22+ and the user manual said Node.js 18+; both now
+  say Node 24+, matching `engines`.
+
 ## [0.6.2] - 2026-10-30
 
 ### Changed

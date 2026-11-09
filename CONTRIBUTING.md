@@ -6,7 +6,8 @@ document is deliberately honest about what that means for your time.
 ## How we work
 
 **Issues are very welcome.** Bug reports, feature requests, and questions are
-the most useful thing you can send. There is a template for each.
+the most useful thing you can send. Bugs and feature requests have templates;
+a question can go in a blank issue.
 
 **Please open an issue before a pull request.** Not bureaucracy — YodaMan has a
 few architectural commitments (below) that are not obvious from reading the
@@ -62,10 +63,11 @@ permission to push to `main`.
 npm run release:verify
 ```
 
-This is the gate. It must exit 0. It chains, in order: the build, lint, the unit
-suites with coverage, a production dependency audit, the vendored-asset audit,
-the release smoke test, the user-journey tests, the plugin tests, the approval
-smoke test, and the packaged smoke test.
+This is the gate. It must exit 0. It chains, in order: the version-consistency
+check, the build, lint, the unit suites, the unit suites again with coverage, a
+production dependency audit, the vendored-asset audit, the release smoke test,
+the user-journey tests, the plugin smoke test, the approval smoke test, and the
+packaged smoke test.
 
 If it is red, the change is not ready — and "it fails on main too" is worth
 saying out loud in the PR rather than quietly working around.
@@ -113,8 +115,9 @@ These are settled. A change that crosses one will be declined regardless of how
 well it is implemented, so please raise an issue if you think one should move.
 
 **Nothing leaves the machine.** No telemetry, no analytics, no cloud calls, no
-API keys. The runtime binds `127.0.0.1` and talks to your local model. A
-dependency that phones home is a dependency we do not take.
+API keys. The runtime binds `127.0.0.1` by default and talks to your local
+model through Ollama. A dependency that phones home is a dependency we do not
+take.
 
 **The MCP server is read-only, permanently.** YodaMan pauses its own agent's
 file writes for approval, with a diff and a graph-derived blast radius. An

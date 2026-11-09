@@ -345,18 +345,38 @@ function installIpcHandlers() {
     ipcMain.handle('yodaman:pick-project-folder', pickProjectFolder);
     ipcMain.handle('yodaman:retry-runtime', retryRuntime);
 
+    // Repair installs every missing user-space tool at once (Ollama is left to
+    // its own installer), so the answer is read back for the one clicked.
     ipcMain.handle('yodaman:install-dependency', async (event, component) => {
         try {
-            const result = await postJson('/api/health/install', { component });
-            return result;
+            return repairOutcome(component, await postJson('/api/setup/repair'));
         } catch (error) {
-            return { ok: false, component, message: error.message };
+            return { ok: false, component, message: repairErrorMessage(error.message) };
         }
     });
 
     ipcMain.handle('yodaman:open-dev-tools', () => {
         if (mainWindow) mainWindow.webContents.openDevTools();
     });
+}
+
+function repairErrorMessage(body) {
+    try {
+        return JSON.parse(body).error || body;
+    } catch {
+        // Not a JSON error body (a proxy page, a network message): show it as is.
+        return body;
+    }
+}
+
+function repairOutcome(component, result) {
+    const manual = (result.manual || []).find((m) => m.name === component);
+    if (manual) return { ok: false, component, message: `${manual.reason}: ${manual.instruction}` };
+    const failed = (result.failed || []).find((f) => f.name === component);
+    if (failed || (result.stillMissing || []).includes(component)) {
+        return { ok: false, component, message: failed?.error || `${component} is still missing after Repair` };
+    }
+    return { ok: true, component, message: `${component} installed` };
 }
 
 function escapeHtml(value) {
@@ -540,11 +560,9 @@ function diagnosticsPage({ title, message, status, logs = '' }) {
           if (window.yodamanDesktop && window.yodamanDesktop.installDependency) {
             result = await window.yodamanDesktop.installDependency(component);
           } else {
-            const resp = await fetch(RUNTIME_URL + '/api/health/install', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ component })
-            });
-            result = await resp.json();
+            const resp = await fetch(RUNTIME_URL + '/api/setup/repair', { method: 'POST' });
+            const body = await resp.json();
+            result = resp.ok ? { ok: !(body.stillMissing || []).includes(component), message: component + ' is still missing' } : { ok: false, message: body.error };
           }
           if (result && result.ok) {
             showToast(component + ' installed! Restart the runtime.', 'success');
@@ -585,7 +603,7 @@ function diagnosticsPage({ title, message, status, logs = '' }) {
         // Status text
         cells[1].innerHTML = statusLabel(ok, ch.message);
 
-        // Action buttons — only for components /api/health/install can repair
+        // Action buttons — Repair (POST /api/setup/repair) installs ctx and OpenSpec; Ollama gets its install command
         if (key === 'ollama' && ok === false) {
           const actionCell = document.getElementById('action-ollama');
           if (actionCell) { actionCell.innerHTML = ''; actionCell.appendChild(makeInstallBtn('ollama')); }

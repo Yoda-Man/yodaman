@@ -156,3 +156,23 @@ describe('the README\'s documented figures are true', () => {
     });
 });
 
+
+describe('YODAMAN_AGENT_PROMPT_CHARS', () => {
+    const { promptBudgetFor: budgetFor, MAX_PROMPT_CHARS: max } = require('../../backend/core/promptBudget');
+
+    it('replaces the window-sized budget when set', () => {
+        expect(budgetFor(8192, { override: '30000' }).maxPromptChars).toBe(30000);
+        expect(budgetFor(131072, { override: '12000' }).maxPromptChars).toBe(12000);
+    });
+
+    it('is still held under the single-invocation limit', () => {
+        expect(budgetFor(8192, { override: String(max * 2) }).maxPromptChars).toBe(max);
+    });
+
+    it('is ignored when unset or not a positive number', () => {
+        const sized = budgetFor(32768, { override: undefined }).maxPromptChars;
+        expect(budgetFor(32768, { override: 'abc' }).maxPromptChars).toBe(sized);
+        expect(budgetFor(32768, { override: '0' }).maxPromptChars).toBe(sized);
+        expect(sized).toBeGreaterThan(9000);
+    });
+});

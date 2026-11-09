@@ -28,4 +28,18 @@ describe('Protocol Generation Consistency', () => {
         expect(newJs).toBe(originalJs);
         expect(newTs).toBe(originalTs);
     });
+
+    it('declares every task event the runtime emits, so clients do not throw on one', () => {
+        // shared/yodamanClient.js asserts each streamed event against this list;
+        // upload_error and response_truncated were emitted but missing from it.
+        const { TASK_EVENT_TYPES } = require('../../shared/yodamanProtocol');
+        const root = path.resolve(__dirname, '../..');
+        const emitted = new Set();
+        for (const file of ['backend/core/AgentReasoningEngine.js', 'backend/interfaces/RestController.js']) {
+            const source = fs.readFileSync(path.join(root, file), 'utf8');
+            for (const m of source.matchAll(/(?:sendEvent|emit|onStep|recordTaskEvent)\([^)]*?type: '([a-z_]+)'|\{ type: '([a-z_]+)', taskId/g)) emitted.add(m[1] || m[2]);
+        }
+        expect(emitted.size).toBeGreaterThan(5);
+        expect([...emitted].filter((type) => !Object.values(TASK_EVENT_TYPES).includes(type))).toEqual([]);
+    });
 });
