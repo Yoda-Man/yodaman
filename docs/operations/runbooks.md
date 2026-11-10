@@ -194,7 +194,7 @@ restart and destroy the only record of the cause.
 4. Run `GET /api/graphify/status?path=/absolute/workspace`.
 5. Run `POST /api/graphify/build` for the workspace.
 6. Poll `GET /api/graphify/build/status?path=/absolute/workspace` until the state is `succeeded`, `partial`, or `failed`.
-7. Treat `partial` as a valid large-graph outcome when `graph.json` and the report exist but `graph.html` or `graph_visualizer.html` were skipped by Graphify.
+7. Treat `partial` as a valid large-graph outcome when `graph.json` and the report exist but `graph.html` was skipped by Graphify.
 8. If orphaned nodes are reported, run Sync Repository or `POST /api/reindex` for the workspace.
 9. If semantic extraction fails, confirm Ollama is running and the model named by `YODAMAN_GRAPHIFY_OLLAMA_MODEL` is available locally.
 

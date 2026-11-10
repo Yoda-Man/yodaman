@@ -77,6 +77,26 @@ describe('WorkspaceReadiness', () => {
         expect(readiness.forWorkspace(PROJECT).state).toBe('ready');
     });
 
+    test('only the workspace being indexed is building', () => {
+        // The queue used to say only "a job is running", so every workspace
+        // read "building" while any one was indexed.
+        setQueue({ isProcessing: true, queue: [], active: { pid: 1, path: OTHER } });
+        expect(readiness.forWorkspace(PROJECT).layers.index.state).toBe('ready');
+        expect(readiness.forWorkspace(OTHER).layers.index.state).toBe('building');
+    });
+
+    test('a degraded picture is logged once, not on every health poll', () => {
+        const logger = require('../../backend/infrastructure/Logger');
+        const info = jest.spyOn(logger, 'info');
+        setQueue({ isProcessing: false, queue: [PROJECT], active: null });
+        try {
+            for (let i = 0; i < 3; i++) readiness.forWorkspaces([PROJECT]);
+            expect(info.mock.calls.filter(([m]) => m === 'workspace_readiness_degraded')).toHaveLength(1);
+        } finally {
+            info.mockRestore();
+        }
+    });
+
     test('the verdict is the weakest layer, never an average', () => {
         expect(readiness.weakest(['ready', 'stale'])).toBe('stale');
         expect(readiness.weakest(['stale', 'unindexed'])).toBe('unindexed');

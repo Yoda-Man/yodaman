@@ -11,6 +11,12 @@ const path = require('path');
 
 // One parent folder, so every run's leftovers are in one place; the folder
 // for a worker is only created if something in it actually writes.
+// Logs too: a runtime a test starts (Electron, the MCP server, a port clash)
+// does not always inherit NODE_ENV=test, and wrote into the user's runtime.log.
+if (!process.env.YODAMAN_LOG_DIR) {
+    process.env.YODAMAN_LOG_DIR = path.join(os.tmpdir(), 'yodaman-test-logs', String(process.pid));
+}
+
 if (!process.env.YODAMAN_DATA_DIR) {
     process.env.YODAMAN_DATA_DIR = path.join(os.tmpdir(), 'yodaman-test-data', String(process.pid));
 }

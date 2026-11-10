@@ -534,7 +534,7 @@ Serves a generated Graphify HTML artifact for a registered workspace, from its
 `graphify-out/` directory only.
 
 - `path`: absolute registered workspace path.
-- `type`: `mindmap` for `graph.html` or `visualizer` for `graph_visualizer.html`.
+- `type`: `mindmap`, for `graph.html`.
 
 ### `GET /graphify/report`
 The Graphify markdown report for a registered workspace (`404` if none).

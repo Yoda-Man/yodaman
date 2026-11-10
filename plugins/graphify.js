@@ -16,14 +16,16 @@ module.exports = {
     parameters: {
         action: 'query | explain | path | affected | status | build',
         path: 'Absolute workspace path',
+        workspacePath: 'Absolute workspace path (same as path; what "Run graphify" fills in)',
         query: 'Natural language graph query for action=query',
         node: 'Graph node name for action=explain',
         source: 'Source node for action=path',
         target: 'Target node for action=path'
     },
     async execute(parameters = {}) {
-        const action = parameters.action || 'query';
-        const projectPath = parameters.path || process.cwd();
+        // "Run graphify" names no action and no query: report the graph's status.
+        const action = parameters.action || (parameters.query ? 'query' : 'status');
+        const projectPath = parameters.path || parameters.workspacePath || process.cwd();
 
         if (action === 'status') {
             return graphifyService.status(projectPath);

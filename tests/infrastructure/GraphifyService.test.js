@@ -23,8 +23,7 @@ describe('GraphifyService build status', () => {
             state: 'partial',
             message: 'Graphify graph built with skipped visualizations',
             skippedArtifacts: {
-                mindmap: 'Graph has 129204 nodes - too large for HTML viz (limit: 5000)',
-                visualizer: 'Graph has 129204 nodes - too large for HTML viz (limit: 5000)'
+                mindmap: 'Graph has 129204 nodes - too large for HTML viz (limit: 5000)'
             },
             nodeCount: 129204,
             edgeCount: 534409
@@ -62,7 +61,8 @@ describe('GraphifyService build status', () => {
         expect(status.build.state).toBe('partial');
         expect(status.build.message).toContain('visualization');
         expect(status.artifacts.mindmap.skippedReason).toContain('visualization');
-        expect(status.artifacts.visualizer.skippedReason).toContain('visualization');
+        // The only artifact a current Graphify writes; a build is complete with it.
+        expect(Object.keys(status.artifacts)).toEqual(['mindmap']);
     });
 
     test('status clears stale running builds when generated mind map output exists', () => {

@@ -52,6 +52,7 @@ describe('what setup refuses to execute', () => {
     it('accepts a single unambiguous command', () => {
         expect(isRunnableCommand('npm install -g yodaman-ctx --allow-scripts=better-sqlite3')).toBe(true);
         expect(isRunnableCommand('python3 -m pip install --user graphifyy')).toBe(true);
+        expect(isRunnableCommand('python3 -m pip install --user --break-system-packages graphifyy')).toBe(true);
     });
 
     it('no command the planner would run mentions sudo, on any platform', () => {
@@ -149,7 +150,7 @@ describe('the printed plan', () => {
         // --dry-run and the real run print the same text, so what a user
         // approves is what executes.
         expect(text).toContain(require('../../backend/infrastructure/DependencyChecker').SERVICES.ctx.installUrl);
-        expect(text).toContain('python3 -m pip install --user graphifyy');
+        expect(text).toContain(require('../../backend/infrastructure/DependencyChecker').SERVICES.graphify.installHint.darwin);
     });
 
     it('does not present the Ollama prose as something it will run', () => {

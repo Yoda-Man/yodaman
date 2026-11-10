@@ -182,11 +182,12 @@ product working, and the difference is not academic: 0.4.5 shipped with the agen
 unable to call a single tool while 492 tests passed, because every gate inspected
 artifacts and none drove the product.
 
-Four gates close that (plus `npm run release:smoke`). They need the full local stack and are slower than the
+Five gates close that (plus `npm run release:smoke`). They need the full local stack and are slower than the
 unit suite, so they run before a release rather than on every save.
 
 | Command | What it proves |
 |---------|----------------|
+| `npm run test:tools` | Context Expert, Graphify, OpenSpec and Ollama are installed **and start**, and the real Graphify builds a graph of a sample project. Every other suite mocks these tools, so 0.6.4 shipped from a machine whose Graphify could not start (its Python had been removed) while every gate passed. |
 | `npm run test:journeys` | Search returns the documented four-signal blend and is genuinely graph-ranked; every workspace reports state and a remediation. Fast — no agent loop. |
 | `npm run test:plugins` | Every chat-invokable plugin is reachable through the agent, using the exact phrase the chat dropdown inserts. |
 | `npm run test:approval` | A proposed write pauses for a decision and the file is untouched both while pending and after a rejection. This is the product's central safety claim. |
@@ -195,7 +196,7 @@ unit suite, so they run before a release rather than on every save.
 Run them all in ascending cost:
 
 ```bash
-npm run release:verify   # version check, build, lint, tests, coverage, both audits, release smoke, then the four gates
+npm run release:verify   # version check, build, lint, tests, coverage, both audits, the tools check, release smoke, then the other four gates
 ```
 
 **Order matters after a version bump.** `Downloads.test.js` and

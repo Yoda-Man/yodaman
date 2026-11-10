@@ -76,10 +76,10 @@ function indexLayer(projectPath) {
         if (queued) {
             return { state: 'building', detail: 'queued for reindex' };
         }
-        if (status.isProcessing && status.active) {
-            // The queue does not expose which path is active, so this is
-            // reported as indeterminate rather than claimed as current.
-            return { state: 'building', detail: 'an index job is running' };
+        // Only the workspace being indexed is building. Every workspace used
+        // to read "building" whenever any one of them was indexing.
+        if (status.active && status.active.path === projectPath) {
+            return { state: 'building', detail: 'being indexed now' };
         }
         return { state: 'ready', detail: 'no pending index work' };
     } catch (err) {
@@ -192,17 +192,21 @@ function summarize(report) {
     return labels[report.state] || report.state;
 }
 
+let lastDegraded = null;
+
 /** Readiness for many workspaces, plus the weakest state across all of them. */
 function forWorkspaces(projectPaths = []) {
     // No coverage here on purpose — see coverageFor(). The list is polled.
     const workspaces = projectPaths.map((p) => forWorkspace(p));
     const overall = workspaces.length ? weakest(workspaces.map(w => w.state)) : 'unindexed';
 
-    if (overall !== 'ready') {
-        logger.info('workspace_readiness_degraded', {
-            overall,
-            degraded: workspaces.filter(w => w.state !== 'ready').map(w => ({ path: w.path, state: w.state }))
-        });
+    // Health polls this every few seconds from each open window, so log only a
+    // change: the same line three times every five seconds buried the real errors.
+    const degraded = workspaces.filter(w => w.state !== 'ready').map(w => ({ path: w.path, state: w.state }));
+    const signature = JSON.stringify(degraded);
+    if (signature !== lastDegraded) {
+        lastDegraded = signature;
+        if (degraded.length) logger.info('workspace_readiness_degraded', { overall, degraded });
     }
 
     return { overall, trustworthy: overall === 'ready', workspaces };

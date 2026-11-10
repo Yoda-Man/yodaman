@@ -4,7 +4,6 @@ import { api } from '../api/api'
 
 const MODES = [
   { id: 'mindmap', label: 'Mind Map' },
-  { id: 'visualizer', label: 'Canvas' },
   { id: 'report', label: 'Report' },
   { id: 'preview', label: 'Map Preview' }
 ]
@@ -204,7 +203,7 @@ export default function GraphStudio({ selectedProject }) {
   const graphReady = Boolean(status?.graphExists)
   const activeArtifactExists = Boolean(status?.artifacts?.[mode]?.exists)
   const artifactModeLabel = mode === 'mindmap' ? 'mind map' : 'canvas visualization'
-  const hasAnyFullArtifact = Boolean(status?.artifacts?.mindmap?.exists || status?.artifacts?.visualizer?.exists)
+  const hasAnyFullArtifact = Boolean(status?.artifacts?.mindmap?.exists)
   const currentBuild = buildStatus || status?.build
   const buildInProgress = currentBuild?.state === 'queued' || currentBuild?.state === 'running'
   const skippedReason = status?.artifacts?.[mode]?.skippedReason || currentBuild?.message
@@ -288,7 +287,7 @@ export default function GraphStudio({ selectedProject }) {
       {/* The graph is projected data, so the surface reads as a projection:
           faint scanlines and a cyan bloom, never over the content itself. */}
       <main className="holo-surface holo-scan relative min-w-0 overflow-hidden">
-        {(mode === 'mindmap' || mode === 'visualizer') ? (
+        {mode === 'mindmap' ? (
           graphReady && activeArtifactExists ? (
             <iframe
               key={`${mode}-${selectedProject.path}`}

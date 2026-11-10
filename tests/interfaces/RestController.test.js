@@ -793,7 +793,7 @@ describe('RestController Integration', () => {
 
         test('GET /graphify/artifact reports missing generated artifacts', async () => {
             const response = await invoke('get', '/graphify/artifact', {
-                query: { path: workspace, type: 'visualizer' }
+                query: { path: workspace, type: 'mindmap' }
             });
 
             expect(response.statusCode).toBe(404);

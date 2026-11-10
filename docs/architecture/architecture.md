@@ -1,6 +1,6 @@
 # YodaMan Architecture Overview
 
-This document describes the architecture of YodaMan v0.6.4, a local-first workspace intelligence platform for developers.
+This document describes the architecture of YodaMan v0.6.5, a local-first workspace intelligence platform for developers.
 
 > **Before deleting any file listed here:** a significant part of this system is
 > wired up at runtime rather than through imports — plugins are `require()`d from
@@ -355,6 +355,8 @@ Support modules under `backend/interfaces/support/`:
 3. Any tool that changes something (`requiresApproval` in `shared/toolCapabilities.js`) pauses for the user: the UI shows the diff and the ImpactAnalyzer blast radius, and nothing is written unless it is approved
 4. Streams events over SSE: `task_started` (sent by RestController), `tool_start`, `awaiting_approval`, `tool_end`, `final_answer`, `response_truncated`, `task_cancelled`, `error`
 
+Two kinds of task skip the model. A plain search ("find where login is handled") runs the search pipeline directly, and "Run <plugin>" runs that plugin directly when it is read-only and the workspace is the only parameter it requires; a plugin that needs more, such as Lightsaber's `action`, goes through the loop so the model can choose it.
+
 A "Draft baseline specs" task (the Stardust **Draft Specs** button) skips the tool loop: it calls SpecBaseline, then puts `openspec init` (if needed) and each drafted spec through the same approval gate.
 
 **ConversationBuffer**: The agent's transcript, bounded. `ctx ask` is stateless, so the whole conversation is re-sent every step; the buffer keeps it within a budget so the prompt does not grow quadratically or exceed the operating system's argument-size limit. It lives in memory for one task.
@@ -378,7 +380,7 @@ A "Draft baseline specs" task (the Stardust **Draft Specs** button) skips the to
 | **ToolBox** | `ToolBox.js` | Built-in agent tools, plugin loader and permission validation. Loads `.js` files from `plugins/` and checks their permissions against `PLUGIN_PERMISSION_ALLOWLIST`. Commands run only from an executable allowlist, via `execFile` with no shell. Its `searchCode` tool is the search pipeline; raw retrieval (`contextExpertSearch`) is private to the pipeline. Records every tool call in AuditLog. |
 | **ContextEngine** | `ContextEngine.js` | Spawns the `ctx` CLI (`ask`, `list`, and any command through `execute`/`executeJson`) and parses its JSON output; answers pass through CliOutput. Maps a workspace path to its ctx project name, and never to a different project that shares the folder name. Stops running ctx processes on shutdown. |
 | **EditorLauncher** | `EditorLauncher.js` | Opens a file at a line in the user's editor: the OS default for the file type, a chosen app, or any command template (`{file}`, `{line}`, `{column}`). Never runs a shell. |
-| **GraphifyService** | `GraphifyService.js` | Wraps the Graphify CLI: `build()`, `status()`, `freshness()`, `query()`, `explain()`, `pathBetween()`, `affected()`. Tracks whether the graph is older than the source. |
+| **GraphifyService** | `GraphifyService.js` | Wraps the Graphify CLI: `build()`, `status()`, `freshness()`, `query()`, `explain()`, `pathBetween()`, `affected()`. Tracks whether the graph is older than the source. Finds the `graphify` launcher once, newest Python first, and finds it again if that launcher stops being able to start. |
 | **Logger** | `Logger.js` | Structured JSON logs (`info`, `warn`, `error`) to the console and `~/.yodaman/logs/runtime.log`, rotated at 5 MB with 3 old files kept (`YODAMAN_LOG_DIR`, `YODAMAN_LOG_MAX_BYTES`, `YODAMAN_LOG_MAX_FILES`). A `requestId` middleware tags each request and logs it as `http_request`. |
 | **AuditLog** | `AuditLog.js` | Records every tool call: tool, status, duration, sanitised parameters, and a result summary or the error. Stored in SQLite (`audit_logs`) when available, otherwise a JSON file; the in-memory list keeps the latest 500, returned newest first. |
 | **SessionStore** | `SessionStore.js` | Chat messages per workspace, in a JSON file: read, append, clear. |
@@ -390,7 +392,7 @@ A "Draft baseline specs" task (the Stardust **Draft Specs** button) skips the to
 | **CliOutput** | `CliOutput.js` | Cleans CLI output shown to users: drops lines matching known tip and banner patterns (falling back to the raw text if nothing would be left), and summarises error output. |
 | **DataPaths** | `DataPaths.js` | Where the user's data lives: `config.json` and `yodaman.db` in `~/Library/Application Support/YodaMan` (macOS), `%APPDATA%\YodaMan` (Windows) or `$XDG_CONFIG_HOME/YodaMan`, falling back to `~/.config/YodaMan` (Linux). `YODAMAN_DATA_DIR` moves it. Migrates data left next to the code by older versions. |
 | **Database** | `Database.js` | Opens `yodaman.db` with Node's built-in SQLite (`node:sqlite`) and creates the `tasks` and `audit_logs` tables. Exports `db` and `useSqlite`; when SQLite is unavailable, TaskStore and AuditLog fall back to JSON files. |
-| **DependencyChecker** | `DependencyChecker.js` | Finds Ollama, Context Expert, Graphify and OpenSpec on PATH and in each platform's usual install folders (Electron apps get a minimal PATH), reports their versions, checks Ollama is responding, and reports a ctx older than the minimum version as missing. |
+| **DependencyChecker** | `DependencyChecker.js` | Finds Ollama, Context Expert, Graphify and OpenSpec on PATH and in each platform's usual install folders (Electron apps get a minimal PATH), runs each one to prove it starts and to read its version, checks Ollama is responding, and reports as missing a tool that cannot start (such as a launcher whose Python was removed, which it also skips when searching) or a ctx older than the minimum version. |
 | **DependencyDoctor** | `DependencyDoctor.js` | Turns `DependencyChecker.checkAll()` into the `yodaman doctor` report. |
 | **GraphFacts** | `GraphFacts.js` | Workspace-wide graph queries: orphan files, test coverage by file, the most central files, entry-point detection. |
 | **GraphRanker** | `GraphRanker.js` | Blends Context Expert's semantic rank with Graphify structure (proximity, centrality) and OpenSpec spec coverage. Default weights: semantic 0.50, proximity 0.20, centrality 0.15, spec coverage 0.15. |
@@ -521,7 +523,7 @@ GET /api/health (all workspaces) or GET /api/readiness?projectId=<path> (one)
   → WorkspaceReadiness.forWorkspaces() / forWorkspace()
     → folder gone?  → "missing"
     → graph layer:  GraphifyService.freshness() → "ready" | "stale" | "building" | "unindexed"
-    → index layer:  QueueService status         → "building" while queued or indexing, else "ready"
+    → index layer:  QueueService status         → "building" while this workspace is queued or being indexed, else "ready"
     → one workspace only: spec coverage from SpecDrift
   → Overall verdict = the weakest layer
   → Shown by Stardust (pipeline strip and Trust tab, via useStardustPipeline)

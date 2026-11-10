@@ -12,7 +12,7 @@ says so, rather than stopping the process. (`npm start` is stricter: see
 | Install | Unlocks | Cost |
 | --- | --- | --- |
 | **Node.js** v24+ | The runtime itself | — |
-| **Graphify** — `python3 -m pip install graphifyy` | The knowledge graph, impact analysis, and the coverage finding: which load-bearing modules carry your codebase and what nothing describes | Small. Graph builds take **0–5 seconds** on a typical repo. |
+| **Graphify** — `python3 -m pip install --user --break-system-packages graphifyy` (Homebrew's Python refuses `--user` installs without the flag) | The knowledge graph, impact analysis, and the coverage finding: which load-bearing modules carry your codebase and what nothing describes | Small. Graph builds take **0–5 seconds** on a typical repo. |
 
 That pair is enough to see the thing YodaMan does that other tools do not. It
 needs no model download and no AI service.
@@ -72,7 +72,7 @@ YodaMan stores workspace configuration in `config.json` in the user's data folde
 - **watchedDirectories**: A list of absolute paths that YodaMan will monitor for changes.
 - **removedDirectories**: A local tombstone list for workspaces deleted from YodaMan so they are not re-added from stale index metadata.
 
-YodaMan 0.6.4 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
+YodaMan 0.6.5 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
 
 Check Graphify graph health across configured workspaces:
 

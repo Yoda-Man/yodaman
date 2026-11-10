@@ -2,7 +2,7 @@
 
 This is a static product website for the YodaMan ecosystem.
 
-The site tracks the `0.6.4` release and highlights the three-tool pillar (Context Expert, Graphify, OpenSpec), the local runtime, and the desktop, VS Code, mobile, and Holocron VR downloads.
+The site tracks the `0.6.5` release and highlights the three-tool pillar (Context Expert, Graphify, OpenSpec), the local runtime, and the desktop, VS Code, mobile, and Holocron VR downloads.
 
 Open locally:
 

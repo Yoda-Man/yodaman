@@ -2,14 +2,49 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
-## [Unreleased]
+## [0.6.5] - 2026-11-10
 
 ### Fixed
+- **Graphs could not be built after a Python upgrade, and health said all was
+  well.** Homebrew replaced Python 3.14 with 3.15, so the `graphify` launcher
+  pip had installed pointed at an interpreter that no longer existed and every
+  build failed with `spawn … ENOENT`. Health still reported Graphify as
+  installed: it was the one tool the check never ran. Now every tool is run to
+  prove it starts, a launcher whose interpreter is gone counts as missing (with
+  that reason), the search for `graphify` skips such launchers and prefers the
+  newest Python, and a cached launcher that stops working is found again
+  without a restart.
+- **Repair could not install Graphify on Homebrew's Python**, which refuses
+  `pip install --user` (PEP 668). It now passes `--break-system-packages`, as
+  `setup.sh` already did; with `--user` the install still goes only to your own
+  folder.
+- **"Run Lightsaber" and "Run graphify" always failed** with `Unknown action:
+  undefined`. The direct route filled in only the workspace; a plugin that needs
+  more now goes through the agent, which chooses the action. "Run graphify" on
+  its own reports the graph's status, for the right workspace.
+- **Graph Studio's Canvas view was empty for every project, and every build
+  said "partial".** Canvas showed `graph_visualizer.html`, which no current
+  Graphify release writes. It is removed; the Mind Map is Graphify's own
+  interactive graph and covers the same ground.
+- **Every workspace read "building" while any one was indexing.** Readiness now
+  marks only the workspace being indexed.
+- **The runtime log repeated `workspace_readiness_degraded` on every health
+  poll**, three times every five seconds; it is logged when the picture changes.
+  Stopping the index job on shutdown no longer logs a warning.
+- **Test runs wrote into your runtime log.** The plugin smoke ran against the
+  app on port 3090 when it was open, and runtimes started by tests logged to
+  `~/.yodaman/logs`. Both now use their own port and a temporary log folder.
 - **The VS Code extension could not start once installed.** It loads core's
   shared client from outside its own folder, which `vsce` never packaged, so
   every `.vsix` failed on activation. `vscode:prepublish` now copies the client
-  into the package, and the website's `vscode-yodaman-0.6.4.vsix` is rebuilt
-  with it.
+  into the package.
+
+### Added
+- **`npm run test:tools`, part of `release:verify`.** Checks that Context
+  Expert, Graphify, OpenSpec and Ollama are installed and start, and builds a
+  real graph of a sample project with the real Graphify. Every other gate mocks
+  these tools, which is how 0.6.4 shipped from a machine whose Graphify could
+  not start.
 
 ## [0.6.4] - 2026-11-08
 

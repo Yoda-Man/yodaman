@@ -30,8 +30,9 @@ const CLOUD_MODEL_KEYS = [
     'MOONSHOT_API_KEY'
 ];
 const ARTIFACTS = {
-    mindmap: 'graph.html',
-    visualizer: 'graph_visualizer.html'
+    // graph_visualizer.html ("Canvas") is gone: no Graphify release writes it any
+    // more, so it was missing from every build and turned each one "partial".
+    mindmap: 'graph.html'
 };
 const REPORT_FILENAMES = ['graph_report.md', 'GRAPH_REPORT.md'];
 const BUILD_STATUS_FILENAME = 'yodaman-build-status.json';
@@ -40,13 +41,21 @@ let resolvedGraphifyBin = null;
 function findUserGraphifyBins() {
     const pythonRoot = path.join(os.homedir(), 'Library', 'Python');
     if (!fs.existsSync(pythonRoot)) return [];
+    // Newest Python first, and only launchers that can still start: Homebrew
+    // replacing Python 3.14 left ~/Library/Python/3.14/bin/graphify pointing
+    // at an interpreter that no longer exists.
     return fs.readdirSync(pythonRoot)
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
         .map(version => path.join(pythonRoot, version, 'bin', 'graphify'))
-        .filter(candidate => fs.existsSync(candidate));
+        .filter(candidate => dependencyChecker.isRunnable(candidate));
 }
 
 function getGraphifyBin() {
-    if (resolvedGraphifyBin) return resolvedGraphifyBin;
+    // Re-resolve once the cached launcher stops starting (its Python removed,
+    // Repair installed a new one), instead of failing until a restart.
+    const stale = resolvedGraphifyBin && path.isAbsolute(resolvedGraphifyBin)
+        && !process.env.YODAMAN_GRAPHIFY_BIN && !dependencyChecker.isRunnable(resolvedGraphifyBin);
+    if (resolvedGraphifyBin && !stale) return resolvedGraphifyBin;
 
     // 1. Environment variable override
     if (process.env.YODAMAN_GRAPHIFY_BIN) {
