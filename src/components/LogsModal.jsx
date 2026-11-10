@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Clipboard, RefreshCw, X, Terminal, Search } from 'lucide-react'
+import { Clipboard, RefreshCw, X, Terminal, Search, Trash2 } from 'lucide-react'
 import { api } from '../api/api'
 
 function formatLog(entry) {
@@ -50,6 +50,17 @@ export default function LogsModal({ onClose }) {
         return `${queue}${(payload.logs || []).map(formatLog).join('\n')}`
     }, [payload])
 
+    const clearLogs = async () => {
+        if (!window.confirm('Clear the runtime logs? The log files on this computer will be deleted.')) return
+        try {
+            await api.clearLogs()
+        } catch (err) {
+            window.alert(`Could not clear logs: ${err.message}`)
+            return
+        }
+        loadLogs()
+    }
+
     const copyLogs = async () => {
         await navigator.clipboard.writeText(text)
         setCopied(true)
@@ -77,6 +88,10 @@ export default function LogsModal({ onClose }) {
                         <button onClick={copyLogs} className="btn-secondary px-4" disabled={!text}>
                             <Clipboard size={16} />
                             <span>{copied ? 'Copied' : 'Copy'}</span>
+                        </button>
+                        <button onClick={clearLogs} className="btn-secondary px-4" disabled={loading}>
+                            <Trash2 size={16} />
+                            <span>Clear</span>
                         </button>
                         <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-xl transition-all group border border-transparent hover:border-white/10">
                             <X size={20} className="text-slate-500 group-hover:text-white" />

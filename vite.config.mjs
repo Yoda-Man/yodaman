@@ -24,6 +24,8 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3090',
         changeOrigin: true,
+        // /api/stardust/live is a WebSocket; without this dev falls back to polling.
+        ws: true,
       },
     },
   },

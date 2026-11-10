@@ -104,7 +104,9 @@ Search, chat, agent tool, startup, unhandled HTTP, unhandled rejection, and unca
 
 `runtime.log` **rotates itself**: at 5 MB it becomes `runtime.log.1`, and three files are retained. Tune with
 `YODAMAN_LOG_MAX_BYTES` and `YODAMAN_LOG_MAX_FILES`; set `YODAMAN_LOG_TO_FILE=false` to disable file logging.
-No manual rotation is needed, and no cron job should be added.
+No manual rotation is needed, and no cron job should be added. To start
+afresh, use **Clear** in the Logs window (or `DELETE /api/logs` from this computer); it deletes
+`runtime.log` and its rotated copies.
 
 If the log directory cannot be written, the runtime logs `log_file_sink_disabled` once to stdout and carries
 on — file logging failing never takes the runtime down. Seeing that message means the directory is

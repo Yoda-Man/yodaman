@@ -2,6 +2,14 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.6.6] - 2026-11-10
+
+### Added
+- **Clear logs.** The Logs window has a **Clear** button. It deletes `runtime.log` and its rotated copies after you confirm, through the new `DELETE /api/logs`. Only this computer can clear the logs, so a paired device cannot erase the record of what it did.
+
+### Fixed
+- **`npm run client` showed a blank page.** The UI imports `shared/searchHits.js` and `shared/pluginInvocation.js`, which were CommonJS: `vite build` converts that, but Vite's dev server does not. Both are now ES modules (the backend still `require()`s them on Node 24), and a test fails if a CommonJS module imported by the UI comes back. The dev proxy now forwards the Stardust live WebSocket too.
+
 ## [0.6.5] - 2026-11-10
 
 ### Fixed

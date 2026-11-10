@@ -177,6 +177,37 @@ describe('RestController Integration', () => {
         }));
     });
 
+    test('DELETE /logs clears the logs, only from this computer, and records that it did', async () => {
+        const route = router.stack.find((l) => l.route?.path === '/logs' && l.route.methods.delete).route;
+        expect(route.stack[0].handle).toBe(router.logsLocalOnly);
+
+        const res = { status(c) { this.statusCode = c; return this; }, json(p) { this.payload = p; return this; } };
+        const next = jest.fn();
+        router.logsLocalOnly({ ip: '192.168.1.30' }, res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(403);
+        expect(res.payload.code).toBe('logs_local_only');
+
+        logger.clear();
+        logger.error('search_failed', new Error('old failure'));
+        const clearFiles = jest.spyOn(logger, 'clearFiles').mockImplementation(() => {});
+        const cleared = { statusCode: 200, status(c) { this.statusCode = c; return this; }, json(p) { this.payload = p; return this; } };
+        await route.stack[1].handle({ id: 'req-clear' }, cleared);
+
+        expect(clearFiles).toHaveBeenCalled();
+        expect(cleared.payload).toEqual({ message: 'Logs cleared' });
+        expect(logger.list().map((e) => e.message)).toEqual(['logs_cleared']);
+
+        clearFiles.mockImplementation(() => { throw new Error('EACCES'); });
+        logger.error('search_failed', new Error('kept'));
+        const failed = { statusCode: 200, status(c) { this.statusCode = c; return this; }, json(p) { this.payload = p; return this; } };
+        await route.stack[1].handle({ id: 'req-fail' }, failed);
+        expect(failed.statusCode).toBe(500);
+        expect(failed.payload.code).toBe('logs_clear_failed');
+        expect(logger.list().some((e) => e.message === 'search_failed')).toBe(true); // window not emptied
+        clearFiles.mockRestore();
+    });
+
     test('POST /logs/client-error transmits frontend failures to live logs', async () => {
         logger.clear();
 

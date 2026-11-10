@@ -7,8 +7,9 @@
  * `metadata.path`, so every ctx hit was labelled "Source File" with nothing to
  * open. The pipeline, the agent and the Search view now all read hits here.
  *
- * Shared by the backend (require) and the frontend (Vite import), so plain
- * CommonJS with no dependencies.
+ * Shared by the backend (require) and the frontend (Vite import), so ES module
+ * syntax with no dependencies: Vite's dev server cannot read module.exports,
+ * and Node 24 require()s an ES module.
  */
 
 /** Workspace-relative (or absolute) path of the hit's file, or ''. */
@@ -61,4 +62,4 @@ function chipPath(filePath) {
     return `./${value}`;
 }
 
-module.exports = { hitPath, hitLine, hitText, hitPreview, dedupeHits, chipPath };
+export { hitPath, hitLine, hitText, hitPreview, dedupeHits, chipPath };

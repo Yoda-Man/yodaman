@@ -257,6 +257,10 @@ export const api = {
         return request(url);
     },
 
+    async clearLogs() {
+        return request(`${API_BASE}/logs`, { method: 'DELETE' });
+    },
+
     async createPairing(runtimeUrl) {
         return request(`${API_BASE}/pairing`, jsonOptions('POST', runtimeUrl ? { runtimeUrl } : {}));
     },

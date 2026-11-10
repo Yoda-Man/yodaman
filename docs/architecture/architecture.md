@@ -1,6 +1,6 @@
 # YodaMan Architecture Overview
 
-This document describes the architecture of YodaMan v0.6.5, a local-first workspace intelligence platform for developers.
+This document describes the architecture of YodaMan v0.6.6, a local-first workspace intelligence platform for developers.
 
 > **Before deleting any file listed here:** a significant part of this system is
 > wired up at runtime rather than through imports — plugins are `require()`d from
@@ -325,7 +325,7 @@ records MCP readers, and non-local clients must present a pairing token
 - **Settings & policy**: `GET/PUT /api/settings`, `GET /api/policy`, `GET/POST /api/ctx/config`, `GET/POST /api/ollama/context`
 - **Health & setup**: `GET /api/health|readiness|status|check`, `GET /api/setup/plan`, `POST /api/setup/repair`, `GET /api/desktop/diagnostics`, `GET /api/diagnostics/run`
 - **Pairing**: `GET/POST /api/pairing`, `POST /api/pairing/revoke`
-- **Chat sessions, audit & logs**: `GET/DELETE /api/sessions`, `GET/DELETE /api/audit`, `GET /api/logs`, `POST /api/logs/client-error`, `GET /api/mcp/clients`
+- **Chat sessions, audit & logs**: `GET/DELETE /api/sessions`, `GET/DELETE /api/audit`, `GET/DELETE /api/logs`, `POST /api/logs/client-error`, `GET /api/mcp/clients`
 - **File upload**: `POST /api/upload/temp`, `DELETE /api/upload/temp/:fileId`, `POST /api/upload/attach`, `GET /api/upload/task/:taskId/files`
 
 Route modules under `backend/interfaces/routes/`:

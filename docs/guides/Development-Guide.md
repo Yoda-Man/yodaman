@@ -267,7 +267,7 @@ npm run package             # Create .vsix file
 
 ### Code Style
 
-- CommonJS (`require`/`module.exports`) in `backend/`, `shared/` and `server.js`; ES modules in `src/` and `bin/yodaman-mcp.mjs`
+- CommonJS (`require`/`module.exports`) in `backend/`, `shared/` and `server.js`; ES modules in `src/` and `bin/yodaman-mcp.mjs`. A `shared/` module that `src/` imports must be an ES module, because Vite's dev server cannot read `module.exports`; the backend still `require()`s it (Node 24 loads ES modules through `require`)
 - 4-space indentation in most files; match the file you are editing
 - Async/await for asynchronous code
 - JSDoc comments for public API methods

@@ -967,6 +967,23 @@ router.get('/logs', (req, res) => {
     });
 });
 
+// The log is the trail of what a paired device did, so only this computer may erase it.
+function logsLocalOnly(req, res, next) {
+    return isLocalRequest(req) ? next() : jsonError(res, 403, 'Logs can only be cleared from this computer', 'logs_local_only');
+}
+
+router.delete('/logs', logsLocalOnly, (req, res) => {
+    try {
+        logger.clearFiles();
+    } catch (err) {
+        // Say so rather than empty the window while the files stay on disk.
+        return jsonError(res, 500, `Could not delete the log files: ${err.message}`, 'logs_clear_failed');
+    }
+    logger.clear();
+    logger.info('logs_cleared', { requestId: req.id });
+    res.json({ message: 'Logs cleared' });
+});
+
 router.post('/logs/client-error', (req, res) => {
     let message;
     let userAction;
@@ -1489,6 +1506,7 @@ router.use(require('./routes/stardustRoutes'));
 router.isPairingRequiredByDefault = isPairingRequiredByDefault;
 router.pairingLocalOnly = pairingLocalOnly;
 router.configLocalOnly = configLocalOnly;
+router.logsLocalOnly = logsLocalOnly;
 router.arePluginUploadsEnabled = arePluginUploadsEnabled;
 router.safePluginFilename = safePluginFilename;
 router.newPluginFilename = newPluginFilename;

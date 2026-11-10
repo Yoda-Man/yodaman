@@ -961,6 +961,15 @@ Optional query filters:
 - `message`: Exact log message key.
 - `since` / `until`: ISO timestamps for time-window filtering.
 
+### `DELETE /logs`
+Deletes `runtime.log` and its rotated copies, and empties the in-memory list
+that `GET /logs` returns. Only this computer may clear the logs
+(`403 logs_local_only` otherwise), so a paired device cannot erase the record
+of what it did. The first entry afterwards is `logs_cleared`.
+
+**Response:** `{ "message": "Logs cleared" }`, or `500 logs_clear_failed` if a
+file could not be deleted (the logs are then left as they were).
+
 ### `POST /logs/client-error`
 Records a frontend failure in the same log stream, for UI errors that would
 otherwise only reach the browser console.

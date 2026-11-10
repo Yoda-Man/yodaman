@@ -108,6 +108,13 @@ module.exports = [
         }
     },
 
+    // The shared modules the UI imports are ES modules: Vite's dev server serves
+    // source as native ESM and cannot read module.exports. Node 24 require()s them.
+    {
+        files: ['shared/searchHits.js', 'shared/pluginInvocation.js'],
+        languageOptions: { sourceType: 'module' }
+    },
+
     // CLI entry points and the logger's own sink: console is the correct output
     // channel here, not a mistake. `yodaman doctor` printing "✅ Graphify is
     // installed" to the terminal is the feature.
