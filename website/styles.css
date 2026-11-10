@@ -330,7 +330,7 @@ pre {
   gap: 14px;
 }
 
-/* The three-tool pillar has exactly three cards — a 4-up grid would leave a hole. */
+/* The three-tool pillar has exactly three cards; a 4-up grid would leave a hole. */
 .pillar-grid.triad {
   grid-template-columns: repeat(3, 1fr);
 }
