@@ -16,6 +16,8 @@
  * Skips with a clear notice when no package has been built, so it can sit in the
  * release chain without failing a source-only checkout.
  */
+// The runtime this starts logs here, not into the user's ~/.yodaman/logs/runtime.log.
+process.env.YODAMAN_LOG_DIR = process.env.YODAMAN_LOG_DIR || require('path').join(require('os').tmpdir(), 'yodaman-smoke-logs');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');

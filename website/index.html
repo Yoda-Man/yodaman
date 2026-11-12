@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>YodaMan | Local-first workspace intelligence for developers</title>
   <meta name="description"
-    content="YodaMan blends three mandatory tools — Context Expert for meaning, Graphify for structure, OpenSpec for intent — into every search, agent turn, and plan. Local-first, with a real-time Stardust dashboard, blast-radius approvals, and desktop, VS Code, and mobile clients." />
+    content="YodaMan blends three mandatory tools (Context Expert for meaning, Graphify for structure, OpenSpec for intent) into every search, agent turn, and plan. Local-first, with a real-time Stardust dashboard, blast-radius approvals, and desktop, VS Code, and mobile clients." />
   <link rel="icon" href="./assets/favicon.png" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -52,7 +52,7 @@
         <p class="eyebrow">Local-first developer intelligence</p>
         <h1 id="hero-title">YodaMan</h1>
         <p class="hero-copy">
-          Local-first workspace intelligence for developers. Context Expert (semantic search), Graphify (structure), and OpenSpec (architectural intent) form a single pillar: every search, every agent turn, and every plan draws on all three at once — none is optional, none runs alone.
+          Local-first workspace intelligence for developers. Context Expert (semantic search), Graphify (structure), and OpenSpec (architectural intent) form a single pillar: every search, every agent turn, and every plan draws on all three at once. None is optional, none runs alone.
         </p>
         <div class="hero-actions">
           <a class="button primary" href="#install">Get started</a>
@@ -73,7 +73,7 @@
       </div>
       <div>
         <strong>Autonomy with approval</strong>
-        <span>Agents can plan and edit code, but every write stops for a diff that shows its blast radius &mdash; what
+        <span>Agents can plan and edit code, but every write stops for a diff that shows its blast radius: what
           depends on the file and whether a test covers it</span>
       </div>
     </section>
@@ -82,21 +82,21 @@
       <div class="section-heading">
         <p class="eyebrow">The three-tool pillar</p>
         <h2>Three mandatory tools, blended into every answer</h2>
-        <p>No silos, no optional features &mdash; this is the architecture. Each tool answers a different question, and
+        <p>No silos, no optional features. This is the architecture. Each tool answers a different question, and
           YodaMan never consults one without the others.</p>
       </div>
       <div class="pillar-grid triad">
         <article>
-          <h3>Context Expert &mdash; meaning</h3>
+          <h3>Context Expert: meaning</h3>
           <p>Semantic search and LLM reasoning over your indexed workspace. Powers search, the agent finding files, and
             RAG retrieval.</p>
         </article>
         <article>
-          <h3>Graphify &mdash; structure</h3>
+          <h3>Graphify: structure</h3>
           <p>The local knowledge graph. Powers blast radius, centrality, proximity, and the structural half of ranking.</p>
         </article>
         <article>
-          <h3>OpenSpec &mdash; intent</h3>
+          <h3>OpenSpec: intent</h3>
           <p>Architecture specs as a first-class input. Powers spec coverage, drift detection, and the
             propose/validate/archive workflow.</p>
         </article>
@@ -112,7 +112,7 @@
       <div class="section-heading">
         <p class="eyebrow">Stardust</p>
         <h2>Real-time Stardust dashboard + cross-tool composition</h2>
-        <p>Context Expert, Graphify, and OpenSpec are all required &mdash; so YodaMan connects them. Each tool's output feeds the next instead of stopping at its own tab. The Stardust dashboard makes that connection visible across eight tabs &mdash; Board, Drift, Compose, Trust, Trace, Diagnostics, Commands, and Impact &mdash; with a live change board, spec diffs, and a WebSocket activity feed.</p>
+        <p>Context Expert, Graphify, and OpenSpec are all required, so YodaMan connects them. Each tool's output feeds the next instead of stopping at its own tab. The Stardust dashboard makes that connection visible across eight tabs (Board, Drift, Compose, Trust, Trace, Diagnostics, Commands, and Impact), with a live change board, spec diffs, and a WebSocket activity feed.</p>
       </div>
       <div class="pillar-grid">
         <article>
@@ -268,16 +268,16 @@
       <div class="install-panels">
         <article>
           <h3>1. Prerequisites</h3>
-          <pre><code># Required — Context Expert (workspace indexing &amp; search)
+          <pre><code># Required: Context Expert (workspace indexing &amp; search)
 npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node
 
-# Required — OpenSpec (spec-driven development)
+# Required: OpenSpec (spec-driven development)
 npm install -g @fission-ai/openspec@latest
 
-# Required — Graphify (knowledge graphs)
-python3 -m pip install graphifyy
+# Required: Graphify (knowledge graphs; Homebrew's Python needs the flag)
+python3 -m pip install --user --break-system-packages graphifyy
 
-# Required — Ollama (local LLM)
+# Required: Ollama (local LLM)
 # Download from https://ollama.com
 brew install ollama    # macOS
 # or: curl -fsSL https://ollama.com/install.sh | sh  # Linux
@@ -322,8 +322,8 @@ brew install ollama    # macOS
         <article>
           <h3>macOS Desktop</h3>
           <p>Apple Silicon build for macOS users who want the full local workspace experience.</p>
-          <a class="button primary" href="downloads/YodaMan-0.6.4-arm64-mac.zip" download>Download macOS ZIP</a>
-          <a class="button secondary" href="downloads/YodaMan-0.6.4-arm64.dmg" download>Download macOS DMG</a>
+          <a class="button primary" href="downloads/YodaMan-0.6.6-arm64-mac.zip" download>Download macOS ZIP</a>
+          <a class="button secondary" href="downloads/YodaMan-0.6.6-arm64.dmg" download>Download macOS DMG</a>
           <span>Unzip and drag to Applications, or mount the DMG and drag from there.</span>
         </article>
         <article>
@@ -336,8 +336,8 @@ brew install ollama    # macOS
         <article>
           <h3>Linux Desktop</h3>
           <p>Linux x64 AppImage and portable ZIP for flexible desktop installation.</p>
-          <a class="button primary" href="downloads/yodaman-0.6.4.zip" download>Download Linux ZIP</a>
-          <a class="button secondary" href="downloads/YodaMan-0.6.4.AppImage" download>Download AppImage</a>
+          <a class="button primary" href="downloads/yodaman-0.6.6.zip" download>Download Linux ZIP</a>
+          <a class="button secondary" href="downloads/YodaMan-0.6.6.AppImage" download>Download AppImage</a>
           <span>ZIP for portable setup, or make the AppImage executable (<code>chmod +x</code>) and run it directly.</span>
         </article>
         <article>
@@ -345,14 +345,14 @@ brew install ollama    # macOS
           <p>Install YodaMan from the Marketplace or download the VSIX for editor-native agent access.</p>
           <a class="button primary"
             href="https://marketplace.visualstudio.com/items?itemName=yodaman.vscode-yodaman">View on Marketplace</a>
-          <a class="button secondary" href="downloads/vscode-yodaman-0.6.4.vsix" download>Download VSIX</a>
+          <a class="button secondary" href="downloads/vscode-yodaman-0.6.6.vsix" download>Download VSIX</a>
           <span>Use the VSIX for offline installs or internal distribution.</span>
         </article>
         <article>
           <h3>Holocron VR Plugin</h3>
           <p>Install the Graphify VR explorer plugin for desktop 3D, WebXR code constellations, Git heatmaps, time
             travel, voice commands, and agent handoff.</p>
-          <a class="button primary" href="downloads/holocron-vr-0.6.4.zip" download>Download Plugin</a>
+          <a class="button primary" href="downloads/holocron-vr-0.6.6.zip" download>Download Plugin</a>
           <span>Version 0.5.1. Extract into your YodaMan plugins directory, then reload plugins.</span>
         </article>
         <article>
@@ -366,7 +366,7 @@ brew install ollama    # macOS
           <p>Use the iOS companion experience for task status, approvals, and project visibility on the go.</p>
           <a class="button secondary" href="./docs.html#mobile-linking">Pair mobile</a>
           <span>Built for quick review moments when you are away from your desktop. The iOS client runs through Expo
-            from source &mdash; there is no App Store build yet.</span>
+            from source; there is no App Store build yet.</span>
         </article>
       </div>
     </section>

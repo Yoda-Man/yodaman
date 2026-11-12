@@ -1,7 +1,8 @@
 /**
  * LOAD-BEARING — DO NOT DELETE BECAUSE "NOTHING IMPORTS IT" IS WRONG HERE.
  * Imported by src/components/AgentChatTab.jsx (through Vite) and by
- * scripts/plugin-smoke.js (through require).
+ * scripts/plugin-smoke.js (through require). ES module syntax, because Vite's
+ * dev server cannot read module.exports; Node 24 require()s an ES module.
  *
  * How a plugin becomes text in the chat composer.
  *
@@ -60,4 +61,4 @@ function pluginCapability(plugin) {
     return match ? match[1] : null;
 }
 
-module.exports = { pluginInvocation, pluginCapability, PLUGIN_CAPABILITY_LABELS };
+export { pluginInvocation, pluginCapability, PLUGIN_CAPABILITY_LABELS };

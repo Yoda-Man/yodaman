@@ -17,6 +17,8 @@
  * INCONCLUSIVE, not as a pass. A small model may decline to attempt the edit,
  * and "the model did not try" must never read the same as "the gate held".
  */
+// The runtime this starts logs here, not into the user's ~/.yodaman/logs/runtime.log.
+process.env.YODAMAN_LOG_DIR = process.env.YODAMAN_LOG_DIR || require('path').join(require('os').tmpdir(), 'yodaman-smoke-logs');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');

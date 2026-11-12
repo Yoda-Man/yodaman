@@ -31,11 +31,16 @@
  * fails hard whenever those dependencies *are* present — which is the case on
  * the release machine, the only place it matters.
  */
+// The runtime this starts logs here, not into the user's ~/.yodaman/logs/runtime.log.
+process.env.YODAMAN_LOG_DIR = process.env.YODAMAN_LOG_DIR || require('path').join(require('os').tmpdir(), 'yodaman-smoke-logs');
 const { spawn } = require('child_process');
 const path = require('path');
 const { pluginCapability, pluginInvocation } = require('../shared/pluginInvocation');
 
-const RUNTIME_URL = process.env.YODAMAN_SMOKE_URL || 'http://127.0.0.1:3090';
+// Its own port, never the user's app on 3090: running plugins against the live
+// runtime filled the user's log with this gate's failures.
+const SMOKE_PORT = Number(process.env.YODAMAN_SMOKE_PORT) || 3098;
+const RUNTIME_URL = process.env.YODAMAN_SMOKE_URL || `http://127.0.0.1:${SMOKE_PORT}`;
 const PROJECT = process.env.YODAMAN_SMOKE_PROJECT || path.resolve(__dirname, '..', '..');
 // Set from a full sequential run of every plugin, not from one sample. Measured
 // on this machine: CodeTrooper 52s, Droid-Sweep 52s, Grand-Inquisitor 45s,
@@ -121,7 +126,8 @@ async function main() {
         log(`Starting a runtime for the gate at ${RUNTIME_URL}...`);
         child = spawn(process.execPath, [path.resolve(__dirname, '..', 'server.js')], {
             stdio: 'ignore',
-            detached: false
+            detached: false,
+            env: { ...process.env, YODAMAN_PORT: String(SMOKE_PORT) }
         });
         if (!await waitForRuntime(BOOT_TIMEOUT_MS)) {
             child.kill('SIGKILL');

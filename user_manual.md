@@ -1,6 +1,6 @@
 # YodaMan User Manual
 
-Version: 0.6.4
+Version: 0.6.6
 
 YodaMan is a local-first AI workspace companion for developers. It keeps project context on your machine and exposes that context through the web UI, desktop app, VS Code extension, mobile companion, Graphify knowledge graph, plugin system, MCP server, and local runtime API. Ollama is the only model it uses; nothing is sent to a cloud LLM.
 
@@ -10,12 +10,12 @@ YodaMan is a local-first AI workspace companion for developers. It keeps project
 
 **Model requirements**: `qwen3.5:9b` is the minimum; it works, but its tool calls are occasionally unreliable. 14B and larger (`qwen2.5:14b`, `codestral:22b`, `deepseek-coder-v2`) call tools reliably, and a larger model needs a larger `OLLAMA_CONTEXT_LENGTH` to pay off (see the README's *Choosing a model*). The agent uses Context Expert's model: set it with `ctx config set default_model <model>`. The Dashboard shows the configured model and the context window Ollama actually serves.
 
-Install Context Expert (1.3.4 or later), OpenSpec, and Graphify, then install and start YodaMan from the repository root:
+Install Context Expert (1.3.4 or later), OpenSpec, and Graphify, then install and start YodaMan from the repository root. `--break-system-packages` is needed for Homebrew's Python, which refuses `--user` installs otherwise; with `--user` it still writes only to your own folder. `yodaman setup` runs the same commands for you:
 
 ```bash
 npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node
 npm install -g @fission-ai/openspec@latest
-python3 -m pip install --user graphifyy
+python3 -m pip install --user --break-system-packages graphifyy
 git clone https://github.com/Yoda-Man/yodaman.git
 cd yodaman
 sh setup.sh
@@ -45,7 +45,7 @@ Workspaces are absolute local folder paths. Add them by pasting a path, browsing
 
 Graphify powers the graph, impact analysis and spec coverage. The runtime starts without it; those features then report what is missing. Graphify runs local-only: by default it builds the graph without any model, and only `YODAMAN_GRAPHIFY_FULL_EXTRACT=true` uses Ollama for full semantic extraction. YodaMan strips cloud provider API keys from Graphify subprocesses and forces the Ollama backend for full extraction. Reindexing builds or updates `graphify-out/graph.json` and `GRAPH_REPORT.md` for each workspace and adds the project graph to Graphify's global graph. Chat answers include graph report context plus question-specific graph traversal output. A workspace with no graph gets one built before the answer; a stale graph is used as it is and shown as `Graph stale`, so you decide when to rebuild.
 
-The Graph tab opens Graph Studio, a project-scoped visual workspace for Graphify outputs. Its **Mind Map**, **Canvas** (vis-network) and **Report** views show the generated graph artifacts and the markdown report, alongside build status, a graph query box, and impact analysis.
+The Graph tab opens Graph Studio, a project-scoped visual workspace for Graphify outputs. Its **Mind Map** (Graphify's interactive `graph.html`), **Report** and **Map Preview** views show the generated graph, the markdown report and a compact map of up to 90 of its nodes, alongside build status, a graph query box, and impact analysis.
 
 Run a local Graphify health check from the command line:
 
@@ -134,7 +134,7 @@ The top bar has five tabs (**Chat**, **Graph**, **Dashboard**, **Plugins**, **St
   Agent responses are **graph-aware**. When graph context is available, the agent cites specific files and their dependencies from the knowledge graph, and says how many files a proposed change would reach. The Graph tab shows the same graph.
 - **Search**: The other Chat view. Runs semantic search across indexed code and documentation in the selected workspace. Results arrive first, then the local model writes a short summary citing them as [1], [2]. Each result has an **Open** button.
 - **Dashboard**: System health with **Repair**, Context Expert and embedding configuration, vector storage, the AI Engine (model and Ollama context window), indexing, workspaces, environment, **Your Data** (where your files live), runtime diagnostics (PID, uptime, task and pending-approval counts), an on-demand **Diagnostics** report, and **Pair Mobile**.
-- **Logs**: Searchable runtime logs, recent requests, index queue state, and `ctx index` output. Filter by text, level, severity, and user action, then use Copy when sharing an error.
+- **Logs**: Searchable runtime logs, recent requests, index queue state, and `ctx index` output. Filter by text, level, severity, and user action, then use Copy when sharing an error. **Clear** deletes the log files (`~/.yodaman/logs/runtime.log` and its rotated copies) after asking you to confirm.
 - **Manual**: **View User Manual** in Settings opens the in-app version of this guide.
 - **Stardust**: OpenSpec workflow for spec-driven development: propose, validate and archive changes, draft specs for a project that has none, and see drift, coverage and impact. Includes diagnostics, version checks, and one-click OpenSpec installation (section 11).
 - **Plugins**: Install `.js` or `.zip` plugins (when uploads are enabled), inspect permissions and parameters, refresh loaded plugins, and remove plugins; the five default plugins cannot be removed. The **Docs** button opens the full plugin authoring guide.
@@ -239,6 +239,7 @@ nothing leaves the machine. Full details in
 - `GET /api/readiness`: Whether a workspace's answers are current. Pass `?projectId=<absolute path>` for one workspace, or omit it for every watched workspace. Returns `ready`, `stale`, `building`, or `unindexed`, plus the per-layer detail and a suggested action.
 - `GET /api/search/code`: Code search. Accepts `activeFile` to bias ranking toward files connected to what you are editing.
 - `GET /api/audit`, `DELETE /api/audit`: Inspect or clear audit logs.
+- `GET /api/logs`, `DELETE /api/logs`: Read or clear the runtime logs (clearing only from this computer).
 - `POST /api/pairing`: Create mobile pairing links (from this computer only).
 
 ## 9. Troubleshooting
@@ -270,7 +271,7 @@ npm run package
 
 ## 11. Project Stardust — OpenSpec Integration
 
-YodaMan 0.6.4 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → implement → validate → archive workflow. The tab has eight views:
+YodaMan 0.6.6 integrates OpenSpec through the **Stardust** tab. OpenSpec provides structured spec-driven development with a propose → implement → validate → archive workflow. The tab has eight views:
 
 - **Board**: Real-time change overview with card-based navigation, task progress bars, validation health icons, and a side-by-side spec diff viewer. Select a change to review its proposed spec deltas grouped by operation (ADDED/MODIFIED/REMOVED/RENAMED), then validate or archive directly from the diff panel. The board updates live via WebSocket — file changes in `openspec/` push instantly.
 - **Drift**: Architecture drift detection comparing OpenSpec specs against the knowledge graph. Shows stale spec references (files cited in specs that no longer exist) and undocumented modules (load-bearing files no spec describes). Unique to YodaMan.

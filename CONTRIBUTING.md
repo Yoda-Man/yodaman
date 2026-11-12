@@ -65,7 +65,9 @@ npm run release:verify
 
 This is the gate. It must exit 0. It chains, in order: the version-consistency
 check, the build, lint, the unit suites, the unit suites again with coverage, a
-production dependency audit, the vendored-asset audit, the release smoke test,
+production dependency audit, the vendored-asset audit, the real-tools check
+(Context Expert, Graphify, OpenSpec and Ollama start, and Graphify builds a real
+graph), the release smoke test,
 the user-journey tests, the plugin smoke test, the approval smoke test, and the
 packaged smoke test.
 

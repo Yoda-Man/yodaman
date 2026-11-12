@@ -20,6 +20,8 @@
  *
  * Exit codes: 0 all passed, 1 a check failed, 0 with SKIP when no runtime.
  */
+// The runtime this starts logs here, not into the user's ~/.yodaman/logs/runtime.log.
+process.env.YODAMAN_LOG_DIR = process.env.YODAMAN_LOG_DIR || require('path').join(require('os').tmpdir(), 'yodaman-smoke-logs');
 const { spawn } = require('child_process');
 const path = require('path');
 

@@ -534,7 +534,7 @@ Serves a generated Graphify HTML artifact for a registered workspace, from its
 `graphify-out/` directory only.
 
 - `path`: absolute registered workspace path.
-- `type`: `mindmap` for `graph.html` or `visualizer` for `graph_visualizer.html`.
+- `type`: `mindmap`, for `graph.html`.
 
 ### `GET /graphify/report`
 The Graphify markdown report for a registered workspace (`404` if none).
@@ -960,6 +960,15 @@ Optional query filters:
 - `userAction`: Source workflow such as `code_search`, `agent_tool_call`, `chat_ask`, or `startup`.
 - `message`: Exact log message key.
 - `since` / `until`: ISO timestamps for time-window filtering.
+
+### `DELETE /logs`
+Deletes `runtime.log` and its rotated copies, and empties the in-memory list
+that `GET /logs` returns. Only this computer may clear the logs
+(`403 logs_local_only` otherwise), so a paired device cannot erase the record
+of what it did. The first entry afterwards is `logs_cleared`.
+
+**Response:** `{ "message": "Logs cleared" }`, or `500 logs_clear_failed` if a
+file could not be deleted (the logs are then left as they were).
 
 ### `POST /logs/client-error`
 Records a frontend failure in the same log stream, for UI errors that would

@@ -387,7 +387,7 @@ export default function Dashboard() {
                             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Path</span>
                             <div className="flex items-center gap-2 max-w-full">
                               <span className="text-[10px] text-slate-400 font-mono truncate flex-1 min-w-0" title={status.database?.path}>{status.database?.path}</span>
-                              <button onClick={()=>navigator.clipboard.writeText(status.database?.path||'')} className="shrink-0 p-1 rounded hover:bg-white/10 text-slate-500 hover:text-slate-200 transition-colors" title="Copy path"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                              <button onClick={()=>navigator.clipboard.writeText(status.database?.path||'')} className="shrink-0 p-1 rounded hover:bg-white/10 text-slate-500 hover:text-slate-200 transition-colors" title="Copy path"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                             </div>
                         </div>
                     </div>

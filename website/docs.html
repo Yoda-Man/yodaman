@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>YodaMan Docs | The three-tool pillar, Stardust, and the runtime API</title>
     <meta name="description"
-      content="How YodaMan composes Context Expert, Graphify, and OpenSpec into every answer — plus the Stardust dashboard, security model, mobile pairing, and runtime API reference." />
+      content="How YodaMan composes Context Expert, Graphify, and OpenSpec into every answer, plus the Stardust dashboard, security model, mobile pairing, and runtime API reference." />
     <link rel="icon" href="./assets/favicon.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -40,11 +40,11 @@
         <p>Three tools are mandatory, and YodaMan never consults one without the others. This is the architecture, not
           a feature list.</p>
         <ul>
-          <li><strong>Context Expert &mdash; meaning.</strong> Semantic search and LLM reasoning over your indexed
+          <li><strong>Context Expert: meaning.</strong> Semantic search and LLM reasoning over your indexed
             workspace. Powers search, the agent finding files, and RAG retrieval.</li>
-          <li><strong>Graphify &mdash; structure.</strong> The local knowledge graph. Powers blast radius, centrality,
+          <li><strong>Graphify: structure.</strong> The local knowledge graph. Powers blast radius, centrality,
             proximity, and the structural half of ranking.</li>
-          <li><strong>OpenSpec &mdash; intent.</strong> Architecture specs as a first-class input. Powers spec
+          <li><strong>OpenSpec: intent.</strong> Architecture specs as a first-class input. Powers spec
             coverage, drift detection, and the propose/validate/archive workflow.</li>
         </ul>
         <p>Search ranks by all three: <code>semantic × 0.50 + proximity × 0.20 + centrality × 0.15 + specCoverage ×
@@ -57,21 +57,21 @@
         <p>Stardust is where the three tools become visible as one system. Eight tabs, backed by a WebSocket feed that
           watches <code>openspec/</code> for changes.</p>
         <ul>
-          <li><strong>Board</strong> &mdash; real-time OpenSpec change board with task progress, validation health, and
+          <li><strong>Board</strong>: real-time OpenSpec change board with task progress, validation health, and
             a side-by-side spec diff grouped by ADDED/MODIFIED/REMOVED/RENAMED.</li>
-          <li><strong>Drift</strong> &mdash; current workspace state compared against active specs, with severity
+          <li><strong>Drift</strong>: current workspace state compared against active specs, with severity
             badges and a one-click reindex.</li>
-          <li><strong>Compose</strong> &mdash; what every tool knows about one file: which specs describe it, its
+          <li><strong>Compose</strong>: which specs describe one file, its
             structural position, and how Context Expert ranks it.</li>
-          <li><strong>Trust</strong> &mdash; per-tool health plus the overall WorkspaceReadiness verdict, with a live
+          <li><strong>Trust</strong>: per-tool health plus the overall WorkspaceReadiness verdict, with a live
             activity feed.</li>
-          <li><strong>Trace</strong> &mdash; why each search result ranked where it did, showing all four signals and
+          <li><strong>Trace</strong>: why each search result ranked where it did, showing all four signals and
             their weights per result.</li>
-          <li><strong>Diagnostics</strong> &mdash; index freshness, graph state, OpenSpec CLI status, plugin health,
+          <li><strong>Diagnostics</strong>: index freshness, graph state, OpenSpec CLI status, plugin health,
             and workspace connectivity in one status grid.</li>
-          <li><strong>Commands</strong> &mdash; every tool execution with sanitized parameters, timing, exit codes, and
+          <li><strong>Commands</strong>: every tool execution with sanitized parameters, timing, exit codes, and
             result summaries.</li>
-          <li><strong>Impact</strong> &mdash; blast radius for any file at a configurable hop depth of 1 to 4, with
+          <li><strong>Impact</strong>: blast radius for any file at a configurable hop depth of 1 to 4, with
             dependents, spec breakdown, risk verdict, and per-file test coverage.</li>
         </ul>
       </section>
@@ -93,7 +93,7 @@
         <p>The runtime hardens local agent tools by default.</p>
         <ul>
           <li>File and command paths resolve against configured workspace roots before anything runs.</li>
-          <li>Shell operators (<code>; &amp; | ` $ &gt; &lt;</code>) are rejected outright &mdash; one command at a
+          <li>Shell operators (<code>; &amp; | ` $ &gt; &lt;</code>) are rejected outright: one command at a
             time. Executables must be bare names drawn from an allowlist, not paths.</li>
           <li>Every file write pauses for a structured approval showing the diff, the files that depend on it, and
             whether any test covers the change.</li>
@@ -116,7 +116,7 @@
         <p>YodaMan gives you a choice of clients so you can work from the environment that fits the moment.</p>
         <ul>
           <li>Desktop downloads are available directly for macOS and Linux. Windows installers are published as build
-            artifacts from a native Windows runner &mdash; see the Windows card on the
+            artifacts from a native Windows runner; see the Windows card on the
             <a href="./index.html#downloads">downloads page</a>.</li>
           <li>The VS Code extension is available on the Visual Studio Marketplace, or as a VSIX for offline installs.</li>
           <li>Mobile companion clients help you monitor tasks and approve changes while away from your desktop. Pair
@@ -129,39 +129,39 @@
         <p>Runtime endpoints are mounted under <code>/api</code>. The most useful ones:</p>
         <p><strong>Agent</strong></p>
         <ul>
-          <li><code>POST /api/agent/task</code> &mdash; start a task</li>
-          <li><code>GET /api/agent/tasks</code> &mdash; list tasks</li>
-          <li><code>GET /api/agent/tasks/:taskId/events</code> &mdash; SSE event stream</li>
-          <li><code>GET /api/agent/pending-approvals</code> &mdash; approvals awaiting a decision</li>
-          <li><code>POST /api/agent/approve</code> &mdash; approve or reject</li>
-          <li><code>POST /api/agent/cancel</code> &mdash; cancel a running task</li>
+          <li><code>POST /api/agent/task</code>: start a task</li>
+          <li><code>GET /api/agent/tasks</code>: list tasks</li>
+          <li><code>GET /api/agent/tasks/:taskId/events</code>: SSE event stream</li>
+          <li><code>GET /api/agent/pending-approvals</code>: approvals awaiting a decision</li>
+          <li><code>POST /api/agent/approve</code>: approve or reject</li>
+          <li><code>POST /api/agent/cancel</code>: cancel a running task</li>
         </ul>
         <p><strong>Search and graph</strong></p>
         <ul>
-          <li><code>GET /api/search</code> &mdash; ranked search across indexed workspaces</li>
-          <li><code>GET /api/graphify/status</code> &mdash; graph state</li>
-          <li><code>GET /api/graphify/map</code> &mdash; architecture map</li>
-          <li><code>POST /api/graphify/affected</code> &mdash; blast radius for a file</li>
-          <li><code>POST /api/graphify/explain</code> &mdash; explain a node or relationship</li>
+          <li><code>GET /api/search</code>: ranked search across indexed workspaces</li>
+          <li><code>GET /api/graphify/status</code>: graph state</li>
+          <li><code>GET /api/graphify/map</code>: architecture map</li>
+          <li><code>POST /api/graphify/affected</code>: blast radius for a file</li>
+          <li><code>POST /api/graphify/explain</code>: explain a node or relationship</li>
         </ul>
         <p><strong>Stardust</strong></p>
         <ul>
-          <li><code>GET /api/stardust/board</code> &mdash; change board</li>
-          <li><code>GET /api/stardust/drift</code> &mdash; drift report</li>
-          <li><code>GET /api/stardust/compose</code> &mdash; cross-tool view of one file</li>
-          <li><code>GET /api/stardust/deltas/:name</code> &mdash; spec diff for a change</li>
-          <li><code>PUT /api/stardust/validation/:name</code> &mdash; validate a change</li>
-          <li><code>GET /api/stardust/diagnose</code> &mdash; runtime diagnostics</li>
-          <li><code>WS /api/stardust/live</code> &mdash; live dashboard feed</li>
+          <li><code>GET /api/stardust/board</code>: change board</li>
+          <li><code>GET /api/stardust/drift</code>: drift report</li>
+          <li><code>GET /api/stardust/compose</code>: cross-tool view of one file</li>
+          <li><code>GET /api/stardust/deltas/:name</code>: spec diff for a change</li>
+          <li><code>PUT /api/stardust/validation/:name</code>: validate a change</li>
+          <li><code>GET /api/stardust/diagnose</code>: runtime diagnostics</li>
+          <li><code>WS /api/stardust/live</code>: live dashboard feed</li>
         </ul>
         <p><strong>Runtime</strong></p>
         <ul>
-          <li><code>GET /api/health</code> &mdash; dependency health</li>
-          <li><code>GET /api/readiness</code> &mdash; WorkspaceReadiness verdict</li>
-          <li><code>GET /api/policy</code> &mdash; active command policy</li>
-          <li><code>GET /api/audit</code> &mdash; audit log</li>
-          <li><code>GET /api/plugins</code> &mdash; installed plugins</li>
-          <li><code>POST /api/pairing</code> &mdash; issue a pairing token</li>
+          <li><code>GET /api/health</code>: dependency health</li>
+          <li><code>GET /api/readiness</code>: WorkspaceReadiness verdict</li>
+          <li><code>GET /api/policy</code>: active command policy</li>
+          <li><code>GET /api/audit</code>: audit log</li>
+          <li><code>GET /api/plugins</code>: installed plugins</li>
+          <li><code>POST /api/pairing</code>: issue a pairing token</li>
         </ul>
       </section>
 

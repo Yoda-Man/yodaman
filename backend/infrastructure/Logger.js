@@ -63,6 +63,18 @@ function rotate(dir) {
 }
 
 /**
+ * Deletes runtime.log and its rotated copies; the next line starts a new file.
+ * Throws if a file cannot be removed, so a caller never reports a clear that did not happen.
+ */
+function clearFiles() {
+    const dir = logDirectory();
+    for (let index = 0; index <= MAX_LOG_FILES; index += 1) {
+        fs.rmSync(path.join(dir, index ? `${LOG_FILE_NAME}.${index}` : LOG_FILE_NAME), { force: true });
+    }
+    sinkBytes = 0;
+}
+
+/**
  * Appends one JSON line to the log file, rotating first if it is full.
  * Never throws: logging must not be able to take the runtime down.
  */
@@ -196,6 +208,7 @@ module.exports = {
     clear: () => {
         entries.length = 0;
     },
+    clearFiles,
     info: (message, meta) => write('info', message, meta),
     warn: (message, meta) => write('warn', message, meta),
     error: (message, err, meta = {}) => write('error', message, { ...meta, error: serializeError(err) })

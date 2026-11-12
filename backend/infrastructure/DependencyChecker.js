@@ -253,12 +253,13 @@ const SERVICES = {
     graphify: {
         executable: 'graphify',
         versionArgs: ['--help'],
-        // graphify --help may include non-version output; accept any result as "installed"
+        // --help prints no version, so it only proves graphify starts; the label names it.
         versionLabel: 'installed',
         runningCheck: null,
         installUrl: 'pip install graphifyy',
         installHint: {
-            darwin: 'python3 -m pip install --user graphifyy',
+            // Homebrew's Python refuses plain --user installs (PEP 668); setup.sh falls back the same way.
+            darwin: 'python3 -m pip install --user --break-system-packages graphifyy',
             linux: 'python3 -m pip install --user graphifyy',
             win32: 'py -m pip install graphifyy',
         },
@@ -288,6 +289,34 @@ function isFile(p) {
     try { return fs.statSync(p).isFile(); } catch (_) { return false; }
 }
 
+/** The interpreter a script's #! line names, or null for anything else. */
+function shebangInterpreter(file) {
+    let head;
+    try {
+        const fd = fs.openSync(file, 'r');
+        const buf = Buffer.alloc(256);
+        const n = fs.readSync(fd, buf, 0, buf.length, 0);
+        fs.closeSync(fd);
+        head = buf.toString('utf8', 0, n);
+    } catch (_) {
+        // Unreadable here; spawning it will report the real problem.
+        return null;
+    }
+    if (!head.startsWith('#!')) return null;
+    return head.slice(2).split('\n')[0].trim().split(/\s+/)[0] || null;
+}
+
+/**
+ * Present and able to start. A pip-installed launcher keeps the absolute path
+ * of the Python that installed it, so when Homebrew replaces that Python the
+ * file is still there but every spawn fails with ENOENT.
+ */
+function isRunnable(file) {
+    if (!isFile(file)) return false;
+    const interpreter = shebangInterpreter(file);
+    return !interpreter || !path.isAbsolute(interpreter) || fs.existsSync(interpreter);
+}
+
 /**
  * Try to find an executable by name.
  *
@@ -303,7 +332,7 @@ function which(name) {
     for (const dir of PATH) {
         try {
             const full = path.resolve(dir, name);
-            if (isFile(full)) return full;
+            if (isRunnable(full)) return full;
         } catch (_) { /* invalid path entry */ }
     }
 
@@ -316,11 +345,11 @@ function which(name) {
             const expanded = expandGlob(dir);
             for (const sub of expanded) {
                 const full = path.join(sub, name);
-                if (isFile(full)) return full;
+                if (isRunnable(full)) return full;
             }
         } else {
             const full = path.join(dir, name);
-            if (isFile(full)) return full;
+            if (isRunnable(full)) return full;
         }
     }
 
@@ -332,7 +361,7 @@ function which(name) {
                 timeout: 5000,
                 stdio: ['ignore', 'pipe', 'ignore'],
             }).trim();
-            if (result && isFile(result)) return result;
+            if (result && isRunnable(result)) return result;
         } catch (_) { /* which not available or not found */ }
     }
 
@@ -416,6 +445,11 @@ function getVersion(binPath, versionArgs) {
         execFile(binPath, versionArgs, { timeout: 10000 }, (err, stdout, stderr) => {
             const version = parseVersion(stdout);
             if (err && !version) {
+                const interpreter = err.code === 'ENOENT' && isFile(binPath) && shebangInterpreter(binPath);
+                if (interpreter) {
+                    resolve({ version: null, error: `the interpreter on its first line, ${interpreter}, no longer exists; reinstall it` });
+                    return;
+                }
                 const lines = String(stderr || err.message).split('\n').map(l => l.trim()).filter(Boolean);
                 resolve({ version: null, error: lines.find(l => /error/i.test(l)) || lines[0] || 'exited with an error' });
                 return;
@@ -472,20 +506,19 @@ async function locate(name) {
         };
     }
 
-    let version = svc.versionLabel;
-    if (!version) {
-        const run = await getVersion(binPath, svc.versionArgs);
-        if (run.error) {
-            // Present but broken counts as missing, so setup and Repair reinstall it.
-            return {
-                found: false, path: binPath, version: null,
-                error: `${name} is installed at ${binPath} but fails to run: ${run.error}`,
-                installUrl: svc.installUrl,
-                installHint: (svc.installHint && svc.installHint[process.platform]) || svc.installUrl,
-            };
-        }
-        version = run.version;
+    // Always run it, even when a label names the version: a graphify whose
+    // Python was removed passed this check for weeks while every build failed.
+    const run = await getVersion(binPath, svc.versionArgs);
+    if (run.error) {
+        // Present but broken counts as missing, so setup and Repair reinstall it.
+        return {
+            found: false, path: binPath, version: null,
+            error: `${name} is installed at ${binPath} but fails to run: ${run.error}`,
+            installUrl: svc.installUrl,
+            installHint: (svc.installHint && svc.installHint[process.platform]) || svc.installUrl,
+        };
     }
+    const version = svc.versionLabel || run.version;
     if (svc.minVersion && isOlder(version, svc.minVersion)) {
         return {
             found: false, path: binPath, version,
@@ -723,5 +756,5 @@ function healthEntry(result, { includeRunning = false } = {}) {
 }
 
 module.exports = {
-    healthEntry, resetCtxModelCache, locate, check, checkAll, checkRunning, which, detectCtxModel, detectOllamaContext, resetOllamaContextCache,
+    healthEntry, resetCtxModelCache, locate, check, checkAll, checkRunning, which, isRunnable, detectCtxModel, detectOllamaContext, resetOllamaContextCache,
     isWeakModel, isOlder, SERVICES, PLATFORM_PATHS };

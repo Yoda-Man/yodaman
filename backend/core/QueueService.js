@@ -87,6 +87,7 @@ class QueueService {
             this.activeProcess = spawn(contextEngine.binary, [
                 'index', targetDir, '--name', name, '--force', '--ignore', INDEX_IGNORE_PATTERNS
             ]);
+            this.activeProcess.targetDir = targetDir;
             let stderr = '';
 
             this.activeProcess.stdout.on('data', (data) => {
@@ -149,8 +150,8 @@ class QueueService {
      */
     killActive() {
         if (this.activeProcess) {
-            logger.info('queue_index_killed');
-            logger.warn('index_process_killed');
+            // Called on shutdown: stopping our own job is expected, not a warning.
+            logger.info('queue_index_killed', { path: this.activeProcess.targetDir });
             this.activeProcess.kill();
         }
     }
@@ -160,7 +161,8 @@ class QueueService {
             isProcessing: this.isProcessing,
             queue: [...this.queue],
             active: this.activeProcess ? {
-                pid: this.activeProcess.pid
+                pid: this.activeProcess.pid,
+                path: this.activeProcess.targetDir
             } : null
         };
     }

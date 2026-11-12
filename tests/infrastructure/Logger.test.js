@@ -34,6 +34,22 @@ describe('Logger diagnostics', () => {
         }));
     });
 
+    test('clearFiles deletes runtime.log and its rotated copies, and nothing else', () => {
+        const fs = require('fs');
+        const path = require('path');
+        const dir = logger.logDirectory();
+        fs.mkdirSync(dir, { recursive: true });
+        const logs = ['runtime.log', 'runtime.log.1', 'runtime.log.2', 'runtime.log.3'];
+        for (const name of [...logs, 'keep.txt']) fs.writeFileSync(path.join(dir, name), 'x');
+
+        logger.clearFiles();
+
+        for (const name of logs) expect(fs.existsSync(path.join(dir, name))).toBe(false);
+        expect(fs.existsSync(path.join(dir, 'keep.txt'))).toBe(true);
+        fs.rmSync(path.join(dir, 'keep.txt'));
+        expect(() => logger.clearFiles()).not.toThrow(); // nothing left to delete is fine
+    });
+
     test('filters logs by level, message query, user action, and time range', () => {
         logger.info('startup_completed', { userAction: 'startup' });
         const since = new Date(Date.now() - 1000).toISOString();

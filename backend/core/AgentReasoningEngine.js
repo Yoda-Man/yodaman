@@ -13,6 +13,9 @@ const defaultCodingSkill = require('./DefaultCodingSkill');
 const queueService = require('./QueueService');
 const ConversationBuffer = require('./ConversationBuffer');
 const { promptBudgetFor } = require('./promptBudget');
+
+// The parameters a directly routed plugin call can fill: the workspace, under each name plugins use.
+const DIRECT_PLUGIN_PARAMS = ['workspacePath', 'projectPath', 'projectRoot'];
 const { requiresApproval } = require('../../shared/toolCapabilities');
 const stardustBrief = require('./StardustBrief');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
@@ -502,6 +505,13 @@ Rules:
         const [name, plugin] = candidates[0];
         if (pluginCapability(plugin)) return null;
 
+        // Only the workspace path is filled in here. A plugin that also requires
+        // something else (Lightsaber's and Graphify's `action`) failed with
+        // "Unknown action: undefined"; the agent loop picks that value instead.
+        const missing = Object.entries(plugin.parameters || {})
+            .some(([key, spec]) => spec?.required && !DIRECT_PLUGIN_PARAMS.includes(key));
+        if (missing) return null;
+
         return { name, plugin };
     }
 
@@ -585,7 +595,7 @@ Rules:
     /** Invoke a named plugin without a model round-trip, emitting the usual events. */
     async runPluginDirectly({ name, plugin }, { taskId, task, onStep, metadata }) {
         const parameters = {};
-        for (const key of ['workspacePath', 'projectPath', 'projectRoot']) {
+        for (const key of DIRECT_PLUGIN_PARAMS) {
             if (plugin.parameters && plugin.parameters[key]) parameters[key] = metadata.projectId;
         }
 

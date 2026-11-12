@@ -12,7 +12,7 @@ Move every version reference in one step, then add the new `CHANGELOG.md` entry 
 npm run version:bump -- <new-version>
 ```
 
-Verify. `release:verify` is the gate: ship only when it exits 0. It chains `version:check`, `build`, `lint`, `test`, `test:coverage`, `audit:prod`, `audit:vendored`, `release:smoke`, `test:journeys`, `test:plugins`, `test:approval`, and `test:packaged`.
+Verify. `release:verify` is the gate: ship only when it exits 0. It chains `version:check`, `build`, `lint`, `test`, `test:coverage`, `audit:prod`, `audit:vendored`, `test:tools` (the real Context Expert, Graphify, OpenSpec and Ollama start, and Graphify builds a real graph), `release:smoke`, `test:journeys`, `test:plugins`, `test:approval`, and `test:packaged`.
 
 ```bash
 npm run release:verify

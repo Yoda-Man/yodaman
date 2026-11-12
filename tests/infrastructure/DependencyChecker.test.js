@@ -194,3 +194,54 @@ describe('Context Expert minimum version', () => {
         }
     });
 });
+
+describe('a graphify that is installed but cannot start', () => {
+    // Homebrew replaced Python 3.14 with 3.15 and removed 3.14. The pip launcher
+    // ~/Library/Python/3.14/bin/graphify stayed, its #! naming the removed
+    // interpreter, so every spawn failed with ENOENT, while health said
+    // "installed" because graphify was the one tool locate() never ran.
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const unix = process.platform === 'win32' ? test.skip : test;
+
+    function fakeGraphify(body) {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-graphify-'));
+        fs.writeFileSync(path.join(dir, 'graphify'), body, { mode: 0o755 });
+        return dir;
+    }
+    async function withPath(dirs, fn) {
+        const old = process.env.PATH;
+        process.env.PATH = [...dirs, old].join(path.delimiter);
+        try { return await fn(); } finally { process.env.PATH = old; dirs.forEach((d) => fs.rmSync(d, { recursive: true, force: true })); }
+    }
+
+    unix('a launcher whose interpreter is gone is not runnable, and which() passes over it', async () => {
+        const dead = fakeGraphify('#!/nonexistent/python3.14\nprint("hi")\n');
+        const alive = fakeGraphify('#!/bin/sh\nexit 0\n');
+        expect(dependencyChecker.isRunnable(path.join(dead, 'graphify'))).toBe(false);
+        expect(dependencyChecker.isRunnable(path.join(alive, 'graphify'))).toBe(true);
+        await withPath([dead, alive], () => expect(dependencyChecker.which('graphify')).toBe(path.join(alive, 'graphify')));
+    });
+
+    unix('health runs graphify instead of trusting that the file exists', async () => {
+        const failing = fakeGraphify('#!/bin/sh\necho "ModuleNotFoundError: No module named graphify" >&2\nexit 1\n');
+        await withPath([failing], async () => {
+            const result = await dependencyChecker.locate('graphify');
+            expect(result.found).toBe(false);
+            expect(result.error).toContain('fails to run');
+        });
+    });
+
+    unix('a graphify that starts is reported installed', async () => {
+        const working = fakeGraphify('#!/bin/sh\necho "usage: graphify"\n');
+        await withPath([working], async () => {
+            const result = await dependencyChecker.locate('graphify');
+            expect(result).toEqual(expect.objectContaining({ found: true, version: 'installed', path: path.join(working, 'graphify') }));
+        });
+    });
+
+    test('Repair can install graphify on Homebrew Python, which refuses plain --user installs', () => {
+        expect(dependencyChecker.SERVICES.graphify.installHint.darwin).toContain('--break-system-packages');
+    });
+});
