@@ -1,6 +1,6 @@
 # YodaMan Architecture Overview
 
-This document describes the architecture of YodaMan v0.6.6, a local-first workspace intelligence platform for developers.
+This document describes the architecture of YodaMan v0.6.7, a local-first workspace intelligence platform for developers.
 
 > **Before deleting any file listed here:** a significant part of this system is
 > wired up at runtime rather than through imports — plugins are `require()`d from
@@ -377,7 +377,7 @@ A "Draft baseline specs" task (the Stardust **Draft Specs** button) skips the to
 
 | Module | File | Purpose |
 |--------|------|---------|
-| **ToolBox** | `ToolBox.js` | Built-in agent tools, plugin loader and permission validation. Loads `.js` files from `plugins/` and checks their permissions against `PLUGIN_PERMISSION_ALLOWLIST`. Commands run only from an executable allowlist, via `execFile` with no shell. Its `searchCode` tool is the search pipeline; raw retrieval (`contextExpertSearch`) is private to the pipeline. Records every tool call in AuditLog. |
+| **ToolBox** | `ToolBox.js` | Built-in agent tools, plugin loader and permission validation. Loads `.js` files from `plugins/` and checks their permissions against `PLUGIN_PERMISSION_ALLOWLIST`. The disabled list is `plugins.json` in the data folder, copied once from the old `config.json` in the `plugins` folder. A command the agent runs without a `cwd` runs in the active workspace. Commands run only from an executable allowlist, via `execFile` with no shell. Its `searchCode` tool is the search pipeline; raw retrieval (`contextExpertSearch`) is private to the pipeline. Records every tool call in AuditLog. |
 | **ContextEngine** | `ContextEngine.js` | Spawns the `ctx` CLI (`ask`, `list`, and any command through `execute`/`executeJson`) and parses its JSON output; answers pass through CliOutput. Maps a workspace path to its ctx project name, and never to a different project that shares the folder name. Stops running ctx processes on shutdown. |
 | **EditorLauncher** | `EditorLauncher.js` | Opens a file at a line in the user's editor: the OS default for the file type, a chosen app, or any command template (`{file}`, `{line}`, `{column}`). Never runs a shell. |
 | **GraphifyService** | `GraphifyService.js` | Wraps the Graphify CLI: `build()`, `status()`, `freshness()`, `query()`, `explain()`, `pathBetween()`, `affected()`. Tracks whether the graph is older than the source. Finds the `graphify` launcher once, newest Python first, and finds it again if that launcher stops being able to start. |
@@ -388,7 +388,7 @@ A "Draft baseline specs" task (the Stardust **Draft Specs** button) skips the to
 | **SettingsProvider** | `SettingsProvider.js` | Settings from `config.json` in the data folder, with defaults and `YODAMAN_*` environment overrides (`allowPluginUploads` → `YODAMAN_ALLOW_PLUGIN_UPLOADS`). `drift()` lists security settings changed from their defaults, which the server logs at startup. |
 | **PairingService** | `PairingService.js` | Pairing tokens for non-local clients such as the mobile app, valid for 24 hours. Checked on every non-local request while `requirePairingToken` is on (the default). |
 | **FileSystemWatcher** | `FileSystemWatcher.js` | Watches workspace folders with chokidar, ignoring generated, vendored and VCS paths, and queues a re-index in QueueService when files change. |
-| **PluginAPI** | `PluginAPI.js` | The API handed to legacy plugins (Holocron VR style) that use `onLoad`/`onEnable` instead of `execute`: `fetch`, `log`, `ui`, `worker`, `config`. |
+| **PluginAPI** | `PluginAPI.js` | The API handed to legacy plugins (Holocron VR style) that use `onLoad`/`onEnable` instead of `execute`: `fetch`, `log`, `ui`, `worker`, `config`. `fetch` refuses a plugin without the `network` or `unrestricted` permission. |
 | **CliOutput** | `CliOutput.js` | Cleans CLI output shown to users: drops lines matching known tip and banner patterns (falling back to the raw text if nothing would be left), and summarises error output. |
 | **DataPaths** | `DataPaths.js` | Where the user's data lives: `config.json` and `yodaman.db` in `~/Library/Application Support/YodaMan` (macOS), `%APPDATA%\YodaMan` (Windows) or `$XDG_CONFIG_HOME/YodaMan`, falling back to `~/.config/YodaMan` (Linux). `YODAMAN_DATA_DIR` moves it. Migrates data left next to the code by older versions. |
 | **Database** | `Database.js` | Opens `yodaman.db` with Node's built-in SQLite (`node:sqlite`) and creates the `tasks` and `audit_logs` tables. Exports `db` and `useSqlite`; when SQLite is unavailable, TaskStore and AuditLog fall back to JSON files. |
@@ -411,7 +411,7 @@ The Stardust layer connects YodaMan to OpenSpec, an external spec-driven change 
 
 | Module | File | Purpose |
 |--------|------|---------|
-| **StardustLive** | `StardustLive.js` | Real-time dashboard backend. Watches the `openspec/` directory with chokidar, builds change-board snapshots (task progress, validation status, graph freshness), parses operation-grouped spec deltas, and pushes live updates over WebSocket at `/api/stardust/live`. REST fallbacks: `GET /api/stardust/board`, `GET /api/stardust/deltas/:name`, `PUT /api/stardust/validation/:name`. |
+| **StardustLive** | `StardustLive.js` | Real-time dashboard backend. Watches the `openspec/` directory with chokidar, builds change-board snapshots (task progress, status `proposed`, `validated` or `applied`, validation results kept per workspace, graph freshness; `changes/archive/` is skipped), parses operation-grouped spec deltas, and pushes live updates over WebSocket at `/api/stardust/live`. The upgrade passes the REST gates (OriginPolicy and the pairing token), and a `projectRoot` that is not a registered workspace closes the socket with code `1008`. A watcher is released when its last client leaves. `resolveProjectRoot` is the one check every Stardust route uses for `projectRoot`. REST fallbacks: `GET /api/stardust/board`, `GET /api/stardust/deltas/:name`, `PUT /api/stardust/validation/:name`. |
 | **StardustWrapper** | `StardustWrapper.js` | Runs the OpenSpec CLI as a child process for `diagnose`, `validate`, `archive`, `list`, `init` and `install`, preferring a global `openspec` and falling back to `npx openspec`. Propose does not call the CLI: `proposeChange` in `stardustRoutes.js` (and `ToolBox.specPropose`) writes the template files itself. |
 | **SpecDrift** | `SpecDrift.js` | Compares intended architecture (file references in OpenSpec specs) with actual architecture (the Graphify graph). Reports `staleReferences` (a spec cites a file the graph has never seen) and `undocumented` (files with at least two dependents that no spec cites). |
 | **SpecBaseline** | `SpecBaseline.js` | Drafts first OpenSpec specs for a workspace that has none: one capability per top-level module from the graph (six by default, at most twelve), its key code from the search pipeline, and the text from the local model through Context Expert. Writes nothing itself; callers put each draft through the approval gate. |
@@ -495,8 +495,8 @@ User → POST /api/agent/task { task: "Refactor App.jsx" }
 
 ### Search Flow
 
-Every search (Search view, Chat, the agent's `searchCode` tool, Trace, docs
-search, Stardust Compose, the ask fallback, MCP) runs one pipeline,
+Every search (Search mode, Chat, `POST /api/ask`, the agent's `searchCode`
+tool, Trace, docs search, Stardust Compose, MCP) runs one pipeline,
 `backend/core/SearchPipeline.js`. Callers choose what to retrieve; they cannot
 skip a stage. `tests/architecture/SearchPipelineBoundary.test.js` fails the
 build if code searches around it.
@@ -597,13 +597,14 @@ and `main.jsx`, the API client in `api/`, the views in `components/`, the
 Holocron constellation in `holocron/`, and three hooks in `hooks/`.
 
 The frontend talks to the backend over HTTP (`src/api/api.js`), with three
-streaming channels: agent tasks use SSE, the Search view's summary streams over
+streaming channels: agent tasks use SSE, Search mode's summary streams over
 `EventSource` (`/api/search/stream`), and Stardust's live board uses the
 `/api/stardust/live` WebSocket. The `useHealthCheck` hook polls `/api/health`
 every 5 seconds for `StatusBar`, `Dashboard` and `HealthDashboard`, and exposes
 `{ checks, services, status, started, loading, error, refresh }`. The
 `useStardustLive` hook uses React's `useSyncExternalStore` to subscribe to the
-WebSocket, falling back to REST polling and reconnecting automatically. The
+WebSocket, falling back to REST polling and reconnecting automatically; a socket
+for a workspace you switched away from, or a tab you left, closes for good. The
 `useStardustPipeline` hook fetches the three tools' readiness once, so the
 pipeline strip, the Trust tab and the Drift tab agree.
 

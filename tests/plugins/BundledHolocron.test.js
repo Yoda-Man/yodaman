@@ -38,3 +38,15 @@ test('the in-app viewer shows the bundled version, not a hardcoded one', () => {
     expect(code).toMatch(/holocronManifest\.version/);
     expect(code).not.toMatch(/>v\d+\.\d+\.\d+</);
 });
+
+test('declares no UI extensions, which nothing in YodaMan renders', () => {
+    // uiExtensions named tab components no code in src/ or backend/ loads. If a
+    // renderer is added, this test is the place to say what it reads.
+    const read = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        const full = path.join(dir, e.name);
+        return e.isDirectory() ? read(full) : /\.(jsx?|mjs)$/.test(e.name) ? [fs.readFileSync(full, 'utf8')] : [];
+    });
+    const root = path.join(__dirname, '..', '..');
+    const rendered = [...read(path.join(root, 'src')), ...read(path.join(root, 'backend'))].some((code) => code.includes('uiExtensions'));
+    if (!rendered) expect(bundled).not.toHaveProperty('uiExtensions');
+});

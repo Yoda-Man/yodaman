@@ -82,4 +82,4 @@ The dashboard can also create a mobile pairing link with:
 POST /api/pairing
 ```
 
-The Dashboard sends its own origin as the `runtimeUrl`, so in the desktop app that link also points at `127.0.0.1`. Use a link created with your LAN address, and start the runtime with `YODAMAN_HOST=0.0.0.0`, to connect a phone on the same local network (see [Linking YodaMan Mobile](mobile-linking.md)).
+The Dashboard sends its own origin as the `runtimeUrl`. When that is a loopback address such as `127.0.0.1`, the runtime swaps in this machine's LAN address on the same port, so the link is one a phone can use. Start the runtime with `YODAMAN_HOST=0.0.0.0` so a phone on the same local network can reach it (see [Linking YodaMan Mobile](mobile-linking.md)).

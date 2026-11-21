@@ -223,3 +223,42 @@ describe('plugin loading skips scaffolded test files', () => {
         }
     });
 });
+
+describe('ToolBox data and schema', () => {
+    const toolBox = require('../../backend/infrastructure/ToolBox');
+    const { dataFile } = require('../../backend/infrastructure/DataPaths');
+
+    test('the disabled-plugin list lives in the data folder, copied once from the old in-bundle file', () => {
+        const target = dataFile('plugins.json');
+        const legacyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-legacy-plugins-'));
+        const legacy = path.join(legacyDir, 'config.json');
+        const before = toolBox.disabledPlugins;
+        fs.rmSync(target, { force: true });
+        try {
+            fs.writeFileSync(legacy, JSON.stringify({ disabled: ['old-plugin'] }));
+            toolBox.loadDisabledConfig(legacy);
+            expect([...toolBox.disabledPlugins]).toEqual(['old-plugin']);
+            expect(JSON.parse(fs.readFileSync(target, 'utf8')).disabled).toEqual(['old-plugin']);
+
+            // Once: the data-folder copy wins from then on, and saves go there.
+            fs.writeFileSync(legacy, JSON.stringify({ disabled: ['stale'] }));
+            toolBox.loadDisabledConfig(legacy);
+            expect([...toolBox.disabledPlugins]).toEqual(['old-plugin']);
+            toolBox.disabledPlugins.add('another');
+            toolBox.saveDisabledConfig();
+            expect(JSON.parse(fs.readFileSync(target, 'utf8')).disabled).toEqual(['old-plugin', 'another']);
+            expect(JSON.parse(fs.readFileSync(legacy, 'utf8')).disabled).toEqual(['stale']);
+        } finally {
+            toolBox.disabledPlugins = before;
+            fs.rmSync(target, { force: true });
+            fs.rmSync(legacyDir, { recursive: true, force: true });
+        }
+    });
+
+    test('searchCode documents the default the search pipeline really uses', () => {
+        const source = fs.readFileSync(path.join(__dirname, '../../backend/core/SearchPipeline.js'), 'utf8');
+        const pipelineDefault = /async function search\(\{[^}]*\btop = (\d+)/.exec(source)[1];
+        const [, parameters] = toolBox.constructor.TOOL_SCHEMA.find(([name]) => name === 'searchCode');
+        expect(parameters.top.note).toBe(`max 50, default ${pipelineDefault}`);
+    });
+});

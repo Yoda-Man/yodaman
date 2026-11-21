@@ -39,7 +39,7 @@ describe('shipped plugins use the knowledge graph', () => {
         test('the TODO scan skips dependencies', () => {
             // Unfiltered, node_modules produced 500 hits and crowded real
             // project TODOs out past the head -500 cap entirely.
-            const grepCalls = source.match(/grep -rn "TODO/g) || [];
+            const grepCalls = source.match(/outputLines\('grep'/g) || [];
             expect(grepCalls.length).toBeGreaterThan(0);
             const excludeCount = (source.match(/--exclude-dir=node_modules/g) || []).length;
             expect(excludeCount).toBe(grepCalls.length);

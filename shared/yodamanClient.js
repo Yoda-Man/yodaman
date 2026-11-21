@@ -68,7 +68,11 @@ async function requestJson(runtimeUrl, path, options = {}) {
         const contentType = response.headers.get('content-type') || '';
         const payload = contentType.includes('application/json') ? await response.json() : await response.text();
         const message = typeof payload === 'object' && payload?.error ? payload.error : payload;
-        throw new Error(message || `YodaMan request failed with HTTP ${response.status}`);
+        const code = typeof payload === 'object' ? payload?.code : undefined;
+        // Every client shows error.message as is, so the fix travels with it.
+        const hint = code === 'workspace_not_registered' ? '. Add this folder to YodaMan first, then try again.' : '';
+        // status marks an answer from the runtime, as opposed to no runtime at all.
+        throw Object.assign(new Error(`${message || `YodaMan request failed with HTTP ${response.status}`}${hint}`), { status: response.status, code });
     }
 
     return response.json();

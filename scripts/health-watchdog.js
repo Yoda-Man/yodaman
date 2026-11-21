@@ -31,8 +31,9 @@
  */
 const { execFileSync } = require('child_process');
 
-const RUNTIME_URL = process.env.YODAMAN_HEALTH_URL || 'http://127.0.0.1:3090';
-const PORT = Number(process.env.YODAMAN_PORT || new URL(RUNTIME_URL).port || 3090);
+// YODAMAN_PORT moves the probe and the lsof check together; the URL, when given, decides both.
+const RUNTIME_URL = process.env.YODAMAN_HEALTH_URL || `http://127.0.0.1:${process.env.YODAMAN_PORT || 3090}`;
+const PORT = Number(new URL(RUNTIME_URL).port || (RUNTIME_URL.startsWith('https:') ? 443 : 80));
 const INTERVAL_MS = Number(process.env.YODAMAN_WATCH_INTERVAL || 30000);
 const TIMEOUT_MS = Number(process.env.YODAMAN_WATCH_TIMEOUT || 10000);
 const WARN_MS = Number(process.env.YODAMAN_WATCH_WARN || 3000);

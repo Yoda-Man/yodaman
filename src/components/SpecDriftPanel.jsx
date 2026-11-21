@@ -38,8 +38,8 @@ export default function SpecDriftPanel({ projectRoot, drift, loading: externalLo
         setOwnLoading(true);
         try {
             setOwnReport(await api.stardustDrift(projectRoot, { minDependents: threshold }));
-        } catch (_) {
-            setOwnReport(null);
+        } catch (err) {
+            setOwnReport({ available: false, reason: err.message });
         } finally {
             setOwnLoading(false);
         }

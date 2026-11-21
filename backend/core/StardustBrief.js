@@ -127,7 +127,7 @@ function specsDescribing(specs, file) {
     const found = [];
     for (const spec of specs) {
         const references = specDrift.extractReferences(spec.text);
-        if (references.some(reference => file.endsWith(reference) || reference.endsWith(path.basename(file)))) {
+        if (references.some(reference => specDrift.citesFile(reference, file))) {
             found.push(spec.id);
         }
     }

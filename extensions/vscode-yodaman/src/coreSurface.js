@@ -75,7 +75,7 @@ function renderCompose(result, relative, output) {
     output.appendLine(`  blast radius   ${graph.blastRadius ?? 0}`);
     output.appendLine(`  centrality     ${graph.centrality ?? 0}`);
     output.appendLine(`  tests          ${graph.coveredByTests ? `${graph.testCount} covering` : 'NONE'}`);
-    output.appendLine(`  specs          ${spec.mentionedIn?.length ? spec.mentionedIn.join(', ') : 'none mention this file'}`);
+    output.appendLine(`  specs          ${spec.mentionedIn?.length ? spec.mentionedIn.map((m) => m.spec).join(', ') : 'none mention this file'}`);
     if (graph.risk) output.appendLine(`  risk           ${graph.risk}`);
     if (graph.reason) output.appendLine(`  note           ${graph.reason}`);
 
@@ -88,6 +88,29 @@ function renderCompose(result, relative, output) {
     } else {
         vscode.window.showInformationMessage(`${path.basename(relative)}: ${summary}`);
     }
+}
+
+// ── Search ────────────────────────────────────────────────────────────────
+
+/**
+ * A search hit as a quick-pick item. ctx hits carry `filePath`, the filesystem
+ * fallback `metadata.path`, and GraphRanker adds `graphRank`; reading `file`,
+ * `path` and `blended` left every pick unopenable and unscored.
+ * shortcut: mirrors shared/searchHits.js hitPath, an ES module the extension
+ * host's Node may not require(); import it once VS Code's floor is Node 22.12+.
+ */
+function searchPickItem(hit) {
+    const file = String(hit?.metadata?.path || hit?.filePath || hit?.path || hit?.file || '');
+    return {
+        label: file ? file.split('/').filter(Boolean).pop() : 'result',
+        description: [
+            hit?.graphRank !== undefined ? `score ${Number(hit.graphRank).toFixed(3)}` : null,
+            hit?.specFlag?.covered ? 'spec' : null,
+            hit?._source || null
+        ].filter(Boolean).join(' · '),
+        detail: file,
+        file
+    };
 }
 
 // ── Stardust ──────────────────────────────────────────────────────────────
@@ -163,7 +186,8 @@ async function publishDrift(deps) {
         const firstLine = new vscode.Range(0, 0, 0, 0);
 
         for (const stale of report.staleReferences || []) {
-            const specPath = path.join(projectRoot, 'openspec', `${stale.spec}.md`);
+            // SpecDrift ids are paths relative to openspec/specs/, extension included.
+            const specPath = path.join(projectRoot, 'openspec', 'specs', stale.spec);
             const d = new vscode.Diagnostic(
                 firstLine,
                 `Spec "${stale.spec}" cites "${stale.reference}", which is not in the knowledge graph.`,
@@ -248,6 +272,8 @@ async function runtimeDiagnostics(deps) {
 
     if (diagnose && !diagnose.error) {
         output.appendLine(`  openspec: installed=${diagnose.installed} version=${diagnose.version || 'n/a'}`);
+    } else if (diagnose) {
+        output.appendLine(`  openspec diagnose unavailable: ${diagnose.error}`);
     }
 
     const summary = readiness && !readiness.error
@@ -290,7 +316,7 @@ async function showPendingApprovals(deps) {
         );
         if (!choice) return;
         await getClient().approve(picked.approval.taskId, choice === 'Approve');
-        vscode.window.showInformationMessage(`YodaMan: ${choice.toLowerCase()}ed ${picked.label}.`);
+        vscode.window.showInformationMessage(`YodaMan: ${choice === 'Approve' ? 'approved' : 'rejected'} ${picked.label}.`);
     } catch (error) {
         vscode.window.showErrorMessage(`YodaMan approvals failed: ${error.message}`);
     }
@@ -330,6 +356,8 @@ async function listPlugins(deps) {
 module.exports = {
     init,
     impactForActiveFile,
+    renderCompose,
+    searchPickItem,
     showStardustBoard,
     publishDrift,
     clearDrift,

@@ -4,7 +4,7 @@ This document covers the architecture, coding patterns, testing approach, and co
 
 ## System Architecture
 
-YodaMan follows a **Clean Architecture** pattern with three layers:
+YodaMan follows a **Clean Architecture** pattern. Its three main backend layers are below; the services and Stardust layers are covered in [Architecture](../architecture/architecture.md).
 
 ```
 Frontend (React + Vite)
@@ -23,7 +23,7 @@ The REST controller mounts every HTTP endpoint under `/api`; route groups also l
 | Prefix | Purpose |
 |--------|---------|
 | `GET/POST /api/projects` | Workspace management |
-| `POST /api/ask` | Chat questions with Graphify context |
+| `POST /api/ask` | Questions about a registered workspace, through the search pipeline with Graphify context |
 | `POST /api/agent/task` | SSE-streamed agent tasks |
 | `GET/POST/DELETE /api/plugins` | Plugin lifecycle (list, upload, delete) |
 | `POST /api/plugins/:name/enable\|disable` | Plugin toggle |
@@ -41,7 +41,7 @@ The REST controller mounts every HTTP endpoint under `/api`; route groups also l
 | Module | Purpose |
 |--------|---------|
 | **ToolBox.js** | Built-in tools (readFile, writeFile, search, exec) + plugin loader + permission validation |
-| **ContextEngine.js** | Wraps `ctx` CLI for search, ask, list, status |
+| **ContextEngine.js** | Wraps the `ctx` CLI: ask, list, and other commands such as search through `execute`/`executeJson` |
 | **GraphifyService.js** | Builds/queries knowledge graphs via `graphify` CLI |
 | **Logger.js** | Structured JSON logging to memory buffer + file |
 | **AuditLog.js** | Audit trail for tool calls and agent actions |
@@ -137,7 +137,10 @@ Tests use Jest and live in `tests/`. Test suites mirror the backend structure:
 
 ```
 tests/
-├── architecture/   # Module boundaries, dead-module check
+├── architecture/   # Module boundaries, dead-module check, and guard tests that
+│                   # fail on a whole class of defect (API errors without a
+│                   # code, unregistered workspace paths, git and Graphify
+│                   # option injection, version references, and more)
 ├── core/           # AgentReasoningEngine, QueueService, SearchPipeline
 ├── infrastructure/ # ToolBox, Graphify, Logger, AuditLog, docs accuracy, etc.
 ├── interfaces/     # RestController, MCP server, CLI, security boundary
@@ -148,6 +151,7 @@ tests/
 ├── components/     # AgentChatTab, PluginsWindow, GraphStudio, Dashboard
 ├── frontend/       # FileUploader, Holocron, displayed version
 ├── electron/       # Desktop render and startup smoke tests
+├── scripts/        # setup.sh and the health watchdog
 ├── website/        # Downloads page
 ├── helpers/        # Shared test helpers
 └── fixtures/       # Test fixtures
@@ -261,9 +265,16 @@ npm run package             # Create .vsix file
 
 1. Fork the repository
 2. Work on `dev`, never `main` (see `CONTRIBUTING.md`)
-3. Make changes with tests
-4. Run `npm test` (and `npm run release:verify` before a release)
-5. Submit a pull request
+3. Start an OpenSpec change: `openspec-propose` in Claude Code, or a folder under
+   `openspec/changes/` by hand. `openspec/specs/` describes what the code does
+   today, and `openspec/config.yaml` holds the project rules
+4. Make changes from the change's `tasks.md`, with tests. A fix needs a
+   regression test that fails without it, and a guard test in
+   `tests/architecture/` when the bug is one of a class
+5. Run `npm test` (and `npm run release:verify` before a release), then
+   `openspec-verify-change` and `openspec-archive-change`, which merges the change's spec deltas
+   into `openspec/specs/`
+6. Submit a pull request
 
 ### Code Style
 

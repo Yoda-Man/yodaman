@@ -21,6 +21,11 @@ const chokidar = require('chokidar');
 const { WebSocketServer } = require('ws');
 const graphifyService = require('../infrastructure/GraphifyService');
 const logger = require('../infrastructure/Logger');
+const { isLocalOrigin } = require('../infrastructure/OriginPolicy');
+const pairingService = require('../infrastructure/PairingService');
+const settings = require('../infrastructure/SettingsProvider');
+const { isLocalRequest } = require('../interfaces/support/http');
+const { resolveRegisteredProjectPath } = require('../interfaces/support/workspaces');
 
 // ──────────────────────────────────────────────
 //  Contracts (kept as JSDoc types — no TS build step)
@@ -76,27 +81,42 @@ function findOpenSpecRoot(projectRoot) {
 }
 
 /**
- * Parse validation status from a change directory.
- * Reads `openspec validate <name> --json` output if available, else falls back
- * to checking whether the change dir exists.
+ * The workspace a Stardust request names. None means the runtime's own folder,
+ * which clients send before a workspace is selected; any other folder must be a
+ * registered workspace, so a caller cannot point Stardust at an arbitrary path.
+ * @throws {Error & {status:number, code:string}}
  */
-function getValidationStatus(_projectRoot, _changeName) {
-    // Default — caller should supply this from a CLI run.
-    // We store the last validation result per change in a simple Map.
-    if (!getValidationStatus._cache) getValidationStatus._cache = new Map();
-    return getValidationStatus._cache.get(_changeName) || 'unknown';
+function resolveProjectRoot(value) {
+    if (!value) return process.cwd();
+    try {
+        return resolveRegisteredProjectPath(value);
+    } catch (err) {
+        err.code ||= 'invalid_project_root';
+        throw err;
+    }
 }
 
-function setValidationStatus(changeName, status) {
-    if (!getValidationStatus._cache) getValidationStatus._cache = new Map();
-    getValidationStatus._cache.set(changeName, status);
+/**
+ * Last validation result per change, in memory. Keyed by workspace as well as
+ * change name: two workspaces can each have an `add-auth` change.
+ */
+const validationResults = new Map();
+// Paths cannot hold a null byte (resolveUserPath refuses one), so it cannot collide.
+const validationKey = (projectRoot, changeName) => `${path.resolve(projectRoot)}\0${changeName}`;
+
+function getValidationStatus(projectRoot, changeName) {
+    return validationResults.get(validationKey(projectRoot, changeName)) || 'unknown';
+}
+
+function setValidationStatus(projectRoot, changeName, status) {
+    validationResults.set(validationKey(projectRoot, changeName), status);
 }
 
 /**
  * Count tasks in a markdown file body.  Looks for `- [ ]` and `- [x]`.
  */
 function countTasks(md) {
-    const total = (md.match(/^[-*]\s+\[[ x]\]/gm) || []).length;
+    const total = (md.match(/^[-*]\s+\[[ x]\]/gim) || []).length;
     const done = (md.match(/^[-*]\s+\[x\]/gim) || []).length;
     return { total, done };
 }
@@ -123,16 +143,14 @@ function newestMtime(dir) {
     return latest;
 }
 
-/** Guess the status of a change from what files are present. */
-function guessStatus(changeDir) {
-    try {
-        const hasProposal = fs.existsSync(path.join(changeDir, 'proposal.md'));
-        const hasTasks = fs.existsSync(path.join(changeDir, 'tasks.md'));
-        if (hasProposal || hasTasks) return 'proposed';
-        return 'proposed'; // default
-    // An unreadable or half-written validation file means the change has not been
-    // validated yet, which is what 'proposed' already says.
-    } catch (_) { return 'proposed'; }
+/**
+ * Where a change stands: `applied` once every task is checked, `validated` once
+ * its last validation passed, otherwise `proposed`. Archived changes leave
+ * `changes/` for `changes/archive/`, so the board never lists them.
+ */
+function changeStatus(tasks, validation) {
+    if (tasks.total > 0 && tasks.done === tasks.total) return 'applied';
+    return validation === 'ok' ? 'validated' : 'proposed';
 }
 
 // ──────────────────────────────────────────────
@@ -152,19 +170,21 @@ function buildSnapshot(projectRoot) {
         // not an error. The board renders empty for it.
         try { entries = fs.readdirSync(changesDir, { withFileTypes: true }); } catch { entries = []; }
         for (const e of entries) {
-            if (!e.isDirectory()) continue;
+            // `openspec archive` moves finished changes into changes/archive/; it is not a change.
+            if (!e.isDirectory() || e.name === 'archive') continue;
             const changeDir = path.join(changesDir, e.name);
             let tasks = { total: 0, done: 0 };
             const tasksPath = path.join(changeDir, 'tasks.md');
             if (fs.existsSync(tasksPath)) {
                 try { tasks = countTasks(fs.readFileSync(tasksPath, 'utf8')); } catch (_) { /* skip */ }
             }
+            const validation = getValidationStatus(projectRoot, e.name);
             changes.push({
                 name: e.name,
-                status: guessStatus(changeDir),
+                status: changeStatus(tasks, validation),
                 taskCompleted: tasks.done,
                 taskTotal: tasks.total,
-                validation: getValidationStatus(projectRoot, e.name),
+                validation,
                 mtimeMs: newestMtime(changeDir),
             });
         }
@@ -193,6 +213,8 @@ function buildDeltas(projectRoot, changeName) {
     const root = findOpenSpecRoot(projectRoot);
     if (!root) return [];
 
+    // A change is one folder under changes/. Express decodes %2F, so refuse anything else.
+    if (!changeName || changeName !== path.basename(changeName) || changeName.startsWith('.')) return [];
     const changeDir = path.join(root, 'changes', changeName);
     if (!fs.existsSync(changeDir)) return [];
 
@@ -264,10 +286,21 @@ function broadcastTo(openspecRoot, msg) {
     for (const [ws, meta] of clients) {
         if (meta.openspecRoot !== openspecRoot) continue;
         if (ws.readyState !== 1) continue;
-        // A send that throws means the socket is gone. Dropping the client IS
+        // A send that throws means the socket is gone. Detaching the client IS
         // the handling; logging a disconnect per broadcast would be noise.
-        try { ws.send(payload); } catch (_) { clients.delete(ws); }
+        try { ws.send(payload); } catch (_) { detachClient(ws); }
     }
+}
+
+/**
+ * Forget a client and release its watcher reference. The one way out: a client
+ * dropped without the release kept its watcher open for the life of the process.
+ */
+function detachClient(ws) {
+    const meta = clients.get(ws);
+    if (!meta) return;
+    clients.delete(ws);
+    if (meta.openspecRoot) releaseWatcher(meta.openspecRoot);
 }
 
 /** The project root any client of this OpenSpec root is using, for snapshots. */
@@ -336,12 +369,35 @@ const EVENT_NAMES = {
     unlinkDir: 'directory removed',
 };
 
+/**
+ * The REST gates, applied to the WebSocket upgrade, which Express middleware never sees:
+ * no cross-site page, and a pairing token for a caller that is not this computer.
+ */
+function allowUpgrade(req) {
+    const origin = req.headers.origin;
+    if (origin && !isLocalOrigin(origin)) return false;
+    if (req.headers['sec-fetch-site'] === 'cross-site') return false;
+    if (isLocalRequest(req) || !settings.get('requirePairingToken')) return true;
+    return pairingService.validate(req.headers['x-yodaman-token']);
+}
+
 function attachToServer(httpServer) {
-    const wss = new WebSocketServer({ server: httpServer, path: '/api/stardust/live' });
+    const wss = new WebSocketServer({
+        server: httpServer,
+        path: '/api/stardust/live',
+        verifyClient: ({ req }) => allowUpgrade(req),
+    });
 
     wss.on('connection', (ws, req) => {
         const url = new URL(req.url, 'http://localhost');
-        const projectRoot = url.searchParams.get('projectRoot') || process.cwd();
+        let projectRoot;
+        try {
+            projectRoot = resolveProjectRoot(url.searchParams.get('projectRoot'));
+        } catch (err) {
+            try { ws.send(JSON.stringify({ type: 'error', message: err.message, code: err.code })); } catch (_) { /* gone */ }
+            ws.close(1008, err.code);
+            return;
+        }
         const openspecRoot = findOpenSpecRoot(projectRoot);
 
         clients.set(ws, { projectRoot, openspecRoot });
@@ -355,14 +411,8 @@ function attachToServer(httpServer) {
 
         if (openspecRoot) acquireWatcher(openspecRoot);
 
-        const detach = () => {
-            if (!clients.has(ws)) return;
-            clients.delete(ws);
-            if (openspecRoot) releaseWatcher(openspecRoot);
-        };
-
-        ws.on('close', detach);
-        ws.on('error', detach);
+        ws.on('close', () => detachClient(ws));
+        ws.on('error', () => detachClient(ws));
     });
 
     return wss;
@@ -394,8 +444,10 @@ function getDeltas(projectRoot, changeName) {
 
 module.exports = {
     attachToServer,
+    allowUpgrade,
     getSnapshot,
     getDeltas,
+    resolveProjectRoot,
     setValidationStatus,
     findOpenSpecRoot,
 };

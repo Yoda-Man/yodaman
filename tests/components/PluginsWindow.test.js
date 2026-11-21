@@ -58,4 +58,37 @@ describe('PluginsWindow page contract', () => {
         expect(manual).toContain('async execute');
         expect(manual).toContain('graphify:read');
     });
+
+    test('never offers to delete a shipped default, and shows a refused delete', () => {
+        // The trash button showed on every default but graphify; the server
+        // answered 403 and the page only logged it.
+        const text = source();
+        const deleteButton = text.slice(text.indexOf('onClick={() => deletePlugin(') - 600, text.indexOf('onClick={() => deletePlugin('));
+
+        expect(deleteButton).toContain('{!plugin.isDefault && (');
+        const handler = text.match(/const deletePlugin = async[\s\S]*?\n {4}\};/)[0];
+        expect(handler).toMatch(/catch \(err\) \{\s*setStatus\(\{ type: 'error'/);
+    });
+
+    test('the guide does not claim the refresh button reloads plugin files', () => {
+        // Refresh only calls GET /api/plugins; nothing on that route loads files.
+        const guide = fs.readFileSync(guidePath, 'utf8');
+        expect(guide).not.toMatch(/refresh<\/strong> button[^\]]*picked up without restarting/);
+        expect(guide).toContain('it does not load new files');
+    });
+
+    test('the guide names where disabled plugins are recorded and what api.fetch needs', () => {
+        // The disabled list moved to plugins.json in the data folder, and
+        // PluginAPI.fetch refuses a plugin without network or unrestricted.
+        const guide = fs.readFileSync(guidePath, 'utf8');
+        const toolBox = fs.readFileSync(path.resolve(__dirname, '../../backend/infrastructure/ToolBox.js'), 'utf8');
+        const pluginApi = fs.readFileSync(path.resolve(__dirname, '../../backend/infrastructure/PluginAPI.js'), 'utf8');
+
+        expect(toolBox).toContain("dataFile('plugins.json')");
+        expect(guide).not.toContain('plugins/config.json');
+        expect(guide).toMatch(/<Code>plugins\.json<\/Code> in YodaMan's data folder/);
+
+        expect(pluginApi).toMatch(/includes\('network'\)/);
+        expect(guide).toMatch(/\['network', '[^']*api\.fetch/);
+    });
 });

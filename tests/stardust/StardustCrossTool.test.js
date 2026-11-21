@@ -90,13 +90,22 @@ function buildWorkspace(root) {
 
 describe('Stardust cross-tool endpoints', () => {
     let root;
+    let previousConfig;
+
+    /** The routes only serve registered workspaces. */
+    const register = (...dirs) => fs.writeFileSync(process.env.YODAMAN_CONFIG_PATH, JSON.stringify({ watchedDirectories: dirs }));
 
     beforeEach(() => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), 'stardust-cross-'));
         buildWorkspace(root);
+        previousConfig = process.env.YODAMAN_CONFIG_PATH;
+        process.env.YODAMAN_CONFIG_PATH = path.join(root, 'config.json');
+        register(root);
     });
 
     afterEach(() => {
+        if (previousConfig === undefined) delete process.env.YODAMAN_CONFIG_PATH;
+        else process.env.YODAMAN_CONFIG_PATH = previousConfig;
         if (root) fs.rmSync(root, { recursive: true, force: true });
     });
 
@@ -155,6 +164,7 @@ describe('Stardust cross-tool endpoints', () => {
 
         test('each tool reports availability independently', async () => {
             const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'stardust-bare-'));
+            register(root, bare);
             try {
                 const res = await invoke('get', '/stardust/compose', {
                     query: { projectRoot: bare, file: 'src/router.js' },
@@ -247,6 +257,25 @@ describe('Stardust cross-tool endpoints', () => {
             expect(res.statusCode).toBe(200);
             expect(res.payload.available).toBe(false);
             expect(res.payload.reason).toBeTruthy();
+        });
+
+        test('reads the standard OpenSpec layout, specs/<id>/spec.md', async () => {
+            fs.mkdirSync(path.join(root, 'openspec', 'specs', 'auth'));
+            fs.writeFileSync(path.join(root, 'openspec', 'specs', 'auth', 'spec.md'), '# Auth\n');
+            const res = await invoke('get', '/stardust/spec', {
+                query: { projectRoot: root, spec: 'auth' },
+            });
+
+            expect(res.payload).toMatchObject({ available: true, path: 'openspec/specs/auth/spec.md', text: '# Auth\n' });
+        });
+
+        test('refuses a spec id whose folder form escapes the specs directory', async () => {
+            const res = await invoke('get', '/stardust/spec', {
+                query: { projectRoot: root, spec: '..' },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.payload.code).toBe('spec_outside_specs');
         });
 
         test('refuses a spec id that escapes the specs directory', async () => {

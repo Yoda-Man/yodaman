@@ -108,7 +108,7 @@ No manual rotation is needed, and no cron job should be added. To start
 afresh, use **Clear** in the Logs window (or `DELETE /api/logs` from this computer); it deletes
 `runtime.log` and its rotated copies.
 
-If the log directory cannot be written, the runtime logs `log_file_sink_disabled` once to stdout and carries
+If the log directory cannot be written, the runtime logs `log_file_sink_disabled` once to stderr and carries
 on — file logging failing never takes the runtime down. Seeing that message means the directory is
 unwritable, not that the runtime is unhealthy.
 
@@ -116,7 +116,7 @@ YodaMan also keeps local state, which does **not** self-rotate:
 
 - `yodaman.db` (task history and audit log, in the user's data folder; the Dashboard shows the path)
 - `sessions.json` (chat history), in the same data folder
-- `audit-log.jsonl`, `task-history.jsonl`, `audit-log.json`, and `task-history.json` in the same data folder, written only when SQLite cannot be opened
+- `audit-log.jsonl`, `task-history.jsonl`, `audit-log.json`, and `task-history.json` in the same data folder, written only when SQLite cannot be opened or a write to it fails
 
 To archive those, stop the runtime, move the files to a dated backup directory, then start the runtime again. Use `DELETE /api/audit` and `DELETE /api/agent/tasks` only when support intentionally wants to clear visible history.
 
@@ -163,9 +163,13 @@ explicitly. It has to be external: the failure blocks the event loop, so an
 in-process check is blocked with everything else.
 
 ```bash
-npm run health:watch     # continuous; prints only on a state change
+npm run health:watch     # continuous; quiet while healthy, prints each unhealthy probe
 npm run health:check     # one probe; exit 0 healthy, 1 wedged, 2 down, 3 slow
 ```
+
+It probes `http://127.0.0.1:<YODAMAN_PORT>` (port 3090 by default), so a
+runtime moved with `YODAMAN_PORT` is watched where it runs. `YODAMAN_HEALTH_URL`
+points it at another address.
 
 The exit codes make it usable from cron, launchd, or a monitoring agent:
 
@@ -203,8 +207,8 @@ restart and destroy the only record of the cause.
 ## Handle out-of-disk errors
 
 1. Stop the runtime.
-2. Check large `.yodaman-doc-chunks` directories inside watched workspaces.
-3. Archive or remove old `audit-log.jsonl` and `task-history.jsonl` files.
+2. Remove leftover `.yodaman-doc-chunks` directories inside watched workspaces (versions before 0.5.8 wrote them; current versions do not).
+3. Archive or remove old `audit-log.jsonl` and `task-history.jsonl` files in the data folder.
 4. Start the runtime and run a targeted reindex.
 
 ## Roll back a release
@@ -275,7 +279,7 @@ npm run release:verify
 ```
 
 That chains every gate: version check, build, lint, tests, coverage, production
-audit, vendored audit, release smoke, the journey, plugin and approval smokes,
+audit, vendored audit, the real-tools check, release smoke, the journey, plugin and approval smokes,
 and finally the packaged-app smoke. Ship only on exit 0. Then:
 
 ```bash
@@ -332,8 +336,8 @@ Expected results:
 ## Escalation Triggers
 
 **Escalate to:** Marwa Trust Mutemasango — GitHub [@Yoda-Man](https://github.com/Yoda-Man),
-trustaldo@gmail.com. Single maintainer; there is no secondary contact. For anything security-related, open a
-private advisory on the repository rather than a public issue.
+trustaldo@gmail.com. Single maintainer; there is no secondary contact. For anything security-related, follow
+`SECURITY.md` (email with `SECURITY` in the subject) rather than opening a public issue.
 
 Escalate when:
 

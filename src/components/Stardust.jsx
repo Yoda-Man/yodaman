@@ -195,7 +195,11 @@ export default function Stardust({ selectedProject }) {
 
             // Record the verdict against the change so its card stops saying "unknown".
             if (action === 'validate' && target) {
-                try { await api.stardustSetValidation(target, result.success ? 'ok' : 'error'); } catch (_) { /* card keeps its prior state */ }
+                try {
+                    await api.stardustSetValidation(target, result.success ? 'ok' : 'error', effectiveCwd || undefined);
+                } catch (err) {
+                    appendConsole(`✗ Could not record the validation result: ${err.message}`, 'error');
+                }
             }
             // Validating or archiving changes what the other tabs are reading.
             if (action === 'validate' || action === 'archive') refreshPipeline();

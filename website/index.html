@@ -121,7 +121,7 @@
         </article>
         <article>
           <h3>Drift detection</h3>
-          <p>The Drift tab compares current workspace state against active OpenSpec specs and flags every mismatch. Divergent files get severity badges, a side-by-side diff, and a one-click reindex action so you can close the gap before it grows.</p>
+          <p>The Drift tab compares your OpenSpec specs against the knowledge graph. It lists stale references (files a spec cites that no longer exist) and undocumented modules (files many others depend on that no spec describes), with a minimum-dependents filter and a Recheck button.</p>
         </article>
         <article>
           <h3>File-centric cross-reference</h3>
@@ -136,12 +136,12 @@
           <p>The Trace tab shows WHY each result ranked where it did. Every file gets four scores: semantic relevance from Context Expert, graph proximity to your active file, structural centrality from Graphify, and spec coverage from OpenSpec. The blend (0.50 + 0.20 + 0.15 + 0.15) is visible per result with colour-coded bars.</p>
         </article>
         <article>
-          <h3>Runtime diagnostics</h3>
-          <p>The Diagnostics tab surfaces runtime health at a glance. See Context Expert index freshness, Graphify graph state, OpenSpec CLI status, plugin health, and workspace connectivity in a single status grid with live WebSocket updates and colour-coded health badges.</p>
+          <h3>OpenSpec diagnostics</h3>
+          <p>The Diagnostics tab checks your OpenSpec setup: whether the CLI is installed, its version, and whether openspec/config.yaml exists, with Run Diagnostics, Install Now and Initialize Project buttons. A readiness checklist and per-tool detail for Context Expert, Graphify, and OpenSpec sit beside it.</p>
         </article>
         <article>
-          <h3>Command audit trail</h3>
-          <p>The Commands tab logs every tool execution with sanitized parameters, timing, exit codes, and result summaries. Filter by tool, status, or time range, and drill into any entry to see the full parameter payload and structured output.</p>
+          <h3>OpenSpec commands</h3>
+          <p>The Commands tab runs OpenSpec directly: Propose, Validate, Archive, List Changes, List Specs, and Draft Specs, with the output in a console beside them. Pick a change from the live board instead of retyping its name.</p>
         </article>
         <article>
           <h3>Impact Analysis</h3>
@@ -205,7 +205,7 @@
           </div>
           <div>
             <strong>Bridge VR and agent work</strong>
-            <span>Select a node, ask the agent about it, open it in VS Code, or use Git heatmaps and time travel to
+            <span>Select a node, ask the agent about it, open it in your editor, or use Git heatmaps and time travel to
               understand how the code evolved.</span>
           </div>
         </div>
@@ -243,7 +243,7 @@
       <div class="security-list">
         <div>
           <h3>Workspace boundaries</h3>
-          <p>File and command tools resolve paths against configured roots before they run.</p>
+          <p>File and command tools resolve paths against configured roots before they run, and git, Stardust and ask act only on workspaces you have added.</p>
         </div>
         <div>
           <h3>Command policy</h3>
@@ -255,7 +255,7 @@
         </div>
         <div>
           <h3>Audit logs</h3>
-          <p>Tool calls are recorded with status, duration, sanitized parameters, and result summaries.</p>
+          <p>Tool calls are recorded with status, duration, sanitized parameters, and result summaries. Only this computer can clear the log.</p>
         </div>
       </div>
     </section>
@@ -269,7 +269,7 @@
         <article>
           <h3>1. Prerequisites</h3>
           <pre><code># Required: Context Expert (workspace indexing &amp; search)
-npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node
+npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-java,tree-sitter-c-sharp,tree-sitter-c,tree-sitter-cpp,tree-sitter-php,tree-sitter-ruby,tree-sitter-powershell,onnxruntime-node
 
 # Required: OpenSpec (spec-driven development)
 npm install -g @fission-ai/openspec@latest
@@ -304,8 +304,8 @@ brew install ollama    # macOS
         <div>
           <p class="eyebrow">Bundled plugin</p>
           <h2>Holocron VR</h2>
-          <p>Holocron VR ships with YodaMan, so there is nothing to install: start YodaMan and open the
-            Holocron VR tab. The plugin zip in the downloads is the same build on its own, for its own repository's users.</p>
+          <p>Holocron VR ships with YodaMan, so there is nothing to install: start YodaMan and click
+            Load in VR in the Chat tab. The plugin zip in the downloads is the same build on its own, for its own repository's users.</p>
         </div>
         <pre><code>yodaman</code></pre>
       </div>
@@ -322,8 +322,8 @@ brew install ollama    # macOS
         <article>
           <h3>macOS Desktop</h3>
           <p>Apple Silicon build for macOS users who want the full local workspace experience.</p>
-          <a class="button primary" href="downloads/YodaMan-0.6.6-arm64-mac.zip" download>Download macOS ZIP</a>
-          <a class="button secondary" href="downloads/YodaMan-0.6.6-arm64.dmg" download>Download macOS DMG</a>
+          <a class="button primary" href="downloads/YodaMan-0.6.7-arm64-mac.zip" download>Download macOS ZIP</a>
+          <a class="button secondary" href="downloads/YodaMan-0.6.7-arm64.dmg" download>Download macOS DMG</a>
           <span>Unzip and drag to Applications, or mount the DMG and drag from there.</span>
         </article>
         <article>
@@ -336,8 +336,8 @@ brew install ollama    # macOS
         <article>
           <h3>Linux Desktop</h3>
           <p>Linux x64 AppImage and portable ZIP for flexible desktop installation.</p>
-          <a class="button primary" href="downloads/yodaman-0.6.6.zip" download>Download Linux ZIP</a>
-          <a class="button secondary" href="downloads/YodaMan-0.6.6.AppImage" download>Download AppImage</a>
+          <a class="button primary" href="downloads/yodaman-0.6.7.zip" download>Download Linux ZIP</a>
+          <a class="button secondary" href="downloads/YodaMan-0.6.7.AppImage" download>Download AppImage</a>
           <span>ZIP for portable setup, or make the AppImage executable (<code>chmod +x</code>) and run it directly.</span>
         </article>
         <article>
@@ -345,15 +345,15 @@ brew install ollama    # macOS
           <p>Install YodaMan from the Marketplace or download the VSIX for editor-native agent access.</p>
           <a class="button primary"
             href="https://marketplace.visualstudio.com/items?itemName=yodaman.vscode-yodaman">View on Marketplace</a>
-          <a class="button secondary" href="downloads/vscode-yodaman-0.6.6.vsix" download>Download VSIX</a>
+          <a class="button secondary" href="downloads/vscode-yodaman-0.6.7.vsix" download>Download VSIX</a>
           <span>Use the VSIX for offline installs or internal distribution.</span>
         </article>
         <article>
           <h3>Holocron VR Plugin</h3>
           <p>Install the Graphify VR explorer plugin for desktop 3D, WebXR code constellations, Git heatmaps, time
             travel, voice commands, and agent handoff.</p>
-          <a class="button primary" href="downloads/holocron-vr-0.6.6.zip" download>Download Plugin</a>
-          <span>Version 0.5.1. Extract into your YodaMan plugins directory, then reload plugins.</span>
+          <a class="button primary" href="downloads/holocron-vr-0.6.7.zip" download>Download Plugin</a>
+          <span>Extract into your YodaMan plugins directory, then reload plugins.</span>
         </article>
         <article>
           <h3>Android Mobile</h3>

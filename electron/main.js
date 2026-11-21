@@ -739,12 +739,14 @@ function loadLoadingState(message = 'Starting the local YodaMan runtime...') {
     }))}`);
 }
 
-function loadRuntimeUnavailable(_error) {
+// Every caller reaches this because the runtime failed to start or stopped,
+// so the page says so and names the reason, never "running".
+function loadRuntimeUnavailable(error) {
     if (!mainWindow) return;
     mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(diagnosticsPage({
         title: 'YodaMan — Diagnostics Dashboard',
-        message: 'The runtime is running but some dependencies need attention. Use the options below to resolve.',
-        status: { started: true },
+        message: `The runtime is not running: ${error?.message || 'it did not start'}. Check the logs below, then press Try Again.`,
+        status: { started: false },
         logs: runtimeLogBuffer.join('\n')
     }))}`);
 }

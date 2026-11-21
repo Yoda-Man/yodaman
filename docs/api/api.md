@@ -7,20 +7,31 @@ the request include the same ID.
 Other agents can reach the read paths without HTTP: `yodaman-mcp` exposes
 search, graph queries, impact and spec drift over MCP's stdio transport,
 proxying the routes below. See [MCP](../guides/mcp.md). Writes are deliberately
-absent from that surface — they are available here, behind the approval gate.
+absent from that surface. They are available here, and an agent task's writes
+wait for approval (see `POST /agent/task`).
 
 ## Access
 
 - Browser requests from another site are rejected before any route runs
-  (OriginPolicy). Requests from this computer are trusted.
+  (OriginPolicy, `403 cross_site_blocked`). Requests from this computer are
+  trusted.
 - When `requirePairingToken` is on (the default), a request from another
-  machine must send a valid pairing token in `X-YodaMan-Token`. See
+  machine must send a valid pairing token in `X-YodaMan-Token`, or it gets
+  `401 { "error": "Valid YodaMan pairing token is required", "code": "pairing_token_required" }`. See
   [Pairing](#pairing).
 - Some actions only work from this computer whatever the token: pairing,
   changing settings, Context Expert and Ollama configuration, opening files in
-  the editor, the editor picker, and Repair.
+  the editor, the editor picker, clearing the logs or the audit log, and Repair.
 
-Errors are JSON of the form `{ "error": "...", "code": "..." }` unless noted.
+Errors are JSON with an `error` message and a `code`
+(`{ "error": "...", "code": "..." }`). An `/api` path that matches no route
+answers `404` (`not_found`) as JSON, not the web app's page.
+
+Routes that act on a workspace (git commit, push, pull and new branch, every
+Stardust route, `/agent/task`, `/ask`, `/reindex`, `/readiness` and the
+Graphify routes)
+accept only a registered workspace, one added with `POST /projects`. Any other
+folder gets `404` (`workspace_not_registered`).
 
 ## Project Management
 
@@ -65,7 +76,8 @@ from the Context Expert index.
 
 ### `PUT /projects`
 Moves a watched project to a new path. The old path is unwatched and removed
-from the index; the new path is watched and queued for indexing.
+from the index; the new path is watched and queued for indexing. The new path
+must pass the same checks as `POST /projects`.
 
 **Body:** `{ "path": "/old/path", "nextPath": "/new/path" }`
 
@@ -84,13 +96,17 @@ Returns `404` (`project_not_found`) if `path` is not watched, and `409`
 ## Intelligence & AI
 
 ### `POST /ask`
-Answers a question about a workspace. When `projectId` resolves to a workspace,
-YodaMan adds the Graphify report and a question-specific graph traversal to the
-question before passing it to Context Expert (`ctx ask`). If Context Expert
-fails or takes longer than `YODAMAN_CTX_ASK_TIMEOUT_MS` (default 12000 ms),
-no model answers: the reply says so and returns the graph context and the top
-five search-pipeline matches instead.
+Answers a question about a workspace. `projectId` is a registered workspace's
+path or folder name; any other folder gets `404` (`workspace_not_registered`).
+For a workspace, YodaMan runs the question through the search pipeline (Context
+Expert retrieves, Graphify ranks, OpenSpec tags) and adds the top five matches,
+the Graphify report and a question-specific graph traversal to the prompt. It
+then asks Context Expert (`ctx ask`), scoped to that workspace. If Context
+Expert fails or takes longer than `YODAMAN_CTX_ASK_TIMEOUT_MS` (default
+12000 ms), no model answers: the reply says so and returns the graph context and
+those five matches instead.
 The question and answer are saved to the workspace's session and to its graph.
+A question with no letter or digit returns `400` (`invalid_question`).
 
 **Body:** `{ "question": "What does the auth service do?", "projectId": "/absolute/path/to/project" }`
 **Response:** `{ "answer": "The auth service handles..." }`
@@ -101,7 +117,9 @@ skill, and graph context when a workspace is given. Progress streams back as
 **Server-Sent Events**; every event carries the `taskId`.
 
 **Body:** `{ "task": "Implement a login form", "projectId": "/path/to/project", "fileIds": ["abc123"] }`
-(`fileIds`: up to 20 uploaded temp files, see [File Upload](#file-upload))
+(`fileIds`: up to 20 uploaded temp files, see [File Upload](#file-upload)).
+A `projectId` that is not a registered workspace gets `404`
+(`workspace_not_registered`) before any stream starts.
 
 **Events:**
 - `data: {"type": "task_started", "taskId": "abc123", "projectId": "/path/to/project"}`
@@ -115,7 +133,8 @@ skill, and graph context when a workspace is given. Progress streams back as
 - `data: {"type": "upload_error", "taskId": "abc123", "fileId": "abc123", "message": "..."}`
 
 ### `POST /agent/approve`
-Approves or rejects a pending agent write.
+Approves or rejects a pending agent write. Only the JSON boolean `true`
+approves; any other value, including the string `"true"`, rejects.
 
 **Body:** `{ "taskId": "abc123", "approved": true }`
 **Response:** `{ "message": "Signal sent" }`
@@ -130,7 +149,9 @@ Requests cancellation of an active agent task.
 Returns recent agent tasks, newest first. Task history is stored in
 `yodaman.db` in the YodaMan data folder (`task-history.json` and
 `task-history.jsonl` in the same folder are used only if the database cannot be
-opened).
+opened). The store keeps only the newest 100 tasks. A task that was still running or
+waiting for approval when the runtime stopped is loaded back as `cancelled`,
+with the error "Interrupted by a runtime restart."
 
 ### `GET /agent/tasks/:taskId/events`
 Returns the recorded events for one agent task.
@@ -187,7 +208,8 @@ Each result also keeps Context Expert's own fields for the hit. `graphSignal`
 and `graphRank` are present only when Graphify ranked the results, and
 `specFlag` only when the workspace has specs. `pillars` says which of the three
 actually contributed. A `project` whose folder no longer exists returns `404`
-(`workspace_missing`).
+(`workspace_missing`). A missing `query` returns
+`400 { "error": "Query is required", "code": "query_required" }`.
 
 ### `GET /search/code` and `GET /search/docs`
 The same, restricted to code or to documentation. Same query params; `top`
@@ -231,6 +253,10 @@ Clears all stored messages for a project.
 ## Git API
 
 Git endpoints run `git` in the given workspace directory, without a shell.
+The four writes (commit, push, pull, new branch) accept only a registered
+workspace (`404` `workspace_not_registered` otherwise). Request values never
+reach git as options: files are passed after `--`, and a branch name may not
+start with `-`.
 
 ### `GET /git/context`
 A compact status snapshot: current branch, ahead/behind counts, and the 8 most
@@ -333,8 +359,10 @@ Details for one commit.
 `additions` and `deletions` are `null` for binary files.
 
 ### `POST /git/commit`
-Stages files (all of them when `files` is omitted) and commits. Falls back to
-`--allow-empty` when there is nothing to commit.
+Stages files (all of them when `files` is omitted) and commits. `files`, when
+given, must be a non-empty array of paths (`400` otherwise). With nothing to
+commit, git's "nothing to commit" message comes back as the error; no empty
+commit is made.
 
 **Body:** `{ "path": "/path/to/workspace", "message": "feat: add login", "files": ["src/auth.js"] }`
 
@@ -348,7 +376,9 @@ Stages files (all of them when `files` is omitted) and commits. Falls back to
 ```
 
 ### `POST /git/push`
-Runs `git push` for the current branch.
+Runs `git push` for the current branch. Push and pull may take up to 10
+minutes. Git is never allowed to prompt, so a remote that needs a password
+fails at once.
 
 **Body:** `{ "path": "/path/to/workspace" }`
 
@@ -386,7 +416,11 @@ Creates and checks out a new branch.
 }
 ```
 
-Git mutations report failures as `500 { "ok": false, "error": "..." }`.
+Git mutations report failures as `{ "ok": false, "error": "...", "code": "..." }`:
+`500` with `git_commit_failed`, `git_push_failed`, `git_pull_failed` or
+`git_branch_failed` when git itself fails, and the request's own `4xx` and code
+(such as `400 invalid_request` or `404 workspace_not_registered`) when the
+request is refused.
 
 ## Editor
 
@@ -423,6 +457,7 @@ local sessions only). Default plugins (`graphify`, `Grand-Inquisitor`,
 
 ### `GET /plugins`
 Lists loaded plugins with name, description, parameters, and permissions.
+`isDefault` is `true` for the default plugins, which cannot be deleted.
 
 **Response:**
 ```json
@@ -432,18 +467,23 @@ Lists loaded plugins with name, description, parameters, and permissions.
     "description": "Code review plugin",
     "parameters": { "...": "..." },
     "permissions": ["unrestricted"],
-    "restricted": false
+    "restricted": false,
+    "isDefault": true
   }
 ]
 ```
 
 ### `POST /plugins`
 Uploads a plugin file (`.js` or `.zip`). A zip is extracted and its `main.js`
-(or first `.js` file) installed; `permissions` from a `plugin.json` inside the
-archive are added to the plugin. An uploaded plugin must declare its
-permissions, and may not replace an installed plugin file (`409` for a file name
-already in `plugins/`; delete the old one first). A plugin that fails
-validation is removed again. Returns `403` (`plugin_uploads_disabled`) unless uploads are on.
+(or first `.js` file) installed as `<archive name>.js`; `permissions` from a
+`plugin.json` inside the archive are added to the plugin. An uploaded plugin
+must declare its permissions, and may not replace an installed plugin: a file
+name already in `plugins/`, or a plugin name already loaded or disabled, gets
+`409` (`plugin_exists`); delete the old one first. A file name that is not
+letters, digits, `-` and `_` ending in `.js` or `.zip`, or a plugin that fails
+validation, gets `400` (`invalid_plugin`), and the plugin is removed again.
+Returns `403` (`plugin_uploads_disabled`) unless uploads are on, and `400`
+(`no_file`) without a file.
 
 **Body:** multipart/form-data with field `plugin` (the file).
 
@@ -456,7 +496,9 @@ validation is removed again. Returns `403` (`plugin_uploads_disabled`) unless up
 ```
 
 ### `DELETE /plugins/:name`
-Removes a plugin from disk. Default plugins return `403`; unknown plugins `404`.
+Removes a plugin from disk, whether it is enabled or disabled; a disabled
+plugin also leaves the disabled list. Default plugins return `403`
+(`mandatory_plugin`); unknown plugins `404` (`plugin_not_found`).
 
 **Response:** `{ "message": "Plugin deleted" }`
 
@@ -497,6 +539,8 @@ Re-enables a disabled plugin.
 
 ### `POST /plugins/:name/disable`
 Disables a plugin without removing its file. Default plugins return `403`.
+The disabled list is kept in `plugins.json` in the YodaMan data folder, so it
+survives upgrades.
 
 **Response:** `{ "message": "Plugin my-plugin disabled", "name": "my-plugin", "disabled": true }`
 
@@ -509,6 +553,7 @@ is missing. Every Graphify endpoint requires a registered workspace path.
 
 ### `GET /graphify/status`
 Graph availability, artifact health, staleness, and the last build summary.
+`available` is `true` only when the Graphify program can actually start.
 Large graphs can report `build.state: "partial"` when `graph.json` and the
 report exist but HTML artifacts were skipped.
 
@@ -549,7 +594,9 @@ Runs a natural-language graph traversal query.
 **Response:** `{ "path": "...", "insights": "...", "graphPath": "..." }`
 
 ### `POST /graphify/explain`
-Explains a node and its neighbouring graph context.
+Explains a node and its neighbouring graph context. A `node` starting with `-`
+gets `400` (`graphify_invalid_argument`), as do `source` and `target` in
+`/graphify/path`. A query's leading dashes are dropped.
 
 **Body:** `{ "path": "/absolute/path/to/project", "node": "AuthService" }`
 **Response:** `{ "path": "...", "node": "AuthService", "explanation": "...", "graphPath": "..." }`
@@ -563,7 +610,7 @@ Finds a graph path between two entities.
 ### `POST /graphify/affected`
 Impact analysis for a node, walking its graph edges in reverse.
 
-**Body:** `{ "path": "/absolute/path/to/project", "node": "AuthService", "depth": 2, "relations": [] }` (`depth` defaults to 2)
+**Body:** `{ "path": "/absolute/path/to/project", "node": "AuthService", "depth": 2, "relations": [] }` (`depth` defaults to 2; a whole number from 1 to 6, else `400` `graphify_invalid_argument`. `node` and relations must not start with `-`)
 **Response:** `{ "path": "...", "node": "...", "depth": 2, "relations": [], "graphPath": "...", "impact": ... }`
 
 ### `GET /graphify/map`
@@ -581,8 +628,9 @@ Generates Graphify's collapsible tree artifact (`graphify-out/GRAPH_TREE.html`).
 Stardust is YodaMan's OpenSpec workspace. It runs the OpenSpec CLI for
 validate, archive, list, init and diagnose, and compares intended architecture
 (OpenSpec specs) with actual structure (the Graphify graph). Every Stardust
-endpoint takes `projectRoot`; when it is omitted, the runtime's working
-directory is used.
+endpoint takes `projectRoot` (in the query, or in the body for `POST` and
+`PUT`); when it is omitted, the runtime's working directory is used. Any other
+folder must be a registered workspace (`404` `workspace_not_registered`).
 
 ### `GET /stardust/drift`
 Diffs OpenSpec specs against the knowledge graph: spec references to files that
@@ -658,7 +706,9 @@ Runs one Stardust action. Supported actions: `diagnose`, `validate` (needs
 `openspec/changes/<changeId>/` with template `proposal.md` (holding
 `description` when given), `design.md` and `tasks.md`. Existing files are not
 overwritten, and the response says what was created and what already existed.
-`changeId` may not contain path separators or `..`.
+`changeId` may not contain path separators or `..` (`400`
+`invalid_change_name`). A `validate` run stores its result for the change
+board, as `PUT /stardust/validation/:name` does.
 
 **Body:**
 ```json
@@ -705,13 +755,18 @@ WebSocket, and what the UI shows before the socket connects.
 }
 ```
 
-Changes are newest first. `validation` is the last result stored with
-`PUT /stardust/validation/:name`, or `unknown`. `graphStatus` is `current`,
+Changes are newest first. `status` is `applied` once every task in
+`tasks.md` is checked, `validated` once the last validation passed, and
+`proposed` otherwise. Archived changes (under `changes/archive/`) are not
+listed. `validation` is the last result stored for that change in that
+workspace (`ok`, `warn` or `error`), or `unknown`. `graphStatus` is `current`,
 `stale` or `unavailable`.
 
 ### `GET /stardust/deltas/:name`
 The spec deltas of a change, from the `## ADDED/MODIFIED/REMOVED/RENAMED
 Requirements` sections of its files under `openspec/changes/<name>/specs/`.
+A name that is not a single folder under `changes/` (it contains `/` or starts
+with `.`) returns an empty `deltas` list.
 
 **Query Params:** `projectRoot`
 
@@ -732,21 +787,27 @@ Requirements` sections of its files under `openspec/changes/<name>/specs/`.
 
 ### `PUT /stardust/validation/:name`
 Stores the last validation result for a change so the change board can show it.
-Results are kept in memory until the runtime restarts.
+Results are kept per workspace, in memory until the runtime restarts. Any other
+`status` gets `400` (`invalid_validation_status`).
 
-**Body:** `{ "status": "ok" | "warn" | "error" }`
+**Body:** `{ "status": "ok" | "warn" | "error", "projectRoot": "/path/to/project" }`
 **Response:** `{ "ok": true, "change": "add-login", "validation": "ok" }`
 
 ### `WS /api/stardust/live`
 WebSocket for live change-board updates. Sends a `snapshot` (the
 `GET /stardust/board` shape) on connect and after every change under
 `openspec/`, and an `activity` message for each file event. Connect with
-`?projectRoot=<path>` to watch a specific workspace.
+`?projectRoot=<path>` to watch a specific workspace. The upgrade passes the
+same gates as the REST routes: a cross-site page is refused, and a caller that
+is not this computer needs a valid `X-YodaMan-Token` when `requirePairingToken`
+is on. A refused upgrade gets HTTP 401. A `projectRoot` that is not a
+registered workspace gets an `error` message with its `code`, then the socket
+closes with code `1008`.
 
 **Message types:**
 - `{ "type": "snapshot", "data": { "changes": [...], "ready": true, "graphStatus": "current" } }`
 - `{ "type": "activity", "data": { "event": "modified", "path": "changes/add-login/tasks.md", "detail": "...", "timestamp": 1722672000000 } }`
-- `{ "type": "error", "message": "..." }`
+- `{ "type": "error", "message": "..." }` (with a `code` when the workspace is refused)
 
 ### `GET /stardust/compose`
 Everything the three tools know about one file: which OpenSpec specs mention it,
@@ -782,13 +843,17 @@ The current text of a published spec, for the SpecDiff view's "current" column.
 The spec ID is confined to `openspec/specs/`.
 
 **Query Params:** `projectRoot`, `spec` (spec ID, e.g. `auth` or `auth/session`)
-**Response:** `{ "available": true, "id": "auth", "path": "openspec/specs/auth.md", "text": "..." }`, or
+
+The spec is read from OpenSpec's own layout, `openspec/specs/<id>/spec.md`, or
+from a flat `openspec/specs/<id>.md`.
+
+**Response:** `{ "available": true, "id": "auth", "path": "openspec/specs/auth/spec.md", "text": "..." }`, or
 `{ "available": false, "id": "auth", "reason": "..." }` when OpenSpec is not set up or the spec does not exist yet.
 
 ### `GET /stardust/change-impact/:name`
 Resolves every file a change's spec deltas cite against the knowledge graph:
 per file, its dependents, centrality, blast radius, risk and test coverage,
-riskiest first. Cited files the graph does not know are listed as `stale`.
+riskiest first. Cited files the graph does not know are listed first, as `stale`.
 
 **Query Params:** `projectRoot`
 **Response:** `{ "change", "available", "deltaCount", "citedCount", "files": [...], "totals": { "inGraph", "stale", "blastRadius", "untested", "highestRisk" } }`
@@ -840,7 +905,8 @@ the Graphify graph state, so a client never has to reconcile them. Each layer is
 `missing`, `unindexed`, `building`, `stale` or `ready`, and the workspace takes
 the weakest.
 
-**Query Params:** `projectId` (optional — absolute path)
+**Query Params:** `projectId` (optional: a registered workspace's absolute
+path or folder name; any other folder gets `404` `workspace_not_registered`)
 
 Without `projectId`, every watched workspace:
 ```json
@@ -917,7 +983,7 @@ When Context Expert is unavailable the response degrades instead of failing:
   "llm": { "model": "Not Available", "provider": "none" },
   "ok": false,
   "error": "spawn ctx ENOENT",
-  "hint": "Context Expert is not working. Use Repair on the Dashboard, or run: npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node"
+  "hint": "Context Expert is not working. Use Repair on the Dashboard, or run: npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-java,tree-sitter-c-sharp,tree-sitter-c,tree-sitter-cpp,tree-sitter-php,tree-sitter-ruby,tree-sitter-powershell,onnxruntime-node"
 }
 ```
 
@@ -937,7 +1003,9 @@ The audit log is stored in `yodaman.db` in the YodaMan data folder
 database cannot be opened).
 
 ### `DELETE /audit`
-Clears the audit log.
+Clears the audit log. Only this computer may clear it
+(`403 audit_local_only` otherwise), so a paired device cannot erase the record
+of what it did.
 
 **Response:** `{ "message": "Audit logs cleared" }`
 
@@ -988,7 +1056,7 @@ Body fields:
 ### `GET /check`
 Checks a workspace path with Context Expert (`ctx check`). A path Context
 Expert does not manage is reported `healthy` with `ctxManaged: false` if it
-exists, and `404` if it does not.
+exists, and `404` (`path_missing`) if it does not.
 
 **Query Params:** `path` (required)
 
@@ -1022,6 +1090,8 @@ settings_local_only` otherwise). Accepted keys: `allowPluginUploads`,
 `allowUnrestrictedPlugins`, `allowAgentCommands`, `requirePairingToken`,
 `allowSelfHealInstall` (coerced to boolean), `allowedCommands` (bare executable
 names only), and `editorCommand` (`"system"` or `""` means the OS default). Plugin permissions are reloaded after a save.
+If `config.json` cannot be written, it answers `500` (`settings_save_failed`)
+and the change is not applied.
 
 **Body:** `{ "allowPluginUploads": true, "requirePairingToken": true }`
 

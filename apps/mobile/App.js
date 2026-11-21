@@ -32,6 +32,8 @@ import {
 // reports correct insets on notched devices, which the built-in one does not.
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { createYodaManClient } from './src/api/yodamanClient';
+import { driftRows, testCoverage } from './src/stardustView';
+import { hitPath } from '../../shared/searchHits';
 import { colors, fonts, radius, readout, statusColor } from './theme';
 import {
   EmptyState,
@@ -110,8 +112,12 @@ export default function App() {
       setConnected(true);
     } catch (error) {
       const message = error.message || 'YodaMan could not complete the request.';
-      setRuntimeNotice(message);
-      setConnected(false);
+      // An HTTP error status means the runtime answered (e.g. an unregistered
+      // workspace); only a request that got no answer means it is offline.
+      if (!error.status) {
+        setRuntimeNotice(message);
+        setConnected(false);
+      }
       Alert.alert(label, message);
     } finally {
       setBusy(false);
@@ -283,10 +289,11 @@ export default function App() {
     try {
       if (tab === 'connect') await client.status().then(setStatus).catch(() => {});
       if (tab === 'stardust') {
+        // Not swallowed: an unregistered workspace has to say so, not look empty.
         await Promise.all([
-          client.stardustBoard(selectedProjectId || undefined).then(setBoard).catch(() => {}),
-          client.stardustDrift(selectedProjectId || undefined).then(setDrift).catch(() => {})
-        ]);
+          client.stardustBoard(selectedProjectId || undefined).then(setBoard),
+          client.stardustDrift(selectedProjectId || undefined).then(setDrift)
+        ]).catch((error) => Alert.alert('Stardust failed', error.message));
       }
       if (tab === 'tasks') await loadTasksInline().catch(() => {});
       if (tab === 'approvals') {
@@ -608,11 +615,11 @@ function AskTab({ answer, busy, onAsk, onSearch, projectLabel, query, question, 
           <EmptyState text="No matches." />
         ) : (
           hits.slice(0, 25).map((hit, i) => (
-            <View key={`${hit.file || i}-${i}`} style={styles.rowItem}>
+            <View key={`${hitPath(hit)}-${i}`} style={styles.rowItem}>
               <Text style={styles.itemTitle} numberOfLines={1}>
-                {(hit.file || hit.path || 'result').split('/').filter(Boolean).pop()}
+                {hitPath(hit).split('/').filter(Boolean).pop() || 'result'}
               </Text>
-              <Text style={styles.itemMeta} numberOfLines={1}>{hit.file || hit.path}</Text>
+              <Text style={styles.itemMeta} numberOfLines={1}>{hitPath(hit)}</Text>
               {hit.specFlag?.covered ? (
                 <Pill label="spec" tone={colors.imperial} dim={colors.imperialDim} />
               ) : null}
@@ -626,7 +633,7 @@ function AskTab({ answer, busy, onAsk, onSearch, projectLabel, query, question, 
 
 function StardustTab({ board, busy, diagnose, drift, onLoad, onLoadDiagnostics, readiness }) {
   const changes = board?.changes || [];
-  const drifts = drift?.drifts || drift?.items || [];
+  const drifts = driftRows(drift);
   return (
     <>
       <Section title="Stardust board" hint="Active OpenSpec changes, read-only from the phone.">
@@ -654,14 +661,12 @@ function StardustTab({ board, busy, diagnose, drift, onLoad, onLoadDiagnostics, 
 
       <Section title="Drift" hint="Where the workspace has diverged from its specs.">
         {drifts.length === 0 ? (
-          <EmptyState text="No drift reported. Load the board first." />
+          <EmptyState text={drift?.available === false ? `Drift unavailable: ${drift.reason}` : 'No drift reported. Load the board first.'} />
         ) : (
           drifts.slice(0, 20).map((d, i) => (
-            <View key={d.file || i} style={styles.rowItem}>
-              <Text style={styles.itemTitle} numberOfLines={1}>
-                {(d.file || d.path || 'file').split('/').filter(Boolean).pop()}
-              </Text>
-              <Text style={styles.itemMeta} numberOfLines={1}>{d.reason || d.detail || d.file}</Text>
+            <View key={`${d.file}-${i}`} style={styles.rowItem}>
+              <Text style={styles.itemTitle} numberOfLines={1}>{d.file.split('/').filter(Boolean).pop()}</Text>
+              <Text style={styles.itemMeta} numberOfLines={2}>{d.file} · {d.detail}</Text>
             </View>
           ))
         )}
@@ -791,6 +796,7 @@ function ApprovalsTab({ approvals, busy, onDecide, onLoad }) {
         approvals.map((item) => {
           const label = item.approval?.params?.filePath || item.taskId;
           const impact = item.approval?.impact;
+          const coverage = testCoverage(impact);
           return (
             <HudFrame key={item.taskId} tone={colors.imperial}>
               <Text style={styles.itemTitle} numberOfLines={2}>{label}</Text>
@@ -800,8 +806,8 @@ function ApprovalsTab({ approvals, busy, onDecide, onLoad }) {
                   <KeyValue label="Dependents" value={impact.impactedCount ?? '—'} />
                   <KeyValue
                     label="Test coverage"
-                    value={impact.covered ? 'covered' : 'no covering test'}
-                    tone={impact.covered ? colors.jedi : colors.sith}
+                    value={coverage.label}
+                    tone={coverage.covered ? colors.jedi : colors.sith}
                   />
                 </>
               ) : null}

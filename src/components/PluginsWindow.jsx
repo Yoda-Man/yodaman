@@ -54,7 +54,7 @@ export default function PluginsWindow() {
             await api.deletePlugin(name);
             loadPlugins();
         } catch (err) {
-            console.error('Delete failed:', err);
+            setStatus({ type: 'error', message: `Could not remove ${name}: ${err.message}` });
         }
     };
 
@@ -131,7 +131,8 @@ export default function PluginsWindow() {
                     {/* Custom Plugins */}
                     {plugins.map((plugin, idx) => (
                         <div key={idx} className="p-8 rounded-[32px] bg-slate-900/40 border border-white/5 flex flex-col justify-between group hover:border-purple-500/30 transition-all relative overflow-hidden shadow-2xl">
-                            {plugin.name !== 'graphify' && (
+                            {/* The server refuses to delete the shipped defaults (403), so never offer it. */}
+                            {!plugin.isDefault && (
                                 <div className="absolute top-0 right-0 p-4">
                                     <button
                                         onClick={() => deletePlugin(plugin.name)}

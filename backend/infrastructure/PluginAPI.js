@@ -3,8 +3,13 @@
  */
 const _path=require('path'),{_Worker}=require('worker_threads');
 class PluginAPI{
-  constructor(dir){this.pluginDir=dir;this.workers=new Set();this.shortcuts=new Set();this._log=console;}
+  constructor(dir,permissions=[]){this.pluginDir=dir;this.permissions=permissions;this.workers=new Set();this.shortcuts=new Set();this._log=console;}
   async fetch(url,opts={}){
+    // A path such as "/api/graphify/status" calls this runtime, which is not outbound, so it needs no permission.
+    const own=url.startsWith('/');
+    if(own)url=`http://127.0.0.1:${Number(process.env.YODAMAN_PORT||3090)}${url}`;
+    // Outbound requests are what the `network` permission grants; `unrestricted` grants everything.
+    else if(!this.permissions.includes('network')&&!this.permissions.includes('unrestricted'))throw new Error('Plugin fetch needs the "network" permission');
     const m=require(url.startsWith('https')?'https':'http');
     return new Promise((res,rej)=>{
       const r=m.request(url,opts,(resp)=>{let d='';resp.on('data',c=>d+=c);resp.on('end',()=>res({ok:resp.statusCode<400,status:resp.statusCode,json:async()=>JSON.parse(d),text:async()=>d}));});

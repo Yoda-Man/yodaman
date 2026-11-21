@@ -9,7 +9,8 @@ const express = require('express');
 
 const gitService = require('../../services/gitService');
 const { jsonError, validateString } = require('../support/http');
-const { runGit, readGitContext } = require('../support/git');
+const { runGit, readGitContext, NETWORK_TIMEOUT_MS } = require('../support/git');
+const { resolveRegisteredProjectPath } = require('../support/workspaces');
 
 const router = express.Router();
 
@@ -88,56 +89,59 @@ router.get('/git/commit', async (req, res) => {
 });
 
 // ── Git mutations ──
+//
+// Only registered workspaces may be changed, and request values never reach git
+// where they could be read as options: files go after `--`, and a branch name
+// may not start with `-`.
 
-router.post('/git/commit', async (req, res) => {
-    try {
-        const dirPath = validateString(req.body?.path, 'path', { max: 2000 });
-        const message = validateString(req.body?.message, 'message', { max: 2000 });
-        const files = req.body?.files || ['.'];
-        const [branch, hash] = await Promise.all([
-            runGit(dirPath, ['rev-parse', '--abbrev-ref', 'HEAD']),
-            runGit(dirPath, ['add', ...files]).then(() =>
-                runGit(dirPath, ['commit', '-m', message]).catch(() =>
-                    runGit(dirPath, ['commit', '--allow-empty', '-m', message])
-                )
-            ).then(() => runGit(dirPath, ['rev-parse', 'HEAD']))
-        ]);
-        res.json({ ok: true, branch, hash: hash.substring(0, 7) });
-    } catch (err) {
-        res.status(500).json({ ok: false, error: err.message });
+/** Runs a mutation, answering `{ ok: false, error, code }` on failure. */
+function mutation(route, code, handler) {
+    router.post(route, async (req, res) => {
+        try {
+            res.json({ ok: true, ...(await handler(resolveRegisteredProjectPath(req.body?.path), req.body || {})) });
+        } catch (err) {
+            // A git failure's err.code is its exit status, so only our own 4xx errors keep theirs.
+            const own = Boolean(err.status);
+            res.status(err.status || 500).json({ ok: false, error: err.message, code: own ? err.code || 'invalid_request' : code });
+        }
+    });
+}
+
+function invalid(message) {
+    const err = new Error(message);
+    err.status = 400;
+    return err;
+}
+
+mutation('/git/commit', 'git_commit_failed', async (dirPath, body) => {
+    const message = validateString(body.message, 'message', { max: 2000 });
+    const files = body.files ?? ['.'];
+    if (!Array.isArray(files) || !files.length || !files.every(f => typeof f === 'string' && f)) {
+        throw invalid('files must be a non-empty array of paths');
     }
+    await runGit(dirPath, ['add', '--', ...files]);
+    // No --allow-empty fallback: "nothing to commit" is reported, not papered over.
+    await runGit(dirPath, ['commit', '-m', message]);
+    const [branch, hash] = await Promise.all([
+        runGit(dirPath, ['rev-parse', '--abbrev-ref', 'HEAD']),
+        runGit(dirPath, ['rev-parse', 'HEAD'])
+    ]);
+    return { branch, hash: hash.substring(0, 7) };
 });
 
-router.post('/git/push', async (req, res) => {
-    try {
-        const dirPath = validateString(req.body?.path, 'path', { max: 2000 });
-        const output = await runGit(dirPath, ['push']);
-        res.json({ ok: true, output });
-    } catch (err) {
-        res.status(500).json({ ok: false, error: err.message });
-    }
-});
+mutation('/git/push', 'git_push_failed', async (dirPath) => (
+    { output: await runGit(dirPath, ['push'], { timeout: NETWORK_TIMEOUT_MS }) }
+));
 
-router.post('/git/pull', async (req, res) => {
-    try {
-        const dirPath = validateString(req.body?.path, 'path', { max: 2000 });
-        const output = await runGit(dirPath, ['pull', '--rebase']);
-        res.json({ ok: true, output });
-    } catch (err) {
-        res.status(500).json({ ok: false, error: err.message });
-    }
-});
+mutation('/git/pull', 'git_pull_failed', async (dirPath) => (
+    { output: await runGit(dirPath, ['pull', '--rebase'], { timeout: NETWORK_TIMEOUT_MS }) }
+));
 
-router.post('/git/branch', async (req, res) => {
-    try {
-        const dirPath = validateString(req.body?.path, 'path', { max: 2000 });
-        const branch = validateString(req.body?.branch, 'branch', { max: 250 });
-        await runGit(dirPath, ['checkout', '-b', branch]);
-        res.json({ ok: true, branch });
-    } catch (err) {
-        res.status(500).json({ ok: false, error: err.message });
-    }
+mutation('/git/branch', 'git_branch_failed', async (dirPath, body) => {
+    const branch = validateString(body.branch, 'branch', { max: 250 });
+    if (branch.startsWith('-')) throw invalid('branch must not start with "-"');
+    await runGit(dirPath, ['checkout', '-b', branch]);
+    return { branch };
 });
-
 
 module.exports = router;

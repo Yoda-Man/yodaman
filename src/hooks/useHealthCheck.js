@@ -7,6 +7,7 @@
  * Components import this instead of writing their own fetch logic.
  */
 import { useState, useEffect, useCallback } from 'react'
+import { api } from '../api/api'
 
 const HEALTH_POLL_MS = 5000
 
@@ -22,9 +23,7 @@ export default function useHealthCheck() {
 
     const fetchHealth = useCallback(async () => {
         try {
-            const res = await fetch('/api/health')
-            if (!res.ok) throw new Error(`HTTP ${res.status}`)
-            const data = await res.json()
+            const data = await api.health()
             setHealth({
                 checks: data.checks || {},
                 services: data.services || {},

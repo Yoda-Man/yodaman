@@ -211,6 +211,20 @@ describe('MCP server without a runtime', () => {
         // No half-answer: it must be explicit that nothing was read.
         expect(text).toMatch(/Nothing was read/);
     }, 30000);
+
+    it('names the command that starts a runtime on the port it proxies', async () => {
+        // It said `yodaman start`, which worked only because an unknown command
+        // starts the runtime, and on 3090 whatever YODAMAN_PORT said.
+        const { messages } = await session([
+            INITIALIZE,
+            { jsonrpc: '2.0', method: 'notifications/initialized', params: {} },
+            { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'yodaman_projects', arguments: {} } }
+        ], { env: { YODAMAN_URL: '', YODAMAN_PORT: '59998' } });
+
+        const text = JSON.stringify(messages.find((m) => m.id === 3) || {});
+        expect(text).toMatch(/run `YODAMAN_PORT=59998 yodaman`/);
+        expect(text).not.toMatch(/yodaman start/);
+    }, 30000);
 });
 
 /**
@@ -264,11 +278,17 @@ async function callTool(name, args) {
 describe('MCP tools return real data', () => {
     let server;
     let workspace = null;
+    let dataDir;
 
     beforeAll(async () => {
+        // A throwaway data folder holding a copy of your config.json: the runtime
+        // sees your indexed workspaces but writes nothing into your own data.
+        dataDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'mcp-live-'));
+        const config = require('../../backend/infrastructure/DataPaths').configPath();
+        if (fs.existsSync(config)) fs.copyFileSync(config, path.join(dataDir, 'config.json'));
         server = spawn(process.execPath, [path.join(rootDir, 'server.js')], {
             cwd: rootDir,
-            env: { ...process.env, NODE_ENV: 'production', YODAMAN_PORT: String(LIVE_PORT) },
+            env: { ...process.env, NODE_ENV: 'production', YODAMAN_PORT: String(LIVE_PORT), YODAMAN_DATA_DIR: dataDir, YODAMAN_LOG_DIR: path.join(dataDir, 'logs') },
             stdio: ['ignore', 'pipe', 'pipe']
         });
 
@@ -303,6 +323,7 @@ describe('MCP tools return real data', () => {
         clearTimeout(timer);
         server.stdout.destroy();
         server.stderr.destroy();
+        fs.rmSync(dataDir, { recursive: true, force: true });
     }, 30000);
 
     it('yodaman_projects lists indexed workspaces', async () => {
@@ -384,4 +405,28 @@ describe('MCP tools return real data', () => {
         const text = JSON.stringify(result);
         expect(text).toMatch(/error|HTTP|not|\[\]/i);
     }, 120000);
+});
+
+describe('yodaman-mcp command line', () => {
+    const { execFileSync } = require('child_process');
+    const BIN = path.join(__dirname, '..', '..', 'bin', 'yodaman-mcp.mjs');
+    const run = (arg) => execFileSync(process.execPath, [BIN, arg], { encoding: 'utf8', timeout: 5000, input: '' });
+
+    test('--help prints usage and exits instead of starting the server', () => {
+        const out = run('--help');
+        expect(out).toContain('Usage: yodaman-mcp');
+        expect(out).not.toContain('"jsonrpc"');
+        expect(run('-h')).toBe(out);
+    });
+
+    test('--version prints the package version', () => {
+        expect(run('--version').trim()).toBe(require('../../package.json').version);
+    });
+
+    test('the help names exactly the tools the server registers', () => {
+        const source = require('fs').readFileSync(BIN, 'utf8');
+        const registered = [...source.matchAll(/registerTool\('([a-z_]+)'/g)].map((m) => m[1]).sort();
+        const listed = run('--help').match(/^Tools: (.*)$/m)[1].split(', ').sort();
+        expect(listed).toEqual(registered);
+    });
 });

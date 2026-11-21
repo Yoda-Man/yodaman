@@ -19,6 +19,7 @@ const GENERATED_HEADER = `/**
  *
  * It is also part of the published package (package.json "files") and is
  * required by shared/yodamanClient.js, so exports that look unused in-repo are
+ * public API for the clients that install the package. Keep them.
  */
 `;
 

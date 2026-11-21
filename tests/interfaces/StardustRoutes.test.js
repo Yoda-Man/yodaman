@@ -28,9 +28,14 @@ describe('Stardust routes', () => {
     let server;
     let baseUrl;
     let workspace;
+    let previousConfig;
 
     beforeAll(async () => {
         workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-stardust-'));
+        // The routes only serve registered workspaces.
+        previousConfig = process.env.YODAMAN_CONFIG_PATH;
+        process.env.YODAMAN_CONFIG_PATH = path.join(workspace, 'config.json');
+        fs.writeFileSync(process.env.YODAMAN_CONFIG_PATH, JSON.stringify({ watchedDirectories: [workspace] }));
 
         const app = express();
         app.use(express.json());
@@ -43,6 +48,8 @@ describe('Stardust routes', () => {
 
     afterAll(async () => {
         if (server) await new Promise((resolve) => server.close(resolve));
+        if (previousConfig === undefined) delete process.env.YODAMAN_CONFIG_PATH;
+        else process.env.YODAMAN_CONFIG_PATH = previousConfig;
         fs.rmSync(workspace, { recursive: true, force: true });
     });
 
@@ -102,8 +109,9 @@ describe('Stardust routes', () => {
                 projectRoot: workspace
             });
 
-            expect(status).toBeGreaterThanOrEqual(400);
-            expect(JSON.stringify(body)).toMatch(/change|invalid|separator|required/i);
+            // A refused name is the caller's mistake: 400 with its code, not a 500.
+            expect(status).toBe(400);
+            expect(body.code).toBe('invalid_change_name');
         });
 
         test('nothing was written outside the workspace', () => {
@@ -170,8 +178,40 @@ describe('Stardust routes', () => {
 
     describe('run rejects an unknown action', () => {
         test('does not silently succeed', async () => {
-            const { status } = await post('/api/stardust/run', { action: 'not-a-real-action', projectRoot: workspace });
-            expect(status).toBeGreaterThanOrEqual(400);
+            const { status, body } = await post('/api/stardust/run', { action: 'not-a-real-action', projectRoot: workspace });
+            expect(status).toBe(400);
+            expect(body.code).toBe('unknown_action');
+        });
+    });
+
+    describe('workspaces', () => {
+        test('run refuses a folder that is not a registered workspace', async () => {
+            const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-stardust-outside-'));
+            try {
+                const { status, body } = await post('/api/stardust/run', { action: 'propose', changeId: 'planted', projectRoot: outside });
+                expect(status).toBe(404);
+                expect(body.code).toBe('workspace_not_registered');
+                expect(fs.existsSync(path.join(outside, 'openspec'))).toBe(false);
+            } finally {
+                fs.rmSync(outside, { recursive: true, force: true });
+            }
+        });
+
+        test('validate stores its result for the workspace it ran in', async () => {
+            const stardustWrapper = require('../../backend/stardust/StardustWrapper');
+            const validate = jest.spyOn(stardustWrapper, 'validate').mockResolvedValue({ success: true, stdout: '', stderr: '', code: 0 });
+            try {
+                await post('/api/stardust/run', { action: 'propose', changeId: 'checked', projectRoot: workspace });
+                const ran = await post('/api/stardust/run', { action: 'validate', changeId: 'checked', projectRoot: workspace });
+                expect(ran.status).toBe(200);
+                expect(validate).toHaveBeenCalledWith('checked', { cwd: workspace });
+
+                const { body } = await get(`/api/stardust/board?projectRoot=${encodeURIComponent(workspace)}`);
+                expect(body.changes.find(c => c.name === 'checked')).toMatchObject({ validation: 'ok', status: 'validated' });
+            } finally {
+                validate.mockRestore();
+                fs.rmSync(path.join(workspace, 'openspec'), { recursive: true, force: true });
+            }
         });
     });
 });

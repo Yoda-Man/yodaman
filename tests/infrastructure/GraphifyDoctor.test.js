@@ -72,4 +72,19 @@ describe('GraphifyDoctor', () => {
         }));
         expect(graphifyDoctor.formatGraphDoctorReport(report)).toContain('Graphify active for 2 projects');
     });
+
+    test('a graph older than a source file does not count as fresh', () => {
+        // The doctor used to call every built graph fresh unless its build had
+        // failed or was running, so a graph a week behind the code read 100%.
+        const projectPath = writeProject('behind', { nodes: [{ id: 'a', source_file: 'a.js' }], links: [] }, { state: 'succeeded' });
+        const graphFile = path.join(projectPath, 'graphify-out', 'graph.json');
+        const old = new Date(Date.now() - 60 * 60 * 1000);
+        fs.utimesSync(graphFile, old, old);
+        fs.writeFileSync(path.join(projectPath, 'a.js'), 'edited after the build');
+
+        const report = graphifyDoctor.buildGraphDoctorReport({ projects: [{ name: 'behind', path: projectPath }] });
+
+        expect(report.projects[0].stale).toBe(true);
+        expect(report.freshnessPercent).toBe(0);
+    });
 });

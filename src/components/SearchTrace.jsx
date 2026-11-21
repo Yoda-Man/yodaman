@@ -8,7 +8,7 @@
  * The bars here are the values the ranker actually used, read from the
  * `graphSignal` it attaches to every hit — so when the graph knows nothing about
  * the results, this tab says the ordering was semantic-only instead of drawing
- * three bars that had no effect.
+ * four bars that had no effect.
  *
  * The active-file input is what makes proximity mean anything: without a file to
  * measure distance from, that term is zero for every hit. Setting it to the
@@ -17,12 +17,46 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-    Search, Brain, GitBranch, Network, FileText, Crosshair, Info, Target, ArrowRight,
+    Search, Brain, GitBranch, Network, FileText, Crosshair, Info, Target, ArrowRight, BookOpen,
 } from 'lucide-react';
 import { api } from '../api/api';
 import {
     Panel, EmptyState, Centered, Spinner, Label, Explainer, ErrorNote, SignalBar, StatTile,
 } from './StardustKit';
+
+// Mirrors GraphRanker.DEFAULT_WEIGHTS (a CommonJS backend module Vite cannot
+// import); tests/components/SearchTrace.test.js fails if the two drift.
+export const DEFAULT_WEIGHTS = { semantic: 0.50, proximity: 0.20, centrality: 0.15, specCoverage: 0.15 };
+
+// One entry per ranking term, so the legend cannot leave a weighted term out.
+const TERMS = [
+    { key: 'semantic', icon: Brain, color: 'text-purple-400' },
+    { key: 'proximity', icon: GitBranch, color: 'text-cyan-400' },
+    { key: 'centrality', icon: Network, color: 'text-amber-400' },
+    { key: 'specCoverage', icon: BookOpen, color: 'text-emerald-400' },
+];
+
+/** The blend the ranker applied, one term per weight. */
+export function FormulaLegend({ weights, graphRanked }) {
+    return (
+        <div className="rounded-2xl border border-indigo-500/10 bg-indigo-500/[0.03] px-5 py-3 flex items-center gap-4 flex-wrap">
+            <Label color="text-indigo-400">Ranking formula</Label>
+            <div className="flex items-center gap-3 text-[10px] font-mono flex-wrap">
+                {TERMS.map(({ key, icon: Icon, color }, i) => (
+                    <React.Fragment key={key}>
+                        {i > 0 && <span className="text-slate-600">+</span>}
+                        <span className="flex items-center gap-1.5"><Icon size={11} className={color} /><span className={color}>{key} × {weights[key]}</span></span>
+                    </React.Fragment>
+                ))}
+            </div>
+            {!graphRanked && (
+                <span className="ml-auto text-[10px] text-amber-400/90">
+                    Not applied to this query — the graph matched none of these hits.
+                </span>
+            )}
+        </div>
+    );
+}
 
 function hitPath(hit) {
     if (typeof hit === 'string') return hit;
@@ -67,7 +101,7 @@ export default function SearchTrace({ projectRoot, focusFile, onOpenFile }) {
     };
 
     const results = response?.results || [];
-    const weights = response?.weights || { semantic: 0.50, proximity: 0.20, centrality: 0.15, specCoverage: 0.15 };
+    const weights = response?.weights || DEFAULT_WEIGHTS;
     const graphRanked = Boolean(response?.graphRanked);
     const inGraphCount = results.filter(hit => hit?.graphSignal?.inGraph).length;
 
@@ -143,21 +177,7 @@ export default function SearchTrace({ projectRoot, focusFile, onOpenFile }) {
                     </div>
 
                     {/* Formula legend with the live weights */}
-                    <div className="rounded-2xl border border-indigo-500/10 bg-indigo-500/[0.03] px-5 py-3 flex items-center gap-4 flex-wrap">
-                        <Label color="text-indigo-400">Ranking formula</Label>
-                        <div className="flex items-center gap-3 text-[10px] font-mono flex-wrap">
-                            <span className="flex items-center gap-1.5"><Brain size={11} className="text-purple-400" /><span className="text-purple-400">semantic × {weights.semantic}</span></span>
-                            <span className="text-slate-600">+</span>
-                            <span className="flex items-center gap-1.5"><GitBranch size={11} className="text-cyan-400" /><span className="text-cyan-400">proximity × {weights.proximity}</span></span>
-                            <span className="text-slate-600">+</span>
-                            <span className="flex items-center gap-1.5"><Network size={11} className="text-amber-400" /><span className="text-amber-400">centrality × {weights.centrality}</span></span>
-                        </div>
-                        {!graphRanked && (
-                            <span className="ml-auto text-[10px] text-amber-400/90">
-                                Not applied to this query — the graph matched none of these hits.
-                            </span>
-                        )}
-                    </div>
+                    <FormulaLegend weights={weights} graphRanked={graphRanked} />
 
                     <Panel title={`Results (${results.length})`} icon={FileText} color="indigo">
                         {results.length === 0 ? (
@@ -185,7 +205,8 @@ export default function SearchTrace({ projectRoot, focusFile, onOpenFile }) {
                     <Explainer title="Reading the bars" icon={Info}>
                         <p><b className="text-purple-400">Semantic ({weights.semantic}):</b> how well the file's embedding matches the query, normalized across this result set. Context Expert computes it from indexed chunks.</p>
                         <p><b className="text-cyan-400">Proximity ({weights.proximity}):</b> hops from the active file through Graphify's dependency graph, decaying to zero at three hops. With no active file this term is zero for everything.</p>
-                        <p><b className="text-amber-400">Centrality ({weights.centrality}):</b> how connected the file is, relative to the busiest file in the graph. Weighted lowest on purpose — a hub is otherwise relevant to every query.</p>
+                        <p><b className="text-amber-400">Centrality ({weights.centrality}):</b> how connected the file is, relative to the busiest file in the graph. Weighted low on purpose — a hub is otherwise relevant to every query.</p>
+                        <p><b className="text-emerald-400">Spec ({weights.specCoverage}):</b> 1 when an OpenSpec spec in this workspace cites the file, 0 otherwise. Files with recorded intent rank a little higher.</p>
                         <p className="text-slate-600">Reranking is advisory. With no graph, or no graph coverage of the hits, Context Expert's original order is returned untouched and this tab says so rather than implying structure was applied.</p>
                     </Explainer>
                 </>

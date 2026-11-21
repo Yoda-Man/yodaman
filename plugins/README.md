@@ -23,20 +23,34 @@ A plugin that declares `write`, `unrestricted`, `command`, `audit:write`,
 `agent:invoke` or `task:create` pauses for your approval every time the agent
 calls it (`shared/toolCapabilities.js`).
 
+Permissions are declarative. A plugin runs inside the runtime with full Node.js
+access, so a permission says what the plugin intends and drives the approval
+gate; it is not a sandbox. Install only plugins you trust. The plugin API
+enforces one permission itself: `api.fetch` to another host works only for a
+plugin that declares `network` or `unrestricted`. A path such as
+`/api/graphify/status` calls the local YodaMan runtime and needs no permission.
+
 ## Adding a plugin
 
 `yodaman create-plugin <name>` writes `plugins/<name>.js`, a test beside it, and
-an entry in this file to fill in.
+an entry in this file to fill in. The name must start with a letter and hold
+only letters, digits, `-` and `_`, at most 64 characters.
 
 Uploading a plugin from the app is off by default. Turn on **Plugin Uploads** in
 Settings, or set `YODAMAN_ALLOW_PLUGIN_UPLOADS=true`. An upload is a `.js` file
 or a `.zip`; from a zip, `main.js` is used if present, otherwise the first `.js`
-file, and a `permissions` array in a `plugin.json` inside it is applied.
-Uploads must declare `permissions`.
+file, and it is installed as `<archive name>.js`. A `permissions` array in a
+`plugin.json` inside the zip is applied. Uploads must declare `permissions`. An
+upload may not replace an installed plugin, by file name or by plugin name;
+delete the old one first.
+
+Disabling a plugin keeps its file. The list of disabled plugins is kept in
+`plugins.json` in the YodaMan data folder, so it survives upgrades. A disabled
+plugin can still be deleted.
 
 ## Bundled plugins
 
-The first five are defaults and cannot be removed.
+The first five are defaults and cannot be removed or disabled.
 
 | Plugin | File | Permissions |
 | --- | --- | --- |

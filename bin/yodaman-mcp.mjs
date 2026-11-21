@@ -38,6 +38,8 @@ const { version } = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'u
 
 const PORT = Number(process.env.YODAMAN_PORT) || 3090;
 const RUNTIME = process.env.YODAMAN_URL || `http://127.0.0.1:${PORT}`;
+// The command that starts a runtime on the port this proxies, so the advice works.
+const START_COMMAND = PORT === 3090 ? 'yodaman' : `YODAMAN_PORT=${PORT} yodaman`;
 const TIMEOUT_MS = Number(process.env.YODAMAN_MCP_TIMEOUT) || 120000;
 
 /** Protocol output is stdout; anything else would corrupt the stream. */
@@ -93,8 +95,9 @@ async function call(pathname, { method = 'GET', body } = {}) {
             ? `the runtime did not answer within ${Math.round(TIMEOUT_MS / 1000)}s`
             : `the runtime at ${RUNTIME} is not reachable`;
         throw new Error(
-            `${reason}. Start YodaMan (open the desktop app, or run \`yodaman start\`), `
-            + 'then try again. Nothing was read.'
+            `${reason}. Start YodaMan (open the desktop app, or run \`${START_COMMAND}\`), `
+            + 'then try again. Nothing was read.',
+            { cause: err }
         );
     }
 
@@ -214,7 +217,22 @@ server.registerTool('yodaman_spec_drift', {
     return asResult(await call(`/api/stardust/drift?${params}`));
 });
 
+const USAGE = `yodaman-mcp ${version}: YodaMan's read-only MCP server over stdio.
+
+Usage: yodaman-mcp            start the server (an MCP client launches this)
+       yodaman-mcp --help     show this help
+       yodaman-mcp --version  show the version
+
+Tools: yodaman_projects, yodaman_search, yodaman_graph_query, yodaman_impact, yodaman_spec_drift
+Proxies the YodaMan runtime at ${RUNTIME}. Change it with YODAMAN_PORT or YODAMAN_URL.
+`;
+
 async function main() {
+    // A person asking what this is must not get a server waiting silently on stdin.
+    const arg = process.argv[2];
+    if (arg === '--help' || arg === '-h') { process.stdout.write(USAGE); return; }
+    if (arg === '--version' || arg === '-v') { process.stdout.write(`${version}\n`); return; }
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
     note(`v${version} ready on stdio, proxying ${RUNTIME} (read-only)`);

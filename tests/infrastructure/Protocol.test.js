@@ -42,4 +42,14 @@ describe('Protocol Generation Consistency', () => {
         expect(emitted.size).toBeGreaterThan(5);
         expect([...emitted].filter((type) => !Object.values(TASK_EVENT_TYPES).includes(type))).toEqual([]);
     });
+
+    it('opens with a header whose every sentence is finished', () => {
+        // It stopped at "so exports that look unused in-repo are".
+        for (const file of ['yodamanProtocol.js', 'yodamanProtocol.d.ts']) {
+            const text = fs.readFileSync(path.resolve(__dirname, '../../shared', file), 'utf8');
+            const header = text.slice(0, text.indexOf('*/'));
+            const lastLine = header.trimEnd().split('\n').pop().replace(/^\s*\*\s?/, '');
+            expect(lastLine).toMatch(/[.!?]$/);
+        }
+    });
 });

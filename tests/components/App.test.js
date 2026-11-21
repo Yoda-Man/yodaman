@@ -47,4 +47,14 @@ describe('App.jsx tab persistence contract', () => {
         expect(tabContent).toContain('<Stardust');
         expect(tabContent).toContain('<PluginsWindow');
     });
+
+    test('offers no "Include in context" toggle, since nothing reads it', () => {
+        // The toggle flipped a client-only `included` flag that no search,
+        // agent task or server route ever used.
+        const list = fs.readFileSync(path.resolve(__dirname, '../../src/components/ProjectList.jsx'), 'utf8');
+        const app = fs.readFileSync(componentPath, 'utf8');
+
+        expect(list).not.toMatch(/Include in context|Exclude from context/);
+        expect(`${list}\n${app}`).not.toMatch(/\bincluded\b|onToggle/);
+    });
 });

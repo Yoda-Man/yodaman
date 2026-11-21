@@ -87,6 +87,39 @@ describe('gitService', () => {
         }));
     });
 
+    test('branch info counts commits ahead of and behind the upstream', async () => {
+        // simple-git's branchLocal() reports neither, so both were always 0.
+        const main = git(workspace, ['rev-parse', '--abbrev-ref', 'HEAD']);
+        git(workspace, ['checkout', '-q', '-b', 'upstream', 'HEAD~1']);
+        fs.writeFileSync(path.join(workspace, 'gamma.js'), 'gamma\n');
+        git(workspace, ['add', 'gamma.js']);
+        git(workspace, ['commit', '-q', '-m', 'Only upstream']);
+        git(workspace, ['checkout', '-q', main]);
+        git(workspace, ['branch', '-q', '--set-upstream-to=upstream']);
+
+        const branch = await gitService.getBranchInfo(workspace);
+        expect(branch).toEqual(expect.objectContaining({ currentBranch: main, ahead: 1, behind: 1 }));
+    });
+
+    test('branch info without an upstream reports 0 ahead and 0 behind', async () => {
+        const branch = await gitService.getBranchInfo(workspace);
+        expect(branch).toEqual(expect.objectContaining({ ahead: 0, behind: 0 }));
+    });
+
+    test('the heatmap window follows the days asked for', async () => {
+        const old = new Date(Date.now() - 60 * 86400000).toISOString();
+        fs.writeFileSync(path.join(workspace, 'old.js'), 'old\n');
+        git(workspace, ['add', 'old.js']);
+        execFileSync('git', ['commit', '-m', 'Old change', '--date', old], {
+            cwd: workspace, env: { ...process.env, GIT_COMMITTER_DATE: old }
+        });
+
+        const files = async (days) => (await gitService.getHeatmapData(workspace, days)).map((f) => f.filePath);
+        expect(await files()).not.toContain('old.js');
+        expect(await files(90)).toContain('old.js');
+        expect(await files('nonsense')).not.toContain('old.js');
+    });
+
     describe('timeline', () => {
         test('lists commits oldest first, with each file and whether it was added or modified', async () => {
             const { commits, truncated } = await gitService.getTimeline(workspace);

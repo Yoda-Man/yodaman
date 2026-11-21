@@ -101,6 +101,59 @@ describe('AgentChatTab component contract', () => {
         expect(text).toContain('isApprovable={pendingApproval?.messageId === message.id}');
     });
 
+    test('loads, saves and clears server history under the same workspace key', () => {
+        // agentTask stored history under the path while getSessions/clearSessions
+        // asked for the id, so history never came back and Clear cleared nothing.
+        const text = read(componentPath);
+        const keys = [
+            ...[...text.matchAll(/api\.agentTask\(task, ([\w.?]+)/g)].map(m => m[1]),
+            ...[...text.matchAll(/api\.(?:getSessions|clearSessions)\(([\w.?]+)\)/g)].map(m => m[1])
+        ];
+
+        expect(keys).toHaveLength(3);
+        expect(new Set(keys)).toEqual(new Set(['selectedProject.path']));
+    });
+
+    test('keeps every field of the approval event the engine emits', () => {
+        // specImpact was dropped here, so "described by spec" never showed.
+        const engine = read(path.resolve(__dirname, '../../backend/core/AgentReasoningEngine.js'));
+        const event = engine.match(/const approvalEvent = \{([\s\S]*?)\};/);
+        expect(event).not.toBeNull();
+        const fields = [...event[1].matchAll(/^\s*(\w+)/gm)].map(m => m[1]).filter(f => !['type', 'taskId'].includes(f));
+        expect(fields).toEqual(expect.arrayContaining(['params', 'impact', 'specImpact']));
+
+        const handler = read(componentPath).match(/case 'awaiting_approval':([\s\S]*?)return\n/)[1];
+        for (const field of fields) expect(handler).toContain(`step.${field}`);
+    });
+
+    describe('approval preview', () => {
+        const React = require('react');
+        const { renderToStaticMarkup } = require('react-dom/server');
+        beforeAll(() => require('../helpers/browserStub').installBrowserStub());
+        const render = (params) => {
+            const { ApprovalPreview } = require('../../src/components/AgentChatTab');
+            return renderToStaticMarkup(React.createElement(ApprovalPreview, { params }));
+        };
+
+        test('shows the arguments of a call that names no file', () => {
+            const html = render({ filePath: null, oldContent: null, newContent: null, arguments: { command: 'npm test' } });
+            expect(html).toContain('npm test');
+            expect(html).not.toContain('No line-level changes detected');
+        });
+
+        test('says an unpredictable edit cannot be previewed instead of deleting every line', () => {
+            const html = render({ filePath: 'src/a.js', oldContent: 'keep me\nand me', newContent: null });
+            expect(html).toContain('cannot be predicted');
+            expect(html).not.toContain('- keep me');
+        });
+
+        test('still diffs a predictable edit', () => {
+            const html = render({ filePath: 'src/a.js', oldContent: 'old line', newContent: 'new line' });
+            expect(html).toContain('- old line');
+            expect(html).toContain('+ new line');
+        });
+    });
+
     test('lets the user stop a running agent task', () => {
         const text = read(componentPath);
 

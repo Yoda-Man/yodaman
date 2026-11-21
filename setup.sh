@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # YodaMan System Doctor & Installer 🚀
-# Version 1.0.0
 
 set -e
 
@@ -27,6 +26,29 @@ check_graphify() {
     ls "$HOME"/Library/Python/*/bin/graphify >/dev/null 2>&1
 }
 
+# Minimums: package.json "engines" and DependencyChecker's SERVICES.ctx.minVersion.
+NODE_MIN_MAJOR=24
+CTX_MIN_VERSION=1.3.4
+
+# True when dotted version $1 is at least $2 (a leading "v" and any suffix are ignored).
+version_at_least() {
+    awk -v have="$1" -v need="$2" 'BEGIN {
+        sub(/^v/, "", have); match(have, /^[0-9.]*/); have = substr(have, 1, RLENGTH)
+        split(have, h, "."); split(need, n, ".")
+        for (i = 1; i <= 3; i++) { if (h[i] + 0 > n[i] + 0) exit 0; if (h[i] + 0 < n[i] + 0) exit 1 }
+        exit 0
+    }'
+}
+
+node_version_ok() {
+    version_at_least "$(node -v 2>/dev/null)" "$NODE_MIN_MAJOR"
+}
+
+# A ctx that fails to report a version counts as too old, as in DependencyChecker.
+ctx_version_ok() {
+    version_at_least "$(ctx --version 2>/dev/null | head -n 1)" "$CTX_MIN_VERSION"
+}
+
 # 1. Check for Homebrew (MacOS Package Manager)
 echo -ne "🔍 Checking Homebrew... "
 if check_cmd brew; then
@@ -40,7 +62,13 @@ fi
 # 2. Check for Node.js
 echo -ne "🔍 Checking Node.js... "
 if check_cmd node; then
-    echo -e "${GREEN}OK ($(node -v))${NC}"
+    if node_version_ok; then
+        echo -e "${GREEN}OK ($(node -v))${NC}"
+    else
+        echo -e "${RED}Too old ($(node -v))${NC}"
+        echo -e "YodaMan needs Node.js ${NODE_MIN_MAJOR} or newer. Upgrade it (brew upgrade node, or nvm install ${NODE_MIN_MAJOR}) and run setup.sh again."
+        exit 1
+    fi
 else
     echo -e "${YELLOW}Missing${NC}"
     echo -e "📦 Installing Node.js..."
@@ -70,12 +98,16 @@ fi
 
 # 5. Check for Context Expert (ctx)
 echo -ne "🔍 Checking Context Expert (ctx)... "
-if check_cmd ctx; then
-    echo -e "${GREEN}OK${NC}"
+if check_cmd ctx && ctx_version_ok; then
+    echo -e "${GREEN}OK ($(ctx --version | head -n 1))${NC}"
 else
-    echo -e "${YELLOW}Missing${NC}"
+    if check_cmd ctx; then
+        echo -e "${YELLOW}Too old ($(ctx --version 2>/dev/null | head -n 1)); YodaMan needs ${CTX_MIN_VERSION} or newer${NC}"
+    else
+        echo -e "${YELLOW}Missing${NC}"
+    fi
     echo -e "📦 Installing yodaman-ctx (YodaMan's Context Expert) globally..."
-    npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node
+    npm install -g yodaman-ctx --allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-java,tree-sitter-c-sharp,tree-sitter-c,tree-sitter-cpp,tree-sitter-php,tree-sitter-ruby,tree-sitter-powershell,onnxruntime-node
 fi
 
 # 6. Check for Graphify

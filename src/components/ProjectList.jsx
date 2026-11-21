@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { RefreshCw, CheckCircle, Circle, Folder, Plus, CheckCircle2, AlertCircle, Pencil, Save, Trash2, X } from 'lucide-react'
+import { RefreshCw, Folder, Plus, CheckCircle2, AlertCircle, Pencil, Save, Trash2, X } from 'lucide-react'
 import { api } from '../api/api'
 
 export default function ProjectList({ 
     projects, 
     selectedProject, 
     onSelect, 
-    onToggle, 
     onReindex, 
     onOpenSettings,
     onRefresh,
@@ -154,17 +153,6 @@ export default function ProjectList({
                                         title="Update file path"
                                     >
                                         <Pencil size={14} />
-                                    </button>
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); onToggle(project.id); }} 
-                                        className={`p-1.5 rounded-lg transition-all ${
-                                            project.included 
-                                            ? 'text-indigo-400 bg-indigo-400/10' 
-                                            : 'text-slate-700 hover:text-slate-500 hover:bg-slate-700/10'
-                                        }`}
-                                        title={project.included ? 'Exclude from context' : 'Include in context'}
-                                    >
-                                        {project.included ? <CheckCircle size={16} /> : <Circle size={16} />}
                                     </button>
                                     <button 
                                         onClick={(e) => deleteProject(e, project)}

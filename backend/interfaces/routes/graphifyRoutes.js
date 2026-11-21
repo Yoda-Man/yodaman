@@ -262,7 +262,8 @@ router.post('/graphify/affected', async (req, res) => {
     try {
         dirPath = resolveRegisteredProjectPath(req.body?.path);
         const node = validateString(req.body?.node, 'node', { max: 1000 });
-        const depth = Number(req.body?.depth || 2);
+        // GraphifyService.affected refuses anything but a whole number in range (400).
+        const depth = Number(req.body?.depth ?? 2);
         const relations = Array.isArray(req.body?.relations)
             ? req.body.relations.map(relation => validateString(relation, 'relation', { max: 100 }))
             : [];

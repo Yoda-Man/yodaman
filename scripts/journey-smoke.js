@@ -23,7 +23,10 @@
 // The runtime this starts logs here, not into the user's ~/.yodaman/logs/runtime.log.
 process.env.YODAMAN_LOG_DIR = process.env.YODAMAN_LOG_DIR || require('path').join(require('os').tmpdir(), 'yodaman-smoke-logs');
 const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { ollamaUrl } = require('../backend/infrastructure/OllamaConfig');
 
 // A dedicated port, NOT the 3090 the desktop app uses.
 //
@@ -40,6 +43,18 @@ const ADOPT_EXISTING = Boolean(process.env.YODAMAN_SMOKE_URL);
 const RUNTIME_URL = process.env.YODAMAN_SMOKE_URL || `http://127.0.0.1:${SMOKE_PORT}`;
 const EXPECTED_WEIGHTS = ['semantic', 'proximity', 'centrality', 'specCoverage'];
 const log = (msg) => process.stdout.write(`${msg}\n`);
+
+/**
+ * A throwaway data folder for the runtime this starts, seeded with a copy of
+ * your config.json so it sees your workspaces and model. Its sessions, task
+ * history and audit log land here, never in your own data folder.
+ */
+function smokeDataDir() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-smoke-data-'));
+    const config = require('../backend/infrastructure/DataPaths').configPath();
+    if (fs.existsSync(config)) fs.copyFileSync(config, path.join(dir, 'config.json'));
+    return dir;
+}
 
 async function reachable(url, timeoutMs = 3000) {
     try {
@@ -237,6 +252,7 @@ async function checkReadiness(failures) {
 
 async function main() {
     let child = null;
+    let dataDir = null;
     // Always say which runtime produced the result. A gate that measured a
     // different build than the one you changed must never look like a gate that
     // measured yours.
@@ -247,14 +263,15 @@ async function main() {
     }
 
     if (!await reachable(`${RUNTIME_URL}/api/health`, 2000)) {
-        if (!await reachable('http://127.0.0.1:11434/api/tags')) {
+        if (!await reachable(`${ollamaUrl()}/api/tags`)) {
             log('SKIP: no runtime and no Ollama — these journeys need the local stack.');
             return true;
         }
         log(`Starting a runtime from this working tree at ${RUNTIME_URL}...`);
+        dataDir = smokeDataDir();
         child = spawn(process.execPath, [path.resolve(__dirname, '..', 'server.js')], {
             stdio: 'ignore',
-            env: { ...process.env, YODAMAN_PORT: String(SMOKE_PORT) }
+            env: { ...process.env, YODAMAN_PORT: String(SMOKE_PORT), YODAMAN_DATA_DIR: dataDir }
         });
         if (!await waitForRuntime(45000)) {
             child.kill('SIGKILL');
@@ -269,6 +286,7 @@ async function main() {
         await checkReadiness(failures);
     } finally {
         if (child) child.kill('SIGTERM');
+        if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true });
     }
 
     if (failures.length) {

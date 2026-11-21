@@ -80,6 +80,19 @@ describe('streaming the answer', () => {
         expect(body.messages[0].content).toMatch(/only the numbered search results/);
     });
 
+    test('asks the Ollama server OLLAMA_HOST names, as ctx and the ollama CLI do', async () => {
+        const saved = process.env.OLLAMA_HOST;
+        process.env.OLLAMA_HOST = '127.0.0.1:11555';
+        try {
+            const { summarize } = fresh();
+            const { fetchImpl, calls } = ollama(['{"done":true}\n']);
+            await collect(summarize({ query: 'q', results: HITS, fetchImpl }));
+            expect(calls[0].url).toBe('http://127.0.0.1:11555/api/chat');
+        } finally {
+            if (saved === undefined) delete process.env.OLLAMA_HOST; else process.env.OLLAMA_HOST = saved;
+        }
+    });
+
     test('the caller\'s abort signal reaches the request to Ollama', async () => {
         // Checked live: aborting this request ends Ollama's generation at once
         // (its log shows the request closing the second the client left).

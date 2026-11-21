@@ -22,6 +22,7 @@
 
 import React, { useState } from 'react';
 import { Search, GitBranch, FileText, AlertTriangle, CheckCircle2, Shield, BarChart3, Brain } from 'lucide-react';
+import { api } from '../api/api';
 
 const RISK_STYLES = {
     low: { label: 'Low risk', className: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' },
@@ -43,16 +44,9 @@ export default function ImpactAnalysisTab({ projectRoot }) {
         try {
             // One call: compose already blends Graphify's blast radius with
             // OpenSpec's spec references for the same file, at the depth asked for.
-            const params = new URLSearchParams({
-                projectRoot: projectRoot || '',
-                file: target,
-                depth: String(depth),
-                limit: '40',
-            });
-            const res = await fetch(`/api/stardust/compose?${params}`);
-            const compose = await res.json();
+            const compose = await api.stardustCompose(projectRoot, target, { depth, limit: 40 });
 
-            if (!res.ok || compose?.error) {
+            if (compose?.error) {
                 setResult({ error: compose?.error || 'Analysis failed' });
                 return;
             }

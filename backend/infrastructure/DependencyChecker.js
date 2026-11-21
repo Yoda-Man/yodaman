@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execFile, execFileSync } = require('child_process');
+const ollamaConfig = require('./OllamaConfig');
 
 // ─────────────────────────────────────────────────────────────────────────
 //  PATH AUGMENTATION — ran once at module init so that `execFile` (used
@@ -131,7 +132,7 @@ const { execFile, execFileSync } = require('child_process');
  * ONNX runtime). Older npm ignores the flag and runs them anyway.
  */
 const CTX_INSTALL = 'npm install -g yodaman-ctx '
-    + '--allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,onnxruntime-node';
+    + '--allow-scripts=better-sqlite3,protobufjs,sharp,tree-sitter,tree-sitter-javascript,tree-sitter-python,tree-sitter-typescript,tree-sitter-go,tree-sitter-rust,tree-sitter-java,tree-sitter-c-sharp,tree-sitter-c,tree-sitter-cpp,tree-sitter-php,tree-sitter-ruby,tree-sitter-powershell,onnxruntime-node';
 
 const PLATFORM_PATHS = {
     darwin: [
@@ -231,7 +232,7 @@ const SERVICES = {
     ollama: {
         executable: process.platform === 'win32' ? 'ollama.exe' : 'ollama',
         versionArgs: ['--version'],
-        runningCheck: { url: 'http://127.0.0.1:11434/api/tags', timeout: 2000 },
+        runningCheck: { get url() { return `${ollamaConfig.ollamaUrl()}/api/tags`; }, timeout: 2000 },
         installUrl: 'https://ollama.com',
         installHint: {
             darwin: 'brew install ollama  or  download from https://ollama.com/download',
@@ -671,7 +672,10 @@ function resetOllamaContextCache() {
 }
 
 function detectOllamaContext(model) {
-    const key = model || '@default';
+    // Read every call (one small file): a changed setting, e.g. after
+    // POST /api/ollama/context, must not wait out the cache.
+    const { configured, managed } = ollamaConfig.inspect();
+    const key = `${model || '@default'}\n${configured}\n${Boolean(managed)}`;
     const cached = contextCache.get(key);
     if (cached && (Date.now() - cached.at) < CONTEXT_TTL_MS) {
         return Promise.resolve(cached.value);
@@ -679,7 +683,7 @@ function detectOllamaContext(model) {
     const pending = contextInFlight.get(key);
     if (pending) return pending;
 
-    const probe = probeOllamaContext(model)
+    const probe = probeOllamaContext(model, configured, Boolean(managed))
         .then((result) => {
             contextCache.set(key, { value: result, at: Date.now() });
             return result;
@@ -690,8 +694,7 @@ function detectOllamaContext(model) {
     return probe;
 }
 
-async function probeOllamaContext(model) {
-    const configured = Number(process.env.OLLAMA_CONTEXT_LENGTH) || null;
+async function probeOllamaContext(model, configured, managed) {
     let declared = null;
     // The model the workspace is actually configured with. Falling back to a
     // literal meant `declared` described a model the user may not be running.
@@ -706,7 +709,7 @@ async function probeOllamaContext(model) {
         }
     }
     try {
-        const response = await fetch('http://127.0.0.1:11434/api/show', {
+        const response = await fetch(`${ollamaConfig.ollamaUrl()}/api/show`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ model: target || 'qwen3.5:9b' }),
@@ -726,6 +729,8 @@ async function probeOllamaContext(model) {
         declared,
         configured,
         effective,
+        // Only a Homebrew-run Ollama can be reconfigured from the Dashboard (POST /api/ollama/context).
+        managed,
         small: effective === null || effective < SMALL_CONTEXT_THRESHOLD,
         advice: effective && effective >= SMALL_CONTEXT_THRESHOLD
             ? null
@@ -746,7 +751,8 @@ function isWeakModel(model) {
 
 /** A check result as /api/health reports it. Startup and the Dashboard's Repair both use this. */
 function healthEntry(result, { includeRunning = false } = {}) {
-    const version = result.version ? `v${result.version}` : 'unknown version';
+    // Only a number gets a "v": Graphify's label is "installed", not "vinstalled".
+    const version = !result.version ? 'unknown version' : /^\d/.test(result.version) ? `v${result.version}` : result.version;
     const running = includeRunning ? (result.running ? ' (running)' : ' (not running)') : '';
     return {
         ok: result.found,

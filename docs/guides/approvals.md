@@ -16,7 +16,7 @@ on the read-only allowlist.
 | Runs without asking | Pauses for approval |
 | --- | --- |
 | `readFile`, `listFiles` | `writeFile`, `applyPatch` |
-| `searchCode`, `impactOf` | `executeCommand` |
+| `searchCode`, `searchCodeFilesystem`, `impactOf` | `executeCommand` |
 | `graphifyQuery`, `graphifyExplain` | `specPropose`, `specArchive` |
 | `graphifyPath`, `graphifyAffected` | `specInit` |
 | `specDrift`, `specValidate`, `specDraft` | any tool not on the allowlist |
@@ -50,7 +50,19 @@ files depend on this one, which tests cover it, a risk assessment, and which
 OpenSpec specs describe it. A diff says what changed; it never says what it
 costs.
 
-For tools that touch no file, the tool name and its arguments are shown instead.
+For tools that touch no file (a command, `specInit`, a plugin call), the tool
+name and its arguments are shown instead. A command shows the folder it will run
+in: when the agent names none, it runs in the active workspace. If the result of
+an edit cannot be predicted, the prompt says so and shows no diff, rather than a
+diff that deletes every line.
+
+## How a decision is recorded
+
+Only the JSON value `true` in `POST /api/agent/approve` approves. Anything else,
+including the string `"true"` or `1`, rejects. A task that was waiting for
+approval, or still running, when the runtime stopped is marked cancelled
+("Interrupted by a runtime restart.") when it starts again, so no approval is
+left waiting for a loop that no longer exists.
 
 ## What is not gated, and why
 

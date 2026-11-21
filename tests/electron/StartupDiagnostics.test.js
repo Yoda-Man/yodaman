@@ -53,4 +53,13 @@ describe('Electron startup diagnostics contract', () => {
         expect(source).toContain("makeInstallBtn('ctx', 'ctx CLI')");
         expect(source).toContain("makeInstallBtn('openspec', 'OpenSpec')");
     });
+
+    test('the page shown when the runtime fails never says it is running', () => {
+        // Every caller passes the start or exit error, yet the page said "The
+        // runtime is running but some dependencies need attention".
+        const body = source.slice(source.indexOf('function loadRuntimeUnavailable'), source.indexOf('function createWindow'));
+        expect(body).not.toMatch(/is running/);
+        expect(body).toMatch(/started: false/);
+        expect(body).toMatch(/error\?\.message/);
+    });
 });

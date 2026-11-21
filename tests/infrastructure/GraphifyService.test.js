@@ -186,3 +186,47 @@ describe('GraphifyService vendor script localization', () => {
         warn.mockRestore();
     });
 });
+
+describe('GraphifyService availability', () => {
+    let workspace;
+    const saved = process.env.YODAMAN_GRAPHIFY_BIN;
+
+    beforeEach(() => {
+        workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-graphify-available-'));
+    });
+    afterEach(() => {
+        if (saved === undefined) delete process.env.YODAMAN_GRAPHIFY_BIN; else process.env.YODAMAN_GRAPHIFY_BIN = saved;
+        fs.rmSync(workspace, { recursive: true, force: true });
+    });
+
+    function freshStatus() {
+        let status;
+        jest.isolateModules(() => {
+            status = require('../../backend/infrastructure/GraphifyService').status(workspace);
+        });
+        return status;
+    }
+
+    test('a binary that does not exist is not available', () => {
+        // The lookup ends with a bare `graphify`, and `available` was
+        // Boolean(that name): true on a machine with no Graphify at all.
+        process.env.YODAMAN_GRAPHIFY_BIN = path.join(workspace, 'no-such-graphify');
+        expect(freshStatus()).toMatchObject({ available: false, binary: process.env.YODAMAN_GRAPHIFY_BIN });
+    });
+
+    (process.platform === 'win32' ? test.skip : test)('a binary that can start is available', () => {
+        const bin = path.join(workspace, 'graphify');
+        fs.writeFileSync(bin, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+        process.env.YODAMAN_GRAPHIFY_BIN = bin;
+        expect(freshStatus().available).toBe(true);
+    });
+});
+
+describe('GraphifyService affected depth', () => {
+    test.each([['NaN', 'abc'], ['zero', 0], ['negative', -1], ['fraction', 1.5], ['above the range', 7]])(
+        'a %s depth is refused with 400 before Graphify runs', async (_label, depth) => {
+            await expect(graphifyService.affected('Node', path.join(os.tmpdir(), 'yodaman-no-such-workspace'), { depth }))
+                .rejects.toMatchObject({ status: 400, code: 'graphify_invalid_argument' });
+        }
+    );
+});

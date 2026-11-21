@@ -57,6 +57,16 @@ describe('SpecDrift', () => {
         });
     });
 
+    describe('citesFile', () => {
+        test('matches on path boundaries only', () => {
+            expect(specDrift.citesFile('Logger.js', 'backend/infrastructure/Logger.js')).toBe(true);
+            expect(specDrift.citesFile('infrastructure/Logger.js', 'backend/infrastructure/Logger.js')).toBe(true);
+            expect(specDrift.citesFile('backend/infrastructure/Logger.js', 'Logger.js')).toBe(true);
+            expect(specDrift.citesFile('Logger.js', 'backend/infrastructure/AuditLogger.js')).toBe(false);
+            expect(specDrift.citesFile('AuditLogger.js', 'backend/Logger.js')).toBe(false);
+        });
+    });
+
     describe('findOpenSpecRoot / readSpecs', () => {
         test('locates an initialized OpenSpec directory', () => {
             const root = workspace({ 'a.md': '# A' });

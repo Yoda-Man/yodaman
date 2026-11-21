@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.7 - 2026-11-21
+
+- **Ask About Workspace works again.** It failed every time with `mode is not defined`, because no lint rules covered the extension. ESLint now does.
+- **Search results open and show their score.** The extension read field names the runtime never sends.
+- **Drift warnings land on the spec file**, and blast radius names the specs that mention a file instead of `[object Object]`.
+- **Stardust commands explain an unregistered folder**: "Add this folder to YodaMan first".
+- Diagnostics report a failed diagnose instead of dropping it, and approval messages read "approved" or "rejected".
+
 ## 0.4.8 - 2026-08-19
 
 - Align extension package version with the YodaMan `0.4.8` release.

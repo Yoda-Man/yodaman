@@ -34,7 +34,10 @@
 // The runtime this starts logs here, not into the user's ~/.yodaman/logs/runtime.log.
 process.env.YODAMAN_LOG_DIR = process.env.YODAMAN_LOG_DIR || require('path').join(require('os').tmpdir(), 'yodaman-smoke-logs');
 const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { ollamaUrl } = require('../backend/infrastructure/OllamaConfig');
 const { pluginCapability, pluginInvocation } = require('../shared/pluginInvocation');
 
 // Its own port, never the user's app on 3090: running plugins against the live
@@ -55,6 +58,18 @@ const TASK_TIMEOUT_MS = Number(process.env.YODAMAN_SMOKE_TASK_TIMEOUT || 300000)
 const BOOT_TIMEOUT_MS = 45000;
 
 const log = (msg) => process.stdout.write(`${msg}\n`);
+
+/**
+ * A throwaway data folder for the runtime this starts, seeded with a copy of
+ * your config.json so it sees your workspaces and model. Its sessions, task
+ * history and audit log land here, never in your own data folder.
+ */
+function smokeDataDir() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-smoke-data-'));
+    const config = require('../backend/infrastructure/DataPaths').configPath();
+    if (fs.existsSync(config)) fs.copyFileSync(config, path.join(dir, 'config.json'));
+    return dir;
+}
 
 async function reachable(url, timeoutMs = 3000) {
     try {
@@ -110,13 +125,14 @@ async function runTask(task) {
 }
 
 async function main() {
-    if (!await reachable('http://127.0.0.1:11434/api/tags')) {
+    if (!await reachable(`${ollamaUrl()}/api/tags`)) {
         log('SKIP: Ollama is not reachable — the agent cannot be exercised here.');
         log('      This gate is meaningful only where the full local stack runs.');
         return;
     }
 
     let child = null;
+    let dataDir = null;
     const alreadyUp = await reachable(`${RUNTIME_URL}/api/health`, 2000);
     if (alreadyUp) {
         log(`Using the runtime already listening at ${RUNTIME_URL}.`);
@@ -124,10 +140,11 @@ async function main() {
     }
     if (!alreadyUp) {
         log(`Starting a runtime for the gate at ${RUNTIME_URL}...`);
+        dataDir = smokeDataDir();
         child = spawn(process.execPath, [path.resolve(__dirname, '..', 'server.js')], {
             stdio: 'ignore',
             detached: false,
-            env: { ...process.env, YODAMAN_PORT: String(SMOKE_PORT) }
+            env: { ...process.env, YODAMAN_PORT: String(SMOKE_PORT), YODAMAN_DATA_DIR: dataDir }
         });
         if (!await waitForRuntime(BOOT_TIMEOUT_MS)) {
             child.kill('SIGKILL');
@@ -136,6 +153,13 @@ async function main() {
     }
 
     try {
+        // The runtime refuses agent tasks for unregistered folders, so say that plainly instead of failing every plugin.
+        const listed = await (await fetch(`${RUNTIME_URL}/api/projects`, { signal: AbortSignal.timeout(10000) })).json();
+        const registered = (Array.isArray(listed) ? listed : listed.projects || []).map((project) => project.path);
+        if (!registered.includes(PROJECT)) {
+            throw new Error(`${PROJECT} is not a registered YodaMan workspace. Register it, or set YODAMAN_SMOKE_PROJECT to one that is.`);
+        }
+
         const response = await fetch(`${RUNTIME_URL}/api/plugins`, { signal: AbortSignal.timeout(10000) });
         const payload = await response.json();
         const plugins = Array.isArray(payload) ? payload : payload.plugins || [];
@@ -199,6 +223,7 @@ async function main() {
         return true;
     } finally {
         if (child) child.kill('SIGTERM');
+        if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true });
     }
 }
 

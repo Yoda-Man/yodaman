@@ -230,3 +230,22 @@ describe('the user\'s data files', () => {
         expect(removedPaths(plan)).not.toContain(files[1]);
     });
 });
+
+describe('the data folder\'s other state files', () => {
+    const { DATA_FOLDER_STATE } = require('../../shared/generatedPaths');
+    const DATA = path.join(HOME, 'Library', 'Application Support', 'YodaMan');
+
+    it('labels each one for what it holds', () => {
+        const files = DATA_FOLDER_STATE.map((name) => path.join(DATA, name));
+        const plan = planFor({ dataFiles: files });
+        expect(removedPaths(plan)).toEqual(expect.arrayContaining(files));
+        for (const item of plan.remove.filter((r) => files.includes(r.path))) {
+            expect(item.what).not.toBe('Your settings and workspace list');
+        }
+    });
+
+    it('no longer claims npm uninstall removes them', () => {
+        const npm = planFor().manual.find((m) => /npm uninstall/.test(m.action));
+        expect(npm.why).not.toMatch(/sessions\.json|audit-log|task-history/);
+    });
+});

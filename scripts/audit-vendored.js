@@ -15,7 +15,13 @@ const path = require('path');
 
 const MANIFEST = path.join(__dirname, '..', 'public', 'vendor', 'MANIFEST.json');
 const RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
-const THRESHOLD = RANK[process.env.VENDOR_AUDIT_LEVEL || 'moderate'];
+const LEVEL = process.env.VENDOR_AUDIT_LEVEL || 'moderate';
+const THRESHOLD = RANK[LEVEL];
+// An unknown level made THRESHOLD undefined, every `>=` false, and the gate pass.
+if (THRESHOLD === undefined) {
+    console.error(`Unknown VENDOR_AUDIT_LEVEL "${LEVEL}". Use one of: ${Object.keys(RANK).join(', ')}.`);
+    process.exit(1);
+}
 
 function vendoredPackages() {
     if (!fs.existsSync(MANIFEST)) {
@@ -64,7 +70,7 @@ function main() {
     }
 
     if (!offending.length) {
-        console.log(`Vendored libraries clean at "${process.env.VENDOR_AUDIT_LEVEL || 'moderate'}" and above.`);
+        console.log(`Vendored libraries clean at "${LEVEL}" and above.`);
         return;
     }
 

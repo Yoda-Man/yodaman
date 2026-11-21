@@ -4,6 +4,7 @@ const contextEngine = require('../infrastructure/ContextEngine');
 const { stripCliNoise, hasSubstantiveAnswer } = require('../infrastructure/CliOutput');
 const impactAnalyzer = require('../infrastructure/ImpactAnalyzer');
 const specDrift = require('../stardust/SpecDrift');
+const { citesFile } = specDrift;
 const toolBox = require('../infrastructure/ToolBox');
 const { pluginCapability } = require('../../shared/pluginInvocation');
 const taskStore = require('../infrastructure/TaskStore');
@@ -297,12 +298,19 @@ function proposedContent(toolCall, oldContent) {
     }
 }
 
+const FINISHED_STATUSES = new Set(['completed', 'error', 'cancelled']);
+
+
 class AgentReasoningEngine {
     constructor() {
         /** @type {Map<string, Function>} Pending approval resolvers. */
         this.pendingApprovals = new Map();
         /** @type {Map<string, object>} Recent task state for external clients. */
-        this.tasks = new Map(taskStore.list().map((task) => [task.taskId, task]));
+        // A restart ends every loop and drops every approval resolver, so a task
+        // stored mid-flight can neither resume nor be approved: close it.
+        this.tasks = new Map(taskStore.list().map((task) => [task.taskId, FINISHED_STATUSES.has(task.status) && !task.pendingApproval
+            ? task
+            : { ...task, status: 'cancelled', pendingApproval: null, error: task.error || 'Interrupted by a runtime restart.' }]));
         /** @type {Set<string>} Task IDs that should stop at the next safe point. */
         this.cancelledTasks = new Set();
         /** @type {number} Maximum number of tool iterations to prevent infinite loops. */
@@ -385,7 +393,9 @@ Rules:
     /**
      * Signals that an action has been approved or rejected.
      */
-    signalApproval(taskId, approved) {
+    signalApproval(taskId, decision) {
+        // Only a real `true` approves: a JSON body of "false" or 1 must not write.
+        const approved = decision === true;
         const resolver = this.pendingApprovals.get(taskId);
         if (resolver) {
             const task = this.tasks.get(taskId);
@@ -662,7 +672,7 @@ Rules:
                 const mentionedIn = [];
                 for (const spec of specs) {
                     const refs = specDrift.extractReferences(spec.text);
-                    if (filePath && refs.some(r => filePath.includes(r) || r.includes(filePath))) {
+                    if (filePath && refs.some(r => citesFile(r, filePath))) {
                         mentionedIn.push(spec.id);
                     }
                 }
@@ -1235,6 +1245,12 @@ Rules:
                     const toolDescriptor = toolBox.plugins && typeof toolBox.plugins.get === 'function'
                         ? toolBox.plugins.get(toolCall.name)
                         : null;
+
+                    // The schema promises the active workspace, and the reviewer
+                    // should see where the command will run before approving it.
+                    if (toolCall.name === 'executeCommand' && metadata.projectId && toolCall.parameters && !toolCall.parameters.cwd) {
+                        toolCall.parameters.cwd = metadata.projectId;
+                    }
 
                     if (requiresApproval(toolCall.name, toolDescriptor || {})) {
                         const decision = await this.awaitApproval(toolCall, { taskId, onStep, metadata });

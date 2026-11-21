@@ -17,6 +17,7 @@ export interface YodaManClient {
   taskEvents(taskId: string): Promise<YodaManTaskEvent[]>;
   policy(): Promise<unknown>;
   audit(limit?: number): Promise<unknown[]>;
+  logs(limit?: number): Promise<unknown>;
   graphifyStatus(path: string): Promise<unknown>;
   graphifyBuild(path: string): Promise<unknown>;
   graphifyBuildStatus(path: string, jobId?: string): Promise<unknown>;
@@ -27,10 +28,23 @@ export interface YodaManClient {
   graphifyPath(path: string, source: string, target: string): Promise<unknown>;
   graphifyAffected(path: string, node: string, depth?: number, relations?: string[]): Promise<unknown>;
   graphifyMap(path: string, limit?: number): Promise<unknown>;
+  health(): Promise<unknown>;
+  readiness(projectId?: string): Promise<unknown>;
+  plugins(): Promise<unknown>;
+  sessions(): Promise<unknown>;
+  // Stardust routes key off projectRoot, not path; omitted, the runtime uses its own cwd.
+  stardustBoard(projectRoot?: string): Promise<unknown>;
+  stardustDrift(projectRoot?: string, minDependents?: number): Promise<unknown>;
+  stardustCompose(projectRoot: string | undefined, file: string, depth?: number, limit?: number): Promise<unknown>;
+  stardustContext(projectRoot?: string, files?: string[]): Promise<unknown>;
+  stardustDiagnose(projectRoot?: string): Promise<unknown>;
+  clearTasks(): Promise<unknown>;
+  clearAudit(): Promise<unknown>;
   createPairing(runtimeUrlOverride?: string): Promise<unknown>;
   runAgentTask(task: string, projectId: string | undefined, onEvent: (event: YodaManTaskEvent) => void | Promise<void>): Promise<void>;
 }
 
+export const API_PATHS: Readonly<Record<string, string>>;
 export function createYodaManClient(runtimeUrl: string, options?: { pairingToken?: string }): YodaManClient;
 export function readEventStream(response: Response, onEvent: (event: YodaManTaskEvent) => void | Promise<void>): Promise<void>;
 export function requestJson(runtimeUrl: string, path: string, options?: RequestInit & { pairingToken?: string }): Promise<unknown>;

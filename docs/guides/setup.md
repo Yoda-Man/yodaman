@@ -43,10 +43,12 @@ no-LLM path, and only `YODAMAN_GRAPHIFY_FULL_EXTRACT=true` reaches for a model.
 
 3. Install the tools (Mac only, uses Homebrew):
    ```bash
-   sh setup.sh
+   bash setup.sh
    ```
    It installs whatever is missing of Homebrew, Node.js, Python 3, Ollama,
    Context Expert, Graphify and OpenSpec, runs `npm install`, then `npm start`.
+   It stops if Node.js is older than 24, and reinstalls a Context Expert older
+   than 1.3.4.
 
 4. Start the runtime and web UI:
    ```bash
@@ -72,7 +74,7 @@ YodaMan stores workspace configuration in `config.json` in the user's data folde
 - **watchedDirectories**: A list of absolute paths that YodaMan will monitor for changes.
 - **removedDirectories**: A local tombstone list for workspaces deleted from YodaMan so they are not re-added from stale index metadata.
 
-YodaMan 0.6.6 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
+YodaMan 0.6.7 creates Graphify artifacts inside each workspace under `graphify-out/`. Reindexing a workspace updates both Context Expert and Graphify.
 
 Check Graphify graph health across configured workspaces:
 
