@@ -1,0 +1,55 @@
+schema: spec-driven
+
+# Constraints an agent cannot read from the code
+context: |
+  YodaMan is a local-first developer tool: a Node backend and a React/Vite UI, also shipped as an Electron
+  desktop app, a Homebrew formula, a VS Code extension and a mobile companion.
+  Privacy first, local only: models run through the user's own Ollama. Never add a cloud LLM or API key
+  (no OpenAI, no Claude, no other hosted model), and no workspace data leaves the machine.
+  Every search goes through the pipeline: Context Expert (ctx, the yodaman-ctx fork, always called with --json),
+  then Graphify ranking, then OpenSpec tagging. No search path may bypass any stage.
+  Never hardcode the user's tools: editor and similar hand-offs follow the OS default and accept any command.
+  Every dependency stays on its latest release, majors included, on Node 24 or later.
+  Lean code: delete what is unused and reuse one shared helper instead of copies.
+  Documentation must be 100% accurate: verify every route, path, flag and step against the code, and fix
+  inaccuracies found in passing.
+  Work on the dev branch, never main. The user merges into main after a stable release.
+  npm run release:verify is the release gate and a release ships only when it exits 0. Build the downloads
+  (npm run desktop:dist:all, then npm run website:downloads) before running it.
+  Context Expert lives in its own repository; never commit or push it from here.
+  All work and maintenance is driven from OpenSpec: every feature, fix or maintenance task starts as a change
+  (openspec-propose or openspec-new-change), is built from its tasks.md (openspec-apply-change), checked (openspec-verify-change), and archived
+  (openspec-archive-change) so openspec/specs always describes what the code does today.
+  Every fix ships with a regression test that fails without it, and a guard test when the bug is one of a class.
+  Write in plain, short sentences.
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
