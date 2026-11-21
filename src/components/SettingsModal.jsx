@@ -105,9 +105,7 @@ export default function SettingsModal({ onClose, watchedDirs, onWatchChange }) {
         let cancelled = false
         const load = async () => {
             try {
-                const res = await fetch('/api/mcp/clients')
-                if (!res.ok) return
-                const data = await res.json()
+                const data = await api.getMcpClients()
                 if (!cancelled) setSeenClients(data.clients || [])
             } catch (_err) {
                 // A missing list is not worth surfacing; the panel simply shows

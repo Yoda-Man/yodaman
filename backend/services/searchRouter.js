@@ -29,7 +29,7 @@ function logSearchFailure(err, { req, query, project, mode }) {
 function searchRoute(mode, { defaultTop, label }) {
   return async (req, res) => {
     const { query, project, top = defaultTop, activeFile } = req.query;
-    if (!query) return res.status(400).send('Query is required');
+    if (!query) return res.status(400).json({ error: 'Query is required', code: 'query_required' });
     try {
       const out = await pipeline.search({ query, project, mode, top, activeFile, requestId: req.id });
       return res.json(label ? { mode: label, ...out } : out);
@@ -55,7 +55,7 @@ router.get('/docs', searchRoute('doc', { defaultTop: 10, label: 'doc' }));
  */
 router.get('/stream', async (req, res) => {
   const { query, project, top = 15, activeFile } = req.query;
-  if (!query) return res.status(400).send('Query is required');
+  if (!query) return res.status(400).json({ error: 'Query is required', code: 'query_required' });
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');

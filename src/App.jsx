@@ -48,7 +48,6 @@ export default function App() {
         id: p.id,
         name: p.name,
         path: p.path,
-        included: true,
         files: []
       }))
       setProjects(nextProjects)
@@ -61,12 +60,6 @@ export default function App() {
     } finally {
       setIsRefreshingProjects(false)
     }
-  }
-
-  const handleToggleProject = (projectId) => {
-    setProjects(projects.map(p =>
-      p.id === projectId ? { ...p, included: !p.included } : p
-    ))
   }
 
   const handleReindex = async () => {
@@ -103,7 +96,6 @@ export default function App() {
           id: updated.path,
           name: updated.path.split('/').filter(Boolean).pop() || updated.path,
           path: updated.path,
-          included: true,
           files: []
         })
       }
@@ -126,7 +118,6 @@ export default function App() {
           projects={projects}
           selectedProject={selectedProject}
           onSelect={(id) => setSelectedProject(projects.find(p => p.id === id))}
-          onToggle={handleToggleProject}
           onReindex={handleReindex}
           onOpenSettings={() => setIsModalOpen(true)}
           onRefresh={fetchProjects}

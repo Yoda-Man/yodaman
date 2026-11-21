@@ -39,7 +39,7 @@ export default function WelcomeModal() {
         },
         {
             title: "Semantic Search",
-            desc: "Use the Search tab to find patterns, not just text. It understands the context of your functions and logic.",
+            desc: "On the Chat tab, switch from Chat to Search to find patterns, not just text. It understands the context of your functions and logic.",
             icon: <Search className="text-emerald-400" size={32} />,
             color: "bg-emerald-500/10"
         },

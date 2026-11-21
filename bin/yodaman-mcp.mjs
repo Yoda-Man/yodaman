@@ -38,6 +38,8 @@ const { version } = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'u
 
 const PORT = Number(process.env.YODAMAN_PORT) || 3090;
 const RUNTIME = process.env.YODAMAN_URL || `http://127.0.0.1:${PORT}`;
+// The command that starts a runtime on the port this proxies, so the advice works.
+const START_COMMAND = PORT === 3090 ? 'yodaman' : `YODAMAN_PORT=${PORT} yodaman`;
 const TIMEOUT_MS = Number(process.env.YODAMAN_MCP_TIMEOUT) || 120000;
 
 /** Protocol output is stdout; anything else would corrupt the stream. */
@@ -93,8 +95,9 @@ async function call(pathname, { method = 'GET', body } = {}) {
             ? `the runtime did not answer within ${Math.round(TIMEOUT_MS / 1000)}s`
             : `the runtime at ${RUNTIME} is not reachable`;
         throw new Error(
-            `${reason}. Start YodaMan (open the desktop app, or run \`yodaman start\`), `
-            + 'then try again. Nothing was read.'
+            `${reason}. Start YodaMan (open the desktop app, or run \`${START_COMMAND}\`), `
+            + 'then try again. Nothing was read.',
+            { cause: err }
         );
     }
 

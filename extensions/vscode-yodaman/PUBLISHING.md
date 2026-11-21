@@ -10,7 +10,7 @@ npm run package
 ```
 
 This creates `vscode-yodaman-<version>.vsix`, named from `version` in
-`package.json` (currently `vscode-yodaman-0.6.4.vsix`). `vscode:prepublish` runs
+`package.json` (currently `vscode-yodaman-0.6.7.vsix`). `vscode:prepublish` runs
 `npm run lint`, then `copy-shared.js`, which copies core's `shared/yodamanClient.js`
 and `shared/yodamanProtocol.js` into the extension's own src/shared folder, so the package carries them.
 

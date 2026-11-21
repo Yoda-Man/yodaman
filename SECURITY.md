@@ -39,6 +39,20 @@ Reports against these are in scope:
 - **The local runtime**, which listens on `127.0.0.1:3090` by default
   (`YODAMAN_HOST`, `YODAMAN_PORT`) — request handling, the pairing-token gate,
   path traversal, or anything that reads or writes outside a watched workspace.
+  The gates that matter here:
+  - Every route that changes or reads a workspace on request (git commit, push,
+    pull and new branch, Stardust, `/api/ask`, `/api/reindex`,
+    `/api/readiness`, Graphify) accepts only a workspace you have added
+    (`404 workspace_not_registered` otherwise).
+  - The live OpenSpec board socket (`/api/stardust/live`) passes the same
+    gates as the REST routes: a cross-site page is refused, and another device
+    needs its pairing token.
+  - Clearing the logs or the audit log works only from this computer, so a
+    paired device cannot erase the record of what it did.
+  - Request text never becomes a command-line flag: git, Context Expert and
+    Graphify get argument lists, never a shell, and values that could be read
+    as options are passed after `--` or refused.
+  - Only the JSON value `true` approves an agent write.
 - **The MCP server** (`bin/yodaman-mcp.mjs`) — in particular any way to make it
   perform a write, since it is read-only by design and enforced by tests.
 - **The approval gate** (`shared/toolCapabilities.js`,
@@ -50,12 +64,13 @@ Reports against these are in scope:
 - **The Ollama context-length setting**, which writes a launchd plist and
   restarts a service. Anything that lets an unvalidated value reach that file.
 - **Any unexpected network egress.** YodaMan is local-first; traffic to anywhere
-  other than the local runtime and your configured local model is a bug. Two
+  other than the local runtime and your configured local model is a bug. Three
   exceptions are expected: a package install you start yourself, through
   `yodaman setup` or the Dashboard's Repair (off unless you enable it in
-  Settings), which reaches the npm and pip registries; and Context Expert's
-  one-time download of its embedding model weights from Hugging Face, which
-  sends no code or queries.
+  Settings), which reaches the npm and pip registries; a Git pull or push you
+  start from the Git Integration panel, which reaches that repository's
+  remote; and Context Expert's one-time download of its embedding model
+  weights from Hugging Face, which sends no code or queries.
 
 ## Not vulnerabilities
 
@@ -77,5 +92,16 @@ To save you the effort, these are known and intentional:
   whatever a client claims to be, so the Settings list is an honest record of
   what was claimed, not an authenticated identity. It is bounded and sanitised
   (length-capped, control characters stripped) precisely because it is untrusted.
+- **Plugins run with your privileges.** A plugin is a JavaScript file the
+  runtime loads in its own process, with full Node.js access. Its declared
+  permissions are declarative: they decide whether its calls pause for
+  approval and whether it may load at all (`unrestricted` needs **Unrestricted
+  Plugins** in Settings), but they are not a sandbox. The one permission the
+  plugin API enforces itself is `network`: `api.fetch` to another host works
+  only for a plugin that declares `network` or `unrestricted`. A path such as
+  `/api/graphify/status` calls the local runtime and needs no permission.
+  Install only plugins you trust.
+  Uploads are off unless you turn on **Plugin Uploads**. A way for a page or a
+  paired device to install or run a plugin without that is in scope.
 - **Reports produced only by an automated scanner**, with no demonstrated impact
   on the above. Please show what an attacker actually achieves.

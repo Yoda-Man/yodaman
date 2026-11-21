@@ -15,7 +15,8 @@ decisions and task cancellation.
 - **Ask** — project-scoped questions, and ranked search showing which results
   OpenSpec covers.
 - **Stardust** — the active OpenSpec change board, drift against the workspace,
-  and runtime diagnostics.
+  and runtime diagnostics. A workspace the runtime does not know shows "Add this
+  folder to YodaMan first" rather than an empty board or "Offline".
 - **Impact** — blast radius for any file at a hop depth of 1 to 4, cross-
   referenced across all three tools.
 - **Tasks** — task timeline with faction-coloured status, each task's recorded

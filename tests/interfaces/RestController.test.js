@@ -145,7 +145,10 @@ describe('RestController Integration', () => {
         auditLog.record({ type: 'test-audit' });
         expect(auditLog.list().length).toBeGreaterThan(0);
 
-        const response = await invoke('delete', '/audit');
+        // stack[0] is the this-computer-only guard, tested on its own below.
+        const route = router.stack.find((l) => l.route?.path === '/audit' && l.route.methods.delete).route;
+        const response = { statusCode: 200, status(c) { this.statusCode = c; return this; }, json(p) { this.payload = p; return this; } };
+        await route.stack[1].handle({ id: 'req-audit' }, response);
         expect(response.statusCode).toBe(200);
         expect(response.payload.message).toBe('Audit logs cleared');
         expect(auditLog.list()).toHaveLength(0);
@@ -175,6 +178,19 @@ describe('RestController Integration', () => {
             message: 'search_failed',
             userAction: 'code_search'
         }));
+    });
+
+    test('DELETE /audit is refused off this computer, so a paired device cannot erase its own trail', () => {
+        const route = router.stack.find((l) => l.route?.path === '/audit' && l.route.methods.delete).route;
+        const res = { status(c) { this.statusCode = c; return this; }, json(p) { this.payload = p; return this; } };
+        const next = jest.fn();
+        route.stack[0].handle({ ip: '192.168.1.30' }, res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(403);
+        expect(res.payload).toEqual({ error: 'The audit log can only be cleared from this computer', code: 'audit_local_only' });
+
+        route.stack[0].handle({ ip: '127.0.0.1' }, res, next);
+        expect(next).toHaveBeenCalled();
     });
 
     test('DELETE /logs clears the logs, only from this computer, and records that it did', async () => {
@@ -388,6 +404,20 @@ describe('RestController Integration', () => {
         }));
     });
 
+    test('POST /ask refuses a question with no letters or digits, before Graphify sees it', async () => {
+        const query = jest.spyOn(graphifyService, 'query');
+        try {
+            for (const question of ['---', ' -- ? ']) {
+                const response = await invoke('post', '/ask', { body: { question } });
+                expect(response.statusCode).toBe(400);
+                expect(response.payload).toEqual({ error: 'question must contain a letter or digit', code: 'invalid_question' });
+            }
+            expect(query).not.toHaveBeenCalled();
+        } finally {
+            query.mockRestore();
+        }
+    });
+
     test('POST /plugins/:name/open invokes a loaded plugin for the selected workspace', async () => {
         const toolBox = require('../../backend/infrastructure/ToolBox');
         const execute = jest.fn(async ({ _action, project }) => ({ opened: true, _action, project }));
@@ -478,7 +508,7 @@ describe('RestController Integration', () => {
 
             expect(response.statusCode).toBe(200);
             expect(contextEngine.execute).toHaveBeenCalledWith(
-                expect.arrayContaining(['ask', '--']),
+                expect.arrayContaining(['ask', '-p', '--']),
                 expect.objectContaining({ timeoutMs: expect.any(Number) })
             );
             expect(response.payload.answer).toContain('YodaMan could not reach ctx ask');
@@ -674,11 +704,35 @@ describe('RestController Integration', () => {
             expect(router.newPluginFilename(`not-installed-${process.pid}.js`)).toBe(`not-installed-${process.pid}.js`);
         });
 
-        test("an archive's main.js cannot overwrite Holocron's", async () => {
+        test("an archive's main.js is installed under the archive's name, never over Holocron's", async () => {
             const before = fs.readFileSync(path.join(pluginsDir, 'main.js'), 'utf8');
-            const res = await send(zipOf('main.js', 'module.exports = { name: "evil", execute() {} };'));
-            expect(res.statusCode).toBe(400);
-            expect(fs.readFileSync(path.join(pluginsDir, 'main.js'), 'utf8')).toBe(before);
+            const pluginName = `zipped-${process.pid}`;
+            const zip = zipOf('main.js', `module.exports = { name: '${pluginName}', permissions: [], execute() {} };`);
+            const installed = path.join(pluginsDir, `${path.basename(zip, '.zip')}.js`);
+            try {
+                const res = await send(zip);
+                expect(res.payload).toEqual({ message: 'Plugin uploaded and loaded', name: path.basename(installed) });
+                expect(fs.existsSync(installed)).toBe(true);
+                expect(fs.readFileSync(path.join(pluginsDir, 'main.js'), 'utf8')).toBe(before);
+            } finally {
+                fs.rmSync(installed, { force: true });
+                fs.rmSync(zip, { force: true });
+                require('../../backend/infrastructure/ToolBox').plugins.delete(pluginName);
+            }
+        });
+
+        test('an upload cannot take over an installed plugin by its name', async () => {
+            const zip = zipOf('main.js', 'module.exports = { name: "graphify", permissions: [], execute() {} };');
+            const installed = path.join(pluginsDir, `${path.basename(zip, '.zip')}.js`);
+            try {
+                const res = await send(zip);
+                expect(res.statusCode).toBe(409);
+                expect(res.payload.code).toBe('plugin_exists');
+                expect(fs.existsSync(installed)).toBe(false);
+            } finally {
+                fs.rmSync(installed, { force: true });
+                fs.rmSync(zip, { force: true });
+            }
         });
 
         test('a plugin that fails validation is removed again', async () => {
@@ -1091,6 +1145,177 @@ describe('RestController Integration', () => {
                 graphifyService.build = originalBuild;
             }
         });
+    });
+
+    describe('/ask and /readiness take registered workspaces only', () => {
+        const toolBox = require('../../backend/infrastructure/ToolBox');
+        const searchPipeline = require('../../backend/core/SearchPipeline');
+        let workspace;
+        let before;
+        const originals = {};
+
+        beforeEach(() => {
+            workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-ask-registered-'));
+            fs.writeFileSync(path.join(workspace, 'menu.js'), 'function publishMenu() {}\n');
+            before = fs.readFileSync(configPath(), 'utf8');
+            fs.writeFileSync(configPath(), JSON.stringify({ watchedDirectories: [workspace], removedDirectories: [] }));
+            router.loadConfig();
+            Object.assign(originals, {
+                execute: contextEngine.execute,
+                query: graphifyService.query,
+                readReport: graphifyService.readReport,
+                saveResult: graphifyService.saveResult,
+                contextExpertSearch: toolBox.contextExpertSearch
+            });
+            contextEngine.forgetProjects();
+            graphifyService.query = jest.fn(async () => 'graph says hi');
+            graphifyService.readReport = jest.fn(() => '');
+            graphifyService.saveResult = jest.fn(async () => ({}));
+            toolBox.contextExpertSearch = jest.fn(async () => [
+                { content: 'function publishMenu() {}', score: 0.9, metadata: { path: path.join(workspace, 'menu.js') } }
+            ]);
+        });
+
+        afterEach(() => {
+            contextEngine.execute = originals.execute;
+            graphifyService.query = originals.query;
+            graphifyService.readReport = originals.readReport;
+            graphifyService.saveResult = originals.saveResult;
+            toolBox.contextExpertSearch = originals.contextExpertSearch;
+            contextEngine.forgetProjects();
+            jest.restoreAllMocks();
+            fs.writeFileSync(configPath(), before);
+            router.loadConfig();
+            fs.rmSync(workspace, { recursive: true, force: true });
+        });
+
+        test('POST /ask refuses a folder that is not registered, and writes nothing into it', async () => {
+            const stranger = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-ask-stranger-'));
+            try {
+                const response = await invoke('post', '/ask', { body: { question: 'menu', projectId: stranger } });
+                expect(response.statusCode).toBe(404);
+                expect(response.payload.code).toBe('workspace_not_registered');
+                expect(graphifyService.saveResult).not.toHaveBeenCalled();
+                expect(fs.readdirSync(stranger)).toEqual([]);
+            } finally {
+                fs.rmSync(stranger, { recursive: true, force: true });
+            }
+        });
+
+        test('POST /ask accepts a workspace by folder name, searches through the pipeline and scopes ctx to it', async () => {
+            const search = jest.spyOn(searchPipeline, 'search');
+            const calls = [];
+            contextEngine.execute = jest.fn(async (args) => {
+                calls.push(args);
+                if (args[0] === 'list') return { output: JSON.stringify({ projects: [{ name: 'menu-index', path: workspace }] }), code: 0 };
+                return { output: 'It publishes the menu.', code: 0 };
+            });
+
+            const response = await invoke('post', '/ask', { body: { question: 'menu', projectId: path.basename(workspace) } });
+
+            expect(response.statusCode).toBe(200);
+            expect(response.payload).toEqual({ answer: 'It publishes the menu.' });
+            expect(search).toHaveBeenCalledWith(expect.objectContaining({ query: 'menu', project: workspace }));
+            const ask = calls.find((args) => args[0] === 'ask');
+            expect(ask.slice(0, 4)).toEqual(['ask', '-p', 'menu-index', '--']);
+            // The ranked, tagged hits are in the prompt ctx answers from.
+            expect(ask.at(-1)).toContain('menu.js');
+            expect(ask.at(-1)).toContain('ranked by Graphify');
+        });
+
+        test('GET /readiness refuses an unregistered projectId and sees a workspace registered since the last read', async () => {
+            const refused = await invoke('get', '/readiness', { query: { projectId: path.join(os.tmpdir(), 'not-registered-here') } });
+            expect(refused.statusCode).toBe(404);
+            expect(refused.payload.code).toBe('workspace_not_registered');
+
+            const added = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-ready-added-'));
+            try {
+                // Written behind the router's back, as another request or the CLI would.
+                fs.writeFileSync(configPath(), JSON.stringify({ watchedDirectories: [workspace, added], removedDirectories: [] }));
+                const all = await invoke('get', '/readiness');
+                expect(JSON.stringify(all.payload)).toContain(added);
+            } finally {
+                fs.rmSync(added, { recursive: true, force: true });
+            }
+        });
+
+        test('PUT /projects refuses a new path that does not exist or is generated output', async () => {
+            const missing = await invoke('put', '/projects', { body: { path: workspace, nextPath: path.join(workspace, 'nope') } });
+            expect(missing.statusCode).toBe(404);
+            expect(missing.payload.code).toBe('workspace_missing');
+
+            fs.mkdirSync(path.join(workspace, 'node_modules'));
+            const generated = await invoke('put', '/projects', { body: { path: workspace, nextPath: path.join(workspace, 'node_modules') } });
+            expect(generated.statusCode).toBe(400);
+            expect(generated.payload.code).toBe('workspace_generated');
+
+            expect(JSON.parse(fs.readFileSync(configPath(), 'utf8')).watchedDirectories).toEqual([workspace]);
+        });
+    });
+
+    test('GET /plugins marks the five defaults, which cannot be deleted', async () => {
+        const res = await invoke('get', '/plugins');
+        const defaults = res.payload.filter((p) => p.isDefault).map((p) => p.name).sort();
+        expect(defaults).toEqual(['CodeTrooper', 'Droid-Sweep', 'Grand-Inquisitor', 'graphify', 'lightsaber']);
+        expect(res.payload.find((p) => p.name === 'holocron-vr')?.isDefault).toBe(false);
+    });
+
+    test('DELETE /plugins/:name deletes a disabled plugin too', async () => {
+        const toolBox = require('../../backend/infrastructure/ToolBox');
+        const name = `disabled-${process.pid}`;
+        const file = path.resolve(__dirname, '../../plugins', `${name}.js`);
+        fs.writeFileSync(file, `module.exports = { name: '${name}', permissions: [], execute() {} };`);
+        const originalSave = toolBox.saveDisabledConfig;
+        toolBox.saveDisabledConfig = jest.fn();
+        toolBox.disabledPlugins.add(name);
+        try {
+            const response = await invoke('delete', '/plugins/:name', { params: { name } });
+            expect(response.statusCode).toBe(200);
+            expect(response.payload).toEqual({ message: 'Plugin deleted' });
+            expect(fs.existsSync(file)).toBe(false);
+            expect(toolBox.disabledPlugins.has(name)).toBe(false);
+            expect(toolBox.saveDisabledConfig).toHaveBeenCalled();
+
+            const unknown = await invoke('delete', '/plugins/:name', { params: { name } });
+            expect(unknown.statusCode).toBe(404);
+            expect(unknown.payload.code).toBe('plugin_not_found');
+        } finally {
+            toolBox.saveDisabledConfig = originalSave;
+            toolBox.disabledPlugins.delete(name);
+            fs.rmSync(file, { force: true });
+        }
+    });
+
+    test('a refused pairing token is a 401 with a code', () => {
+        const original = process.env.YODAMAN_REQUIRE_PAIRING_TOKEN;
+        delete process.env.YODAMAN_REQUIRE_PAIRING_TOKEN;
+        const res = { status(c) { this.statusCode = c; return this; }, json(p) { this.payload = p; return this; } };
+        const next = jest.fn();
+        try {
+            router.pairingTokenGate({ path: '/projects', ip: '192.168.1.30', get: () => 'not-a-token' }, res, next);
+            expect(next).not.toHaveBeenCalled();
+            expect(res.statusCode).toBe(401);
+            expect(res.payload).toEqual({ error: 'Valid YodaMan pairing token is required', code: 'pairing_token_required' });
+        } finally {
+            if (original !== undefined) process.env.YODAMAN_REQUIRE_PAIRING_TOKEN = original;
+        }
+    });
+
+    test('POST /agent/task ids are random UUIDs', async () => {
+        const originalExecute = agentEngine.executeTask;
+        agentEngine.executeTask = jest.fn(async () => 'done');
+        const ids = [];
+        try {
+            for (let i = 0; i < 2; i += 1) {
+                const res = { setHeader: jest.fn(), write: jest.fn(), end: jest.fn() };
+                await routeHandler('post', '/agent/task')({ body: { task: 'hi' }, id: 'r' }, res);
+                ids.push(JSON.parse(res.write.mock.calls[0][0].slice('data: '.length)).taskId);
+            }
+            for (const id of ids) expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+            expect(ids[0]).not.toBe(ids[1]);
+        } finally {
+            agentEngine.executeTask = originalExecute;
+        }
     });
 
     test('desktop diagnostics say where the user\'s config.json and yodaman.db are, for the Dashboard', async () => {

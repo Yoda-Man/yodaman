@@ -19,7 +19,7 @@ The key architectural rule is that these clients should not duplicate agent logi
 The current repository uses a clean layered architecture:
 
 - Presentation: React and Vite.
-- Interface: Express routes in `backend/interfaces/RestController.js`, with route modules in `backend/interfaces/routes/` and the search, upload, and git routers in `backend/services/`.
+- Interface: Express routes in `backend/interfaces/RestController.js`, with route modules in `backend/interfaces/routes/` and the search and upload routers and the git reads in `backend/services/`.
 - Core: Agent orchestration, the search pipeline, and the indexing queue in `backend/core`.
 - Infrastructure: Context Expert CLI wrapper, Graphify, file watching, session and task storage, audit, pairing, and tool execution in `backend/infrastructure`.
 - Stardust: OpenSpec board, drift, and the live WebSocket feed in `backend/stardust`.
@@ -55,7 +55,7 @@ The runtime currently exposes:
 
 - `GET /api/projects` for indexed and watched projects.
 - `POST /api/projects` and `DELETE /api/projects` for project management.
-- `POST /api/ask` for direct context questions.
+- `POST /api/ask` for direct context questions, answered through the search pipeline for a registered workspace.
 - `POST /api/agent/task` for Server-Sent Events agent execution.
 - `POST /api/agent/approve` and `POST /api/agent/cancel` for human approval of agent actions and task cancellation.
 - `GET /api/search` for semantic search across code and docs (`/api/search/code` and `/api/search/docs` for one mode, `/api/search/stream` for the streamed Search view).

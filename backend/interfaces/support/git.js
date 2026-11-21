@@ -13,15 +13,21 @@ const { execFile } = require('child_process');
  *
  * @param {string} dirPath - Working directory (already validated by the caller).
  * @param {string[]} args  - git arguments.
+ * @param {{timeout?: number}} [options] - local reads keep the 5 s default;
+ *   push and pull pass NETWORK_TIMEOUT_MS, since a slow remote is not a hang.
  * @returns {Promise<string>} trimmed stdout
  */
-function runGit(dirPath, args) {
+function runGit(dirPath, args, { timeout = 5000 } = {}) {
     return new Promise((resolve, reject) => {
-        execFile('git', args, { cwd: dirPath, timeout: 5000 }, (err, stdout, stderr) => {
+        // No terminal prompts: the runtime has nobody to answer one, so a
+        // remote needing credentials fails at once instead of at the timeout.
+        const env = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+        execFile('git', args, { cwd: dirPath, timeout, env }, (err, stdout, stderr) => {
             if (err) {
-                // git puts the useful message on stderr; err.message is usually
-                // just "Command failed".
-                err.message = (stderr || err.message || '').trim() || err.message;
+                // git puts the useful message on stderr, except "nothing to
+                // commit", which goes to stdout; err.message is usually just
+                // "Command failed".
+                err.message = String(stderr || stdout || '').trim() || err.message;
                 reject(err);
                 return;
             }
@@ -60,4 +66,7 @@ async function readGitContext(dirPath) {
     };
 }
 
-module.exports = { runGit, readGitContext };
+/** Push and pull talk to a remote; give them minutes, not seconds. */
+const NETWORK_TIMEOUT_MS = 10 * 60 * 1000;
+
+module.exports = { runGit, readGitContext, NETWORK_TIMEOUT_MS };

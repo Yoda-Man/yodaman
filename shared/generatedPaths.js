@@ -46,14 +46,15 @@ const HOME_STATE_DIR = '.yodaman';
 const USER_OWNED_DIRS = ['openspec'];
 
 /**
- * Files the runtime keeps inside its own install directory. Listed for
- * reporting only: `npm uninstall -g yodaman` removes the whole directory, so
- * nothing here is deleted individually.
+ * State files the runtime keeps in the user's data folder beside config.json
+ * and yodaman.db (backend/infrastructure/DataPaths.js `dataFile`): chat
+ * sessions, the disabled-plugins list, and the JSON fallbacks for the audit log and task history used when
+ * SQLite is unavailable. Upgrades and `npm uninstall` keep them, so
+ * `yodaman uninstall` names each one.
  */
-// config.json and yodaman.db are not here: they live in the user's data
-// folder (backend/infrastructure/DataPaths.js), so upgrades keep them.
-const INSTALL_DIR_STATE = [
+const DATA_FOLDER_STATE = [
     'sessions.json',
+    'plugins.json',
     'audit-log.json',
     'audit-log.jsonl',
     'task-history.json',
@@ -71,6 +72,6 @@ module.exports = {
     GENERATED_WORKSPACE_DIRS,
     HOME_STATE_DIR,
     USER_OWNED_DIRS,
-    INSTALL_DIR_STATE,
+    DATA_FOLDER_STATE,
     isUserOwned
 };

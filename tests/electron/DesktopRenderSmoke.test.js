@@ -12,6 +12,7 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const http = require('http');
+const os = require('os');
 const path = require('path');
 
 const rootDir = path.resolve(__dirname, '../..');
@@ -81,11 +82,15 @@ const maybeDescribe = hasBuild && hasDisplay ? describe : describe.skip;
 maybeDescribe('desktop renders the dashboard', () => {
     let server;
     let serverUp = false;
+    let workDir;
 
     beforeAll(async () => {
+        // A throwaway data and log folder: the run never writes the developer's
+        // own sessions, history or runtime.log.
+        workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'desktop-render-'));
         server = spawn(process.execPath, [path.join(rootDir, 'server.js')], {
             cwd: rootDir,
-            env: { ...process.env, NODE_ENV: 'production', YODAMAN_PORT: String(PORT) },
+            env: { ...process.env, NODE_ENV: 'production', YODAMAN_PORT: String(PORT), YODAMAN_DATA_DIR: path.join(workDir, 'data'), YODAMAN_LOG_DIR: path.join(workDir, 'logs') },
             stdio: ['ignore', 'pipe', 'pipe']
         });
         serverUp = await waitForServer();
@@ -103,6 +108,7 @@ maybeDescribe('desktop renders the dashboard', () => {
         clearTimeout(timer);
         server.stdout.destroy();
         server.stderr.destroy();
+        fs.rmSync(workDir, { recursive: true, force: true });
         // Longer than the SIGKILL fallback above. With Jest's default 5s hook
         // timeout the escalation could never actually run: it fired at the same
         // instant the hook was abandoned, so a runtime slow to exit under load

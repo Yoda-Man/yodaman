@@ -35,6 +35,21 @@ npm run dev
 launches the Electron app. `docs/guides/Development-Guide.md` has the detail;
 `docs/guides/setup.md` covers models and dependencies.
 
+## Changes start in OpenSpec
+
+All work on YodaMan, features, fixes and maintenance alike, is driven from
+OpenSpec. `openspec/specs/` holds the baseline: one spec per capability,
+describing what the code does today. `openspec/config.yaml` holds the project
+rules. A change starts as a proposal under `openspec/changes/<name>/`, is built
+from its `tasks.md`, checked against its specs, and archived, which merges its
+spec deltas into `openspec/specs/`.
+
+`.claude/skills/` ships the OpenSpec workflows as skills for Claude Code: `openspec-propose` (or
+`openspec-new-change`), `openspec-apply-change`, `openspec-verify-change` and `openspec-archive-change`, plus
+`openspec-explore`, `openspec-continue-change`, `openspec-ff-change`, `openspec-update-change`, `openspec-sync-specs`,
+`openspec-bulk-archive-change` and `openspec-onboard`. Without Claude Code, the `openspec`
+CLI does the same steps by hand.
+
 ## Branches
 
 **Work on `dev`. Never commit or push to `main`.**
@@ -79,7 +94,7 @@ Useful while iterating:
 | Command | What it runs |
 | --- | --- |
 | `npm test` | The unit suites |
-| `npm run lint` | ESLint (`lint:fix` to autofix) |
+| `npm run lint` | ESLint over the repository (not `website/` or build output), including `bin/*.mjs` and the VS Code extension; no warnings allowed (`lint:fix` to autofix) |
 | `npm run test:approval` | The approval-gate smoke test |
 | `npm run test:coverage` | Coverage report |
 
@@ -105,6 +120,14 @@ Two consequences worth applying:
   `tests/frontend/SettingsModalLayout.test.js`, which exists purely to stop the
   rest of that file passing vacuously.
 - **Prefer one failing assertion per fault**, so the failure names the cause.
+
+Every fix ships with a regression test that fails without it. When the bug is
+one of a class, add a guard test in `tests/architecture/` that scans for the
+whole class, so the next instance fails the gate. Examples:
+`tests/architecture/ApiErrorsHaveCodes.test.js` (every API error carries a
+`code`), `tests/architecture/RegisteredWorkspacePaths.test.js` (routes act only
+on registered workspaces) and `tests/architecture/GitArgvEndsOptions.test.js`
+(request text never reaches git as an option).
 
 Two files are worth reading as worked examples, both with header comments
 explaining the specific bug they exist to catch:

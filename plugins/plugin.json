@@ -20,21 +20,6 @@
     "upload:temp",
     "filesystem:read-selected"
   ],
-  "uiExtensions": [
-    {
-      "target": "main-tab-bar",
-      "position": 1,
-      "label": "Agent",
-      "icon": "assets/chat-icon.svg",
-      "component": "frontend/AgenticChat.js"
-    },
-    {
-      "target": "plugins-tab",
-      "label": "Holocron VR",
-      "icon": "assets/icon.svg",
-      "component": "frontend/UIPanel.js"
-    }
-  ],
   "configSchema": {
     "lodNear": {
       "type": "number",

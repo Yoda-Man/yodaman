@@ -264,7 +264,10 @@ class ContextEngine {
      * @returns {Promise<Object>} Parsed JSON object.
      */
     async executeJson(args = []) {
-        const { output } = await this.execute([...args, '--json']);
+        // `--json` goes before any `--`: after it, ctx reads it as more free
+        // text and refuses the search with "too many arguments".
+        const end = args.indexOf('--');
+        const { output } = await this.execute(end === -1 ? [...args, '--json'] : [...args.slice(0, end), '--json', ...args.slice(end)]);
         try {
             // Find the actual JSON block by looking for the first { or [ that starts a line
             // or is the start of the output, avoiding "tip" messages in the middle of lines.

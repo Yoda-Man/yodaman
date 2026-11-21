@@ -47,8 +47,11 @@ const INLINE_EVAL_FLAGS = {
     perl: ['-e']
 };
 
-const { configPath } = require('./DataPaths');
-const PLUGIN_CONFIG_PATH = path.join(__dirname, '../../plugins/config.json');
+const { configPath, dataFile } = require('./DataPaths');
+// The disabled list lives in the data folder: plugins/ is inside the app
+// bundle, which every desktop upgrade replaces (and macOS signs).
+const PLUGIN_CONFIG_PATH = dataFile('plugins.json');
+const LEGACY_PLUGIN_CONFIG_PATH = path.join(__dirname, '../../plugins/config.json');
 const PLUGIN_PERMISSION_ALLOWLIST = new Set([
     'read',
     'write',
@@ -85,8 +88,13 @@ class ToolBox {
         this.loadPlugins();
     }
 
-    loadDisabledConfig() {
+    loadDisabledConfig(legacyPath = LEGACY_PLUGIN_CONFIG_PATH) {
         try {
+            // Once: copied, never moved, as DataPaths does, so an older version still finds its list.
+            if (!fs.existsSync(PLUGIN_CONFIG_PATH) && fs.existsSync(legacyPath)) {
+                fs.mkdirSync(path.dirname(PLUGIN_CONFIG_PATH), { recursive: true });
+                fs.copyFileSync(legacyPath, PLUGIN_CONFIG_PATH, fs.constants.COPYFILE_EXCL);
+            }
             if (fs.existsSync(PLUGIN_CONFIG_PATH)) {
                 const config = JSON.parse(fs.readFileSync(PLUGIN_CONFIG_PATH, 'utf8'));
                 if (Array.isArray(config.disabled)) this.disabledPlugins = new Set(config.disabled);
@@ -245,7 +253,7 @@ class ToolBox {
             ['searchCode', {
                 query: { type: 'string', required: true, note: 'natural language or a code fragment' },
                 project,
-                top: { type: 'number', required: false, note: 'max 50, default 10' },
+                top: { type: 'number', required: false, note: 'max 50, default 15' },
             }, 'Search the workspace: semantic matches, ranked by the knowledge graph, tagged with the specs that cover them.'],
             ['listFiles', { directoryPath: { type: 'string', required: true } }, 'Lists the entries of a directory.'],
             ['impactOf', {
@@ -444,7 +452,7 @@ class ToolBox {
      * tests/architecture/SearchPipelineBoundary.test.js fails the build if it does.
      */
     async contextExpertSearch({ query, project, top } = {}) {
-        const args = ['search', query];
+        const args = ['search'];
         if (project) {
             // ctx -p takes the indexed project's NAME. This passed the absolute
             // path, so ctx answered "Project not found", the JSON parse failed,
@@ -461,6 +469,8 @@ class ToolBox {
             args.push('-p', name);
         }
         if (top) args.push('-k', String(Math.min(Math.max(Number(top) || 10, 1), 50)));
+        // After `--`, a query such as "-k 3" or "--help" is text, never a flag.
+        args.push('--', query);
         try {
             const results = await contextEngine.executeJson(args);
             if (Array.isArray(results) && results.length > 0) return this.normalizeSearchHits(results);
@@ -1084,7 +1094,7 @@ class ToolBox {
                 const PluginAPI = require('./PluginAPI');
                 const pluginsDir = path.resolve(__dirname, '../../plugins');
                 const pluginDir = pluginsDir;
-                plugin._api = new PluginAPI(pluginDir);
+                plugin._api = new PluginAPI(pluginDir, this.normalizePluginPermissions(plugin.permissions));
                 plugin.execute = async (params = {}) => {
                     if (plugin.onLoad) await plugin.onLoad(plugin._api);
                     if (params._action === 'enable' && plugin.onEnable) await plugin.onEnable(plugin._api);

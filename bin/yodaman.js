@@ -36,14 +36,17 @@ const args = process.argv.slice(2);
 // Deliberately before every other require below runs any real work: `yodaman
 // --help` used to fall through this file entirely and BOOT THE RUNTIME, so a
 // user asking what the commands were got a server instead of an answer.
-if (args[0] === 'help' || args[0] === '--help' || args[0] === '-h') {
+// Anywhere on the line, not only first: `yodaman setup --help` ran setup.
+if (args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     const { version } = require('../package.json');
+    const port = Number(process.env.YODAMAN_PORT || 3090);
     console.log(`
 YodaMan ${version} — local-first workspace intelligence
 
-  yodaman                    Start the runtime (http://localhost:3090)
+  yodaman                    Start the runtime (http://localhost:${port})
   yodaman setup              Install the dependencies YodaMan needs
-  yodaman uninstall          Show what removing YodaMan would delete\n  yodaman doctor             Check dependency health
+  yodaman uninstall          Show what removing YodaMan would delete
+  yodaman doctor             Check dependency health
   yodaman doctor --graph     Check knowledge-graph health
   yodaman create-plugin <n>  Scaffold a new plugin
 
@@ -91,7 +94,9 @@ if (args[0] === 'uninstall' || args[0] === 'clean') {
         }
 
         const dataPaths = require('../backend/infrastructure/DataPaths');
-        const plan = uninstallPlanner.buildUninstallPlan({ workspaces, dataFiles: [configPath, dataPaths.databasePath()] });
+        const { DATA_FOLDER_STATE } = require('../shared/generatedPaths');
+        const dataFiles = [configPath, dataPaths.databasePath(), ...DATA_FOLDER_STATE.map((name) => dataPaths.dataFile(name))];
+        const plan = uninstallPlanner.buildUninstallPlan({ workspaces, dataFiles });
         console.log(uninstallPlanner.formatUninstallPlan(plan));
 
         if (!confirmed) {
@@ -203,6 +208,12 @@ if (args[0] === 'create-plugin') {
     const pluginName = args[1];
     if (!pluginName) {
         console.error('Usage: yodaman create-plugin <plugin-name>');
+        process.exit(1);
+    }
+    // The name becomes a file name, a JS identifier and a string literal, so
+    // `../x` must not write outside plugins/ and a quote must not break the source.
+    if (!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(pluginName)) {
+        console.error(`Invalid plugin name "${pluginName}": use a letter, then letters, digits, - or _ (at most 64).`);
         process.exit(1);
     }
 

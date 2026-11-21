@@ -8,9 +8,9 @@
  * configured with, so there is no second model setting to keep in step.
  */
 const contextEngine = require('../infrastructure/ContextEngine');
+const { ollamaUrl } = require('../infrastructure/OllamaConfig');
 const { hitPath, hitLine, hitText } = require('../../shared/searchHits');
 
-const OLLAMA_URL = 'http://127.0.0.1:11434';
 const MAX_HITS = 8;
 const MAX_SNIPPET_CHARS = 700;
 const CACHE_SIZE = 50;
@@ -77,7 +77,7 @@ async function* summarize({ query, results, signal, fetchImpl = fetch }) {
         return;
     }
 
-    const response = await fetchImpl(`${OLLAMA_URL}/api/chat`, {
+    const response = await fetchImpl(`${ollamaUrl()}/api/chat`, {
         method: 'POST',
         signal,
         body: JSON.stringify({

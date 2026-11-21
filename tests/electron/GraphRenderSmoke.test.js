@@ -121,9 +121,11 @@ maybeDescribe('Graph Studio renders', () => {
 
     beforeAll(async () => {
         workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'graph-render-'));
+        // workDir doubles as the runtime's data and log folder, so the run never
+        // writes the developer's own sessions, history or runtime.log.
         server = spawn(process.execPath, [path.join(rootDir, 'server.js')], {
             cwd: rootDir,
-            env: { ...process.env, NODE_ENV: 'production', YODAMAN_PORT: String(PORT) },
+            env: { ...process.env, NODE_ENV: 'production', YODAMAN_PORT: String(PORT), YODAMAN_DATA_DIR: path.join(workDir, 'data'), YODAMAN_LOG_DIR: path.join(workDir, 'logs') },
             stdio: ['ignore', 'pipe', 'pipe']
         });
         serverUp = await waitForServer();

@@ -94,7 +94,8 @@ export function useStardustPipeline(projectRoot) {
         const [health, readiness, drift] = await Promise.all([
             api.health().catch(() => null),
             api.getReadiness(projectRoot).catch(() => null),
-            api.stardustDrift(projectRoot).catch(() => null),
+            // A refusal (e.g. 404 workspace_not_registered) is shown as the spec layer's reason.
+            api.stardustDrift(projectRoot).catch(err => ({ available: false, reason: err.message })),
         ]);
 
         // A newer refresh already landed — drop this one rather than overwrite it.

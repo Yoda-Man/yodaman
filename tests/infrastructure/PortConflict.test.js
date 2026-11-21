@@ -1,5 +1,7 @@
 const { spawn } = require('child_process');
+const fs = require('fs');
 const net = require('net');
+const os = require('os');
 const path = require('path');
 
 /**
@@ -17,6 +19,8 @@ const path = require('path');
 describe('Runtime port conflict', () => {
     let blocker;
     let port;
+    // The runtime prepares its data folder before it binds; keep that off the developer's own.
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'port-conflict-'));
 
     beforeAll(async () => {
         // Take a port the runtime will then fail to bind.
@@ -27,6 +31,7 @@ describe('Runtime port conflict', () => {
 
     afterAll(() => {
         if (blocker) blocker.close();
+        fs.rmSync(scratch, { recursive: true, force: true });
     });
 
     test('reports the port, the cause, and a way out — and exits distinctly', async () => {
@@ -34,7 +39,7 @@ describe('Runtime port conflict', () => {
         const child = spawn(process.execPath, [serverPath], {
             // YODAMAN_PORT, not PORT. Writing PORT here is what caught the runtime
             // printing `PORT=3091` as the remedy — advice that would not have worked.
-            env: { ...process.env, YODAMAN_PORT: String(port) },
+            env: { ...process.env, YODAMAN_PORT: String(port), YODAMAN_DATA_DIR: path.join(scratch, 'data'), YODAMAN_LOG_DIR: path.join(scratch, 'logs') },
             stdio: ['ignore', 'pipe', 'pipe']
         });
 

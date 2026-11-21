@@ -63,11 +63,10 @@ export function useStardustLive(projectRoot) {
     const connect = useCallback((root) => {
         if (wsRef.current) {
             try { wsRef.current.close(); } catch (_) { /* ignore */ }
+            wsRef.current = null;
         }
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.host;
-        const url = `${protocol}//${host}/api/stardust/live?projectRoot=${encodeURIComponent(root || '')}`;
+        const url = api.stardustLiveUrl(root);
 
         let ws;
         try {
@@ -103,11 +102,13 @@ export function useStardustLive(projectRoot) {
         };
 
         ws.onclose = () => {
+            // A socket replaced by connect() or closed on unmount is no longer
+            // current; reconnecting it would leak one socket per switch.
+            if (wsRef.current !== ws) return;
             _connected = false;
             notify();
-            // Reconnect after 3s
             setTimeout(() => {
-                if (projectRef.current) connect(projectRef.current);
+                if (wsRef.current === ws && projectRef.current) connect(projectRef.current);
             }, 3000);
         };
 
@@ -125,6 +126,7 @@ export function useStardustLive(projectRoot) {
                 try { wsRef.current.close(); } catch (_) { /* ignore */ }
                 wsRef.current = null;
             }
+            _connected = false;
             if (pollRef.current) {
                 clearInterval(pollRef.current);
                 pollRef.current = null;

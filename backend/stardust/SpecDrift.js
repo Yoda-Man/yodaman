@@ -237,4 +237,15 @@ function formatDrift(report) {
     return lines.join('\n');
 }
 
-module.exports = { findOpenSpecRoot, readSpecs, extractReferences, detectDrift, formatDrift };
+/**
+ * Whether a spec reference names this file, on path boundaries: `Logger.js`
+ * names `src/Logger.js`, never `src/AuditLogger.js`. Either side may be the
+ * longer one (absolute path, workspace-relative path or bare file name).
+ */
+function citesFile(reference, filePath) {
+    const ref = String(reference).replace(/\\/g, '/');
+    const file = String(filePath).replace(/\\/g, '/');
+    return ref === file || file.endsWith(`/${ref}`) || ref.endsWith(`/${file}`);
+}
+
+module.exports = { findOpenSpecRoot, readSpecs, extractReferences, detectDrift, formatDrift, citesFile };

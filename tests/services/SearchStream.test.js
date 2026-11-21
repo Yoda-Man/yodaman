@@ -25,7 +25,7 @@ async function stream(query) {
         end: jest.fn(),
         on(type, fn) { listeners[type] = fn; },
         status: jest.fn(function status() { return this; }),
-        send: jest.fn()
+        json: jest.fn()
     };
     const done = handler({ query, id: 'r1' }, res);
     return { events, res, listeners, done };
@@ -96,5 +96,6 @@ test('a query is required', async () => {
     const { res, events, done } = await stream({});
     await done;
     expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Query is required', code: 'query_required' });
     expect(events).toEqual([]);
 });

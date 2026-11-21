@@ -58,18 +58,14 @@ function scanByText(root, exts, skip) {
   const entryNames = new Set(['index.js', 'index.ts', 'main.js', 'main.ts', 'app.js', 'app.tsx', 'index.jsx', 'index.tsx']);
   for (const file of allFiles) if (entryNames.has(path.basename(file))) referenced.add(file);
 
+  // Each file's own relative imports mark their targets as used. This used to
+  // search each file for its OWN name, so a file another file imported was
+  // still reported unused.
   for (const [filePath, content] of Object.entries(contents)) {
-    const base = path.basename(filePath).replace(path.extname(filePath), '');
-    const pattern = new RegExp(`['"\`](\\.\\.?/.*?)?${base}['"\`]`, 'g');
-    let match;
-    while ((match = pattern.exec(content)) !== null) {
-      const importPath = match[1] ? match[1] + base : base;
-      if (!importPath.startsWith('.')) continue;
-      const resolved = path.resolve(path.dirname(filePath), importPath);
-      for (const ext of exts) {
-        if (fs.existsSync(resolved + ext)) referenced.add(resolved + ext);
-        if (fs.existsSync(path.join(resolved, `index${ext}`))) referenced.add(path.join(resolved, `index${ext}`));
-      }
+    for (const [, spec] of content.matchAll(/['"`](\.\.?\/[^'"`\s]*)['"`]/g)) {
+      const resolved = path.resolve(path.dirname(filePath), spec);
+      const candidates = [resolved, ...[...exts].flatMap(ext => [resolved + ext, path.join(resolved, `index${ext}`)])];
+      for (const candidate of candidates) if (candidate in contents) referenced.add(candidate);
     }
   }
 

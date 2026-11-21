@@ -35,6 +35,14 @@ module.exports = [
         ]
     },
 
+    // Root tooling configs (this file, Vite, PostCSS, Tailwind) run in Node.
+    // sourceType is left to the extension: .mjs is ESM, .cjs and .js CommonJS-ish.
+    {
+        files: ['*.config.js', '*.config.cjs', '*.config.mjs'],
+        languageOptions: { ecmaVersion: 2023, globals: { ...globals.node } },
+        rules: { ...js.configs.recommended.rules }
+    },
+
     // Build/tooling configs inside apps/ run in Node, not the RN bundle.
     {
         files: ['apps/**/*.config.js', 'apps/**/babel.config.js'],
@@ -64,7 +72,7 @@ module.exports = [
 
     // ── Backend / Node (CommonJS) ────────────────────────────────────────
     {
-        files: ['backend/**/*.js', 'shared/**/*.js', 'plugins/**/*.js', 'scripts/**/*.js', 'electron/**/*.js', 'bin/**/*.js', 'server.js', 'start.js'],
+        files: ['backend/**/*.js', 'shared/**/*.js', 'plugins/**/*.js', 'scripts/**/*.js', 'electron/**/*.js', 'bin/**/*.js', 'bin/**/*.mjs', 'server.js', 'start.js'],
         languageOptions: {
             ecmaVersion: 2023,
             sourceType: 'commonjs',
@@ -108,10 +116,28 @@ module.exports = [
         }
     },
 
+    // ── VS Code extension (CommonJS, Node extension host) ────────────────
+    // Unlinted until 0.6.7, which is how an undefined `mode` shipped in
+    // extension.js. `vscode` is require()d, not a global.
+    {
+        files: ['extensions/*/src/**/*.js', 'extensions/*/*.js'],
+        languageOptions: {
+            ecmaVersion: 2023,
+            sourceType: 'commonjs',
+            globals: { ...globals.node }
+        },
+        rules: {
+            ...js.configs.recommended.rules,
+            'no-unused-vars': ['warn', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+            'no-empty': ['error', { allowEmptyCatch: false }]
+        }
+    },
+
     // The shared modules the UI imports are ES modules: Vite's dev server serves
     // source as native ESM and cannot read module.exports. Node 24 require()s them.
+    // .mjs entry points are ESM by definition.
     {
-        files: ['shared/searchHits.js', 'shared/pluginInvocation.js'],
+        files: ['shared/searchHits.js', 'shared/pluginInvocation.js', 'bin/**/*.mjs'],
         languageOptions: { sourceType: 'module' }
     },
 
@@ -119,7 +145,7 @@ module.exports = [
     // channel here, not a mistake. `yodaman doctor` printing "✅ Graphify is
     // installed" to the terminal is the feature.
     {
-        files: ['bin/**/*.js', 'start.js', 'backend/infrastructure/Logger.js', 'scripts/**/*.js'],
+        files: ['bin/**/*.js', 'bin/**/*.mjs', 'start.js', 'backend/infrastructure/Logger.js', 'scripts/**/*.js'],
         rules: { 'no-console': 'off' }
     },
 
@@ -135,7 +161,7 @@ module.exports = [
 
     // ── Frontend (ESM + JSX + browser) ───────────────────────────────────
     {
-        files: ['src/**/*.js', 'src/**/*.jsx', 'frontend/**/*.js', 'frontend/**/*.jsx'],
+        files: ['src/**/*.js', 'src/**/*.jsx', 'src/**/*.mjs', 'frontend/**/*.js', 'frontend/**/*.jsx'],
         languageOptions: {
             ecmaVersion: 2023,
             sourceType: 'module',

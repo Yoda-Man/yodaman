@@ -26,12 +26,20 @@
  * assertion on the next run. Everything here is spawned detached and killed by
  * process group so nothing survives the suite.
  */
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const net = require('net');
 const { spawn } = require('child_process');
 
 const CLI = path.join(__dirname, '..', '..', 'bin', 'yodaman.js');
 const RUNTIME_PORT = 3090;
+
+// A throwaway data and log folder for every run, so no command here reads or
+// writes the developer's own config, sessions, history or runtime.log.
+const SCRATCH = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-cli-test-'));
+const ISOLATED = { YODAMAN_DATA_DIR: path.join(SCRATCH, 'data'), YODAMAN_LOG_DIR: path.join(SCRATCH, 'logs') };
+afterAll(() => fs.rmSync(SCRATCH, { recursive: true, force: true }));
 
 /** True if something is accepting connections on the port. */
 function portIsOpen(port) {
@@ -58,14 +66,14 @@ function portIsOpen(port) {
  *                   test that only needs to see a banner does not have to wait
  *                   out the full timeout with a server running.
  */
-function runCli(args, { timeoutMs = 15000, stopOnStdout = null } = {}) {
+function runCli(args, { timeoutMs = 15000, stopOnStdout = null, env = {} } = {}) {
     return new Promise((resolve) => {
         // detached:true puts the child in its own process group, so killing
         // -pid reaps anything it spawned. Without this, `server.js` outlives us.
         const child = spawn(process.execPath, [CLI, ...args], {
             stdio: ['ignore', 'pipe', 'pipe'],
             detached: true,
-            env: { ...process.env, NODE_ENV: 'test' }
+            env: { ...process.env, NODE_ENV: 'test', YODAMAN_DATA_DIR: ISOLATED.YODAMAN_DATA_DIR, YODAMAN_LOG_DIR: ISOLATED.YODAMAN_LOG_DIR, ...env }
         });
 
         let stdout = '';
@@ -144,6 +152,37 @@ describe('yodaman --help', () => {
         expect(result.stdout).toMatch(/yodaman doctor/);
         expect(result.stdout).toMatch(/create-plugin/);
     });
+});
+
+describe('--help after a command', () => {
+    // `yodaman setup --help` used to run setup, and `yodaman doctor --help` ran
+    // the doctor: help was recognised only as the first argument.
+    test.each([['setup', '--help'], ['doctor', '--help'], ['uninstall', '-h'], ['create-plugin', '--help']])(
+        'yodaman %s %s prints help and runs nothing', async (...args) => {
+            const result = await runCli(args);
+            expect(result.timedOut).toBe(false);
+            expect(result.code).toBe(0);
+            expect(result.stdout).toMatch(/Options\s+--help/);
+            expect(result.stdout).not.toMatch(/Checking what YodaMan needs|Would remove|Nothing generated|Created plugin|Starting YodaMan/);
+        }, 40000);
+
+    it('names the port the runtime will use', async () => {
+        const result = await runCli(['--help'], { env: { YODAMAN_PORT: '3123' } });
+        expect(result.stdout).toMatch(/Start the runtime \(http:\/\/localhost:3123\)/);
+    }, 40000);
+});
+
+describe('yodaman create-plugin', () => {
+    const pluginsDir = path.join(__dirname, '..', '..', 'plugins');
+
+    test.each(['../escaped', '/tmp/abs', "it's", 'a.b', '1abc'])('refuses the name %p and writes nothing', async (name) => {
+        const before = fs.readdirSync(pluginsDir).sort();
+        const result = await runCli(['create-plugin', name]);
+        expect(result.code).toBe(1);
+        expect(result.stderr).toMatch(/Invalid plugin name/);
+        expect(fs.readdirSync(pluginsDir).sort()).toEqual(before);
+        expect(fs.existsSync(path.join(pluginsDir, '..', 'escaped.js'))).toBe(false);
+    }, 40000);
 });
 
 describe('yodaman --version', () => {
@@ -240,6 +279,44 @@ describe('yodaman uninstall', () => {
     it('states that source code is untouched', async () => {
         const result = await runCli(['uninstall'], { timeoutMs: 30000 });
         expect(result.stdout).toMatch(/source code is never touched/i);
+    }, 60000);
+});
+
+describe('yodaman uninstall and the data folder', () => {
+    // Since 0.6.4 sessions.json and the audit/task JSON fallbacks live in the data
+    // folder beside config.json, and `npm uninstall` keeps them, yet the plan
+    // named only config.json and yodaman.db.
+    const STATE = ['sessions.json', 'plugins.json', 'audit-log.json', 'audit-log.jsonl', 'task-history.json', 'task-history.jsonl'];
+    let home;
+    let data;
+    let env;
+
+    beforeEach(() => {
+        home = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-uninstall-home-'));
+        data = path.join(home, 'data');
+        fs.mkdirSync(data);
+        // config.json first, with no workspaces, so nothing outside this folder
+        // is in the plan (and no older install's config is copied in).
+        for (const name of ['config.json', ...STATE]) fs.writeFileSync(path.join(data, name), name === 'config.json' ? '{"watchedDirectories":[]}' : '{}');
+        fs.mkdirSync(path.join(data, 'Local Storage'));
+        // HOME too: --yes also removes ~/.yodaman, and this must never be the real one.
+        env = { HOME: home, USERPROFILE: home, YODAMAN_DATA_DIR: data, YODAMAN_CONFIG_PATH: '', YODAMAN_DB_PATH: '' };
+    });
+    afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
+
+    it('lists every state file in the data folder', async () => {
+        const result = await runCli(['uninstall'], { env, timeoutMs: 30000 });
+        expect(result.code).toBe(0);
+        for (const name of ['config.json', ...STATE]) expect(result.stdout).toContain(path.join(data, name));
+        expect(result.stdout).not.toMatch(/its own state \(sessions\.json/);
+        expect(STATE.every((name) => fs.existsSync(path.join(data, name)))).toBe(true);
+    }, 60000);
+
+    it('--yes removes them and keeps the rest of the folder', async () => {
+        const result = await runCli(['uninstall', '--yes'], { env, timeoutMs: 30000 });
+        expect(result.code).toBe(0);
+        expect(STATE.filter((name) => fs.existsSync(path.join(data, name)))).toEqual([]);
+        expect(fs.existsSync(path.join(data, 'Local Storage'))).toBe(true);
     }, 60000);
 });
 

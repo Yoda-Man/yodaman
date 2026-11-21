@@ -4,8 +4,9 @@
  *
  * WHY THIS EXISTS.
  *
- * The version lives in eleven places across three packages, a README badge, a
- * user manual, four docs, a website page, and an issue template. Every release
+ * The version lives in thirteen places (SITES below): three packages, a README
+ * badge, the user manual and its in-app copy, four docs, the VS Code publishing
+ * guide, the website, and an issue template. Every release
  * so far moved them by hand, and the ones that were missed are why
  * `tests/infrastructure/DocumentationAccuracy.test.js` had to be written: an
  * audit found docs claiming 0.4.4 four releases later, and a publishing guide
@@ -33,9 +34,14 @@
  * A blanket search-and-replace of the version string across the tree would do
  * both of those wrong, which is why every edit below is anchored to a specific
  * pattern in a specific file.
+ *
+ * --check also scans every doc for a version beside "YodaMan" or "Version"
+ * (see STRAY), because a list of sites only covers the places someone
+ * remembered: public/manual.html sat at 0.6.4 while --check passed.
  */
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -119,7 +125,21 @@ const SITES = [
         file: 'website/index.html',
         describe: 'website download links',
         pattern: (v) => new RegExp(`downloads/[A-Za-z-]*${escape(v)}`),
-        write: (s, from, to) => s.replace(new RegExp(escape(from), 'g'), to)
+        write: (s, from, to) => s.replace(new RegExp(`(downloads/[A-Za-z-]*)${escape(from)}`, 'g'), `$1${to}`)
+    },
+    {
+        file: 'public/manual.html',
+        describe: 'in-app manual',
+        pattern: (v) => new RegExp(`<p class="version">Version ${escape(v)}</p>`),
+        write: (s, from, to) => s
+            .replace(new RegExp(`<p class="version">Version ${escape(from)}</p>`), `<p class="version">Version ${to}</p>`)
+            .replace(new RegExp(`YodaMan ${escape(from)}`, 'g'), `YodaMan ${to}`)
+    },
+    {
+        file: 'extensions/vscode-yodaman/PUBLISHING.md',
+        describe: 'VS Code publishing guide',
+        pattern: (v) => new RegExp(`vscode-yodaman-${escape(v)}\\.vsix`),
+        write: (s, from, to) => s.replace(new RegExp(`vscode-yodaman-${escape(from)}\\.vsix`, 'g'), `vscode-yodaman-${to}.vsix`)
     },
     {
         file: '.github/ISSUE_TEMPLATE/bug_report.yml',
@@ -131,6 +151,29 @@ const SITES = [
 
 function escape(v) {
     return String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * A version that names YodaMan's own release: "YodaMan 0.6.6", "YodaMan v0.6.6",
+ * "Version: 0.6.6", "**Version**: 0.6.6", the badge's "Version-0.6.6", and
+ * download names such as "YodaMan-0.6.6-arm64.dmg" or "vscode-yodaman-0.6.6.vsix".
+ */
+const STRAY = /(?:\bYodaMan v?|\bVersion\**[:\s-]*|\b(?:YodaMan|yodaman|vscode-yodaman)-)(\d+\.\d+\.\d+)\b/g;
+// History keeps the versions it describes; specs and tests quote examples.
+const NOT_SCANNED = /^(CHANGELOG\.md|UPGRADING\.md|packaging\/|openspec\/|tests\/|\.(?!github\/))/;
+
+/** Each version in `text` that names YodaMan but is not `version`. */
+function strayVersions(text, version) {
+    return [...text.matchAll(STRAY)].filter((m) => m[1] !== version).map((m) => m[0].trim());
+}
+
+/** Docs in the working tree (tracked or new, not ignored) that name another version. */
+function strays(version) {
+    const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8' })
+        .split('\n')
+        .filter((file) => /\.(md|html|ya?ml|txt)$/.test(file) && !NOT_SCANNED.test(file) && exists(file));
+    return files.flatMap((file) => strayVersions(read(file), version)
+        .map((found) => `${file} names "${found}", not ${version} — add it to SITES or correct it`));
 }
 
 function currentVersion() {
@@ -150,7 +193,7 @@ function check(target) {
             problems.push(`${site.file} (${site.describe}) does not carry ${target}`);
         }
     }
-    return problems;
+    return problems.concat(strays(target));
 }
 
 function main() {
@@ -161,7 +204,7 @@ function main() {
     if (checkOnly) {
         const problems = check(from);
         if (!problems.length) {
-            console.log(`All ${SITES.length} version references agree on ${from}.`);
+            console.log(`All ${SITES.length} version sites, and every doc that names a version, agree on ${from}.`);
             process.exit(0);
         }
         console.error(`Version drift against package.json (${from}):`);
@@ -218,4 +261,6 @@ function main() {
     console.log('  website/downloads/      run `npm run website:downloads` before deploying the site');
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { SITES, check, strayVersions };

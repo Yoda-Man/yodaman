@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { GitBranch, GitCommit, GitPullRequest, ArrowUp, ArrowDown, Plus } from 'lucide-react'
+import { api } from '../api/api'
 
 export default function GitPanel({ project }) {
     const selected = project?.path || ''
@@ -13,8 +14,7 @@ export default function GitPanel({ project }) {
         if (!path) return
         setLoading(true)
         try {
-            const r = await fetch(`/api/git/context?path=${encodeURIComponent(path)}`)
-            setGit(await r.json())
+            setGit(await api.getGitContext(path))
         } catch (_) { setGit(null) }
         setLoading(false)
     }
@@ -23,15 +23,10 @@ export default function GitPanel({ project }) {
         if (selected) fetchGit(selected)
     }, [selected])
 
-    const doAction = async (endpoint, body = {}) => {
+    const doAction = async (action, body = {}) => {
         setActionStatus('...')
         try {
-            const r = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: selected, ...body })
-            })
-            const d = await r.json()
+            const d = await api.gitAction(action, selected, body)
             setActionStatus(d.ok ? '✓ Done' : '✗ ' + (d.error || 'failed'))
             if (d.ok) fetchGit(selected)
         } catch (e) {
@@ -75,15 +70,15 @@ export default function GitPanel({ project }) {
 
                     {/* Actions */}
                     <div className="flex flex-wrap gap-2">
-                        <button onClick={() => doAction('/api/git/commit', { message: commitMsg || 'yodaman update' })}
+                        <button onClick={() => doAction('commit', { message: commitMsg || 'yodaman update' })}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 uppercase hover:bg-emerald-500/20">
                             <GitCommit size={12} /> Commit
                         </button>
-                        <button onClick={() => doAction('/api/git/push')}
+                        <button onClick={() => doAction('push')}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500/10 border border-sky-500/20 rounded-lg text-[10px] font-bold text-sky-400 uppercase hover:bg-sky-500/20">
                             <ArrowUp size={12} /> Push
                         </button>
-                        <button onClick={() => doAction('/api/git/pull')}
+                        <button onClick={() => doAction('pull')}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] font-bold text-amber-400 uppercase hover:bg-amber-500/20">
                             <GitPullRequest size={12} /> Pull
                         </button>
@@ -105,7 +100,7 @@ export default function GitPanel({ project }) {
                             onChange={e => setNewBranch(e.target.value)}
                             className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-slate-200 outline-none focus:border-indigo-500/50"
                         />
-                        <button onClick={() => { doAction('/api/git/branch', { branch: newBranch }); setNewBranch('') }}
+                        <button onClick={() => { doAction('branch', { branch: newBranch }); setNewBranch('') }}
                             disabled={!newBranch}
                             className="flex items-center gap-1 px-3 py-1.5 bg-violet-500/10 border border-violet-500/20 rounded-lg text-[10px] font-bold text-violet-400 uppercase disabled:opacity-30 hover:bg-violet-500/20">
                             <Plus size={12} /> Branch

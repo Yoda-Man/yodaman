@@ -241,7 +241,64 @@ describe('a graphify that is installed but cannot start', () => {
         });
     });
 
+    unix('a graphify found by Repair reads "installed at <path>", not "vinstalled"', async () => {
+        // The shape Repair hands healthEntry: locate()'s result for graphify.
+        const working = fakeGraphify('#!/bin/sh\necho "usage: graphify"\n');
+        await withPath([working], async () => {
+            const entry = dependencyChecker.healthEntry(await dependencyChecker.locate('graphify'));
+            expect(entry.message).toBe(`installed at ${path.join(working, 'graphify')}`);
+        });
+    });
+
     test('Repair can install graphify on Homebrew Python, which refuses plain --user installs', () => {
         expect(dependencyChecker.SERVICES.graphify.installHint.darwin).toContain('--break-system-packages');
+    });
+});
+
+describe('health entry text', () => {
+    test('a numeric version still gets its "v"', () => {
+        expect(dependencyChecker.healthEntry({ found: true, version: '0.30.8', path: '/bin/ollama', running: true }, { includeRunning: true }).message)
+            .toBe('v0.30.8 at /bin/ollama (running)');
+    });
+});
+
+describe('the context window Ollama serves', () => {
+    const ollamaConfig = require('../../backend/infrastructure/OllamaConfig');
+    let inspect;
+    let savedFetch;
+
+    beforeEach(() => {
+        dependencyChecker.resetOllamaContextCache();
+        savedFetch = global.fetch;
+        global.fetch = jest.fn(async () => { throw new Error('offline'); });
+        inspect = jest.spyOn(ollamaConfig, 'inspect');
+    });
+    afterEach(() => {
+        global.fetch = savedFetch;
+        inspect.mockRestore();
+        dependencyChecker.resetOllamaContextCache();
+    });
+
+    test('a changed setting is reported at once, not after the 5 minute cache', async () => {
+        inspect.mockReturnValue({ configured: 4096 });
+        expect(await dependencyChecker.detectOllamaContext('m')).toMatchObject({ configured: 4096, small: true });
+
+        // POST /api/ollama/context rewrote the plist; the runtime was not restarted.
+        inspect.mockReturnValue({ configured: 32768 });
+        expect(await dependencyChecker.detectOllamaContext('m')).toMatchObject({ configured: 32768, effective: 32768, small: false });
+    });
+
+    test('says whether the Dashboard can change the window (Homebrew-run Ollama only)', async () => {
+        inspect.mockReturnValue({ configured: 4096, managed: false });
+        expect(await dependencyChecker.detectOllamaContext('m')).toMatchObject({ small: true, managed: false });
+        inspect.mockReturnValue({ configured: 4096, managed: true });
+        expect(await dependencyChecker.detectOllamaContext('m')).toMatchObject({ small: true, managed: true });
+    });
+
+    test('an unchanged setting is still served from the cache', async () => {
+        inspect.mockReturnValue({ configured: 32768 });
+        await dependencyChecker.detectOllamaContext('m');
+        await dependencyChecker.detectOllamaContext('m');
+        expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 });

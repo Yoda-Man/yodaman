@@ -33,9 +33,20 @@ const path = require('path');
 const {
     GENERATED_WORKSPACE_DIRS,
     HOME_STATE_DIR,
-    INSTALL_DIR_STATE,
     isUserOwned
 } = require('../../shared/generatedPaths');
+
+/** What each file in the data folder holds, as the plan prints it. */
+const DATA_FILE_LABELS = {
+    'config.json': 'Your settings and workspace list',
+    'yodaman.db': 'Your task history and audit log',
+    'sessions.json': 'Your chat sessions',
+    'plugins.json': 'Your list of disabled plugins',
+    'audit-log.json': 'Your audit log (fallback when SQLite is unavailable)',
+    'audit-log.jsonl': 'Your audit log (fallback when SQLite is unavailable)',
+    'task-history.json': 'Your task history (fallback when SQLite is unavailable)',
+    'task-history.jsonl': 'Your task history (fallback when SQLite is unavailable)'
+};
 
 /**
  * Paths that must never be proposed for deletion regardless of what a config
@@ -70,7 +81,7 @@ function isDangerousRoot(target, homeDir = os.homedir()) {
  * @param {string}   options.homeDir     Defaults to os.homedir().
  * @param {function} options.exists      Injectable for tests; defaults to fs.existsSync.
  * @param {string}   options.platform    Defaults to process.platform.
- * @param {string[]} options.dataFiles   The user's config.json and yodaman.db (see DataPaths).
+ * @param {string[]} options.dataFiles   The user's files in the data folder (see DataPaths).
  * @returns {{remove: object[], protected: object[], manual: object[], skipped: object[]}}
  */
 function buildUninstallPlan({
@@ -94,7 +105,7 @@ function buildUninstallPlan({
     // The user's settings, workspace list and history. Named one by one: the
     // folder they sit in also holds the desktop app's own browser data.
     for (const file of dataFiles) {
-        if (exists(file)) remove.push({ path: file, what: path.basename(file) === 'yodaman.db' ? 'Your task history and audit log' : 'Your settings and workspace list' });
+        if (exists(file)) remove.push({ path: file, what: DATA_FILE_LABELS[path.basename(file)] || 'Your YodaMan data' });
     }
 
     for (const workspace of workspaces) {
@@ -124,7 +135,7 @@ function buildUninstallPlan({
     // Things a user must do themselves, because they are not ours to run.
     manual.push({
         action: 'npm uninstall -g yodaman',
-        why: `removes the program and its own state (${INSTALL_DIR_STATE.join(', ')})`
+        why: 'removes the program itself, never your data files listed above'
     });
     manual.push({
         action: 'Remove the "yodaman" entry from any MCP client config',

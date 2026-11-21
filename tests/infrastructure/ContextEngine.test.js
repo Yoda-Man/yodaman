@@ -21,6 +21,18 @@ describe('ContextEngine', () => {
         expect(result.code).toBe(0);
     });
 
+    test('executeJson puts --json before --, so ctx does not read it as query text', async () => {
+        spawn.mockReturnValue({
+            stdout: { on: jest.fn((event, cb) => { if (event === 'data') cb(Buffer.from('[]')); }) },
+            stderr: { on: jest.fn() },
+            on: jest.fn((event, cb) => { if (event === 'close') cb(0); })
+        });
+        await contextEngine.executeJson(['search', '-p', 'x', '--', '-q']);
+        expect(spawn.mock.calls.at(-1)[1]).toEqual(['search', '-p', 'x', '--json', '--', '-q']);
+        await contextEngine.executeJson(['list']);
+        expect(spawn.mock.calls.at(-1)[1]).toEqual(['list', '--json']);
+    });
+
     test('executeJson should extract JSON from noisy output', async () => {
         const noisyOutput = `
         dotenvx: version 0.1.0

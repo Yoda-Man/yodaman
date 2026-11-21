@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const { execFile } = require('child_process');
 const execFileAsync = require('util').promisify(execFile);
 
@@ -10,6 +11,7 @@ const contextEngine = require('../infrastructure/ContextEngine');
 const watcherService = require('../infrastructure/FileSystemWatcher');
 const toolBox = require('../infrastructure/ToolBox');
 const searchRouter = require('../services/searchRouter');
+const searchPipeline = require('../core/SearchPipeline');
 const fileUploadService = require('../services/fileUploadService');
 const auditLog = require('../infrastructure/AuditLog');
 const dataPaths = require('../infrastructure/DataPaths');
@@ -19,7 +21,8 @@ const logger = require('../infrastructure/Logger');
 const {
     getConfigPath,
     validateIndexableDirectory,
-    validateWorkspaceCandidate
+    validateWorkspaceCandidate,
+    resolveRegisteredProjectPath
 } = require('./support/workspaces');
 const graphifyService = require('../infrastructure/GraphifyService');
 const dependencyChecker = require('../infrastructure/DependencyChecker');
@@ -36,6 +39,12 @@ const queueService = require('../core/QueueService');
 const agentEngine = require('../core/AgentReasoningEngine');
 
 const router = express.Router();
+// Express 5 leaves req.body undefined when a request has no JSON body, so every
+// `req.body.x` read threw and answered 500 instead of the route's own 400.
+router.use((req, _res, next) => {
+    req.body ??= {};
+    next();
+});
 const PLUGINS_DIR = path.resolve(__dirname, '../../plugins');
 const DEFAULT_PLUGINS = new Set(['graphify', 'Grand-Inquisitor', 'CodeTrooper', 'Droid-Sweep', 'lightsaber']);
 
@@ -53,6 +62,14 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// multer hands a refused file name to next(err), which reached the app's
+// error handler as a 500. Answer it here with its own status and code.
+function receivePluginUpload(req, res, next) {
+    upload.single('plugin')(req, res, (err) => (
+        err ? jsonError(res, err.status || 400, err.message, err.code || 'invalid_plugin') : next()
+    ));
+}
+
 
 /**
  * RestController (Interface Layer)
@@ -62,48 +79,7 @@ const upload = multer({ storage });
 
 let config = { watchedDirectories: [], removedDirectories: [] };
 
-function jsonError(res, status, message, code) {
-    return res.status(status).json({ error: message, code });
-}
-
-
-function validateString(value, name, { required = true, max = 4000 } = {}) {
-    if (!required && (value === undefined || value === null || value === '')) return undefined;
-    if (typeof value !== 'string' || value.trim() === '') {
-        const err = new Error(`${name} must be a non-empty string`);
-        err.status = 400;
-        throw err;
-    }
-    const trimmed = value.trim();
-    if (trimmed.length > max) {
-        const err = new Error(`${name} must be ${max} characters or fewer`);
-        err.status = 400;
-        throw err;
-    }
-    return trimmed;
-}
-
-function resolveUserPath(value, name = 'path') {
-    const inputPath = validateString(value, name, { max: 4096 });
-    if (inputPath.includes('\0')) {
-        const err = new Error(`${name} cannot contain null bytes`);
-        err.status = 400;
-        throw err;
-    }
-    const resolved = path.resolve(inputPath);
-    if (!path.isAbsolute(resolved)) {
-        const err = new Error(`${name} must resolve to an absolute path`);
-        err.status = 400;
-        throw err;
-    }
-    return resolved;
-}
-
-function validateProjectId(projectId) {
-    return validateString(projectId, 'projectId', { required: false, max: 4096 });
-}
-
-const { isLocalRequest } = require('./support/http');
+const { jsonError, validateString, validateProjectId, resolveUserPath, isLocalRequest } = require('./support/http');
 
 
 function isPairingRequiredByDefault() {
@@ -119,10 +95,10 @@ function arePluginUploadsEnabled() {
 function safePluginFilename(originalName) {
     const filename = path.basename(validateString(originalName, 'plugin filename', { max: 200 }));
     if (filename !== originalName || filename.includes('..')) {
-        throw new Error('Invalid plugin filename');
+        throw Object.assign(new Error('Invalid plugin filename'), { status: 400, code: 'invalid_plugin' });
     }
     if (!/^[a-zA-Z0-9_-]+\.(js|zip)$/.test(filename)) {
-        throw new Error('Plugin upload must be a .js or .zip file with a safe filename');
+        throw Object.assign(new Error('Plugin upload must be a .js or .zip file with a safe filename'), { status: 400, code: 'invalid_plugin' });
     }
     return filename;
 }
@@ -134,7 +110,7 @@ function safePluginFilename(originalName) {
 function newPluginFilename(originalName) {
     const filename = safePluginFilename(originalName);
     if (fs.existsSync(path.join(PLUGINS_DIR, filename))) {
-        throw Object.assign(new Error(`A plugin file named ${filename} is already installed. Delete it first to replace it.`), { status: 409 });
+        throw Object.assign(new Error(`A plugin file named ${filename} is already installed. Delete it first to replace it.`), { status: 409, code: 'plugin_exists' });
     }
     return filename;
 }
@@ -228,18 +204,19 @@ router.use(mcpClients.middleware);
 // from a non-browser client. A local *process* is still trusted deliberately: it
 // already runs with the user's privileges, so gating it would buy nothing. What
 // is no longer trusted is a remote *page* that merely reaches us over loopback.
-router.use((req, res, next) => {
+function pairingTokenGate(req, res, next) {
     if (req.path.startsWith('/pairing')) return next();
     if (!isPairingRequiredByDefault()) return next();
     if (isLocalRequest(req)) return next();
 
     const token = req.get('X-YodaMan-Token');
     if (!pairingService.validate(token)) {
-        return res.status(401).json({ error: 'Valid YodaMan pairing token is required' });
+        return jsonError(res, 401, 'Valid YodaMan pairing token is required', 'pairing_token_required');
     }
 
     return next();
-});
+}
+router.use(pairingTokenGate);
 
 router.use('/upload', fileUploadService.router);
 
@@ -299,28 +276,35 @@ async function removeFromCtxIndex(dirPath) {
     }
 }
 
+/**
+ * A registered workspace, by path or by folder name (as search accepts it).
+ * Anything else is refused with 404 workspace_not_registered: /api/ask once
+ * resolved any path and wrote graphify-out/ into whatever folder it named.
+ */
 function resolveProjectPath(projectId) {
     if (!projectId) return undefined;
-    const resolved = path.resolve(projectId);
-    if (path.isAbsolute(resolved)) return resolved;
-
-    loadConfig();
-    return config.watchedDirectories.find(dir => (
-        dir === projectId ||
-        path.basename(dir) === projectId
-    ));
+    return resolveRegisteredProjectPath(searchPipeline.resolveProject(projectId));
 }
 
-function buildGraphAugmentedQuestion(question, graphInsights) {
-    if (!graphInsights) return question;
-    return [
-        'Use these Graphify knowledge graph insights when answering. Treat them as structural context from code, docs, and diagrams, and cite concrete files or entities when useful.',
-        '',
-        graphInsights,
-        '',
-        'User question:',
-        question
-    ].join('\n');
+function buildAskPrompt(question, graphInsights, hits) {
+    const context = [];
+    if (graphInsights) {
+        context.push(
+            'Use these Graphify knowledge graph insights when answering. Treat them as structural context from code, docs, and diagrams, and cite concrete files or entities when useful.',
+            '',
+            graphInsights,
+            ''
+        );
+    }
+    if (hits.length) {
+        context.push(
+            'The workspace search found these passages, best first (ranked by Graphify, tagged with the OpenSpec specs that cover them):',
+            '',
+            hits.map(formatSearchResult).join('\n\n'),
+            ''
+        );
+    }
+    return context.length ? [...context, 'User question:', question].join('\n') : question;
 }
 
 function sanitizeGraphReportForChat(report) {
@@ -332,17 +316,13 @@ function sanitizeGraphReportForChat(report) {
 function formatSearchResult(result, index) {
     const filePath = result.metadata?.path || result.path || 'unknown file';
     const line = result.metadata?.line ? `:${result.metadata.line}` : '';
+    const specs = result.specFlag?.covered ? ` (specs: ${result.specFlag.specs.join(', ')})` : '';
     const snippet = result.content || result.text || result.snippet || '';
-    return `${index + 1}. ${filePath}${line}\n${snippet}`.trim();
+    return `${index + 1}. ${filePath}${line}${specs}\n${snippet}`.trim();
 }
 
-async function buildLocalAskFallbackAnswer({ question, projectPath, graphInsights, cause }) {
-    // The shared pipeline, so even the fallback answer is ranked and tagged.
-    const searchResults = projectPath
-        ? await require('../core/SearchPipeline').search({ query: question, project: projectPath, top: 5 })
-            .then((out) => out.results).catch(() => [])
-        : [];
-    const snippets = searchResults.slice(0, 5).map(formatSearchResult).join('\n\n');
+function buildLocalAskFallbackAnswer({ question, hits, graphInsights, cause }) {
+    const snippets = hits.map(formatSearchResult).join('\n\n');
     return [
         `YodaMan could not reach ctx ask (${cause.message}), so it answered from local workspace context instead.`,
         '',
@@ -447,8 +427,10 @@ router.put('/projects', (req, res) => {
     try {
         resolvedPath = resolveUserPath(req.body?.path);
         nextResolvedPath = resolveUserPath(req.body?.nextPath, 'nextPath');
+        // The new path is registered by this call, so it must pass what POST /projects checks.
+        if (nextResolvedPath !== resolvedPath) validateWorkspaceCandidate(nextResolvedPath);
     } catch (err) {
-        return jsonError(res, err.status || 400, err.message, 'invalid_path');
+        return jsonError(res, err.status || 400, err.message, err.code || 'invalid_path');
     }
 
     loadConfig();
@@ -511,10 +493,14 @@ router.post('/ask', async (req, res) => {
     let projectPath;
     try {
         question = validateString(req.body?.question, 'question', { max: 20000 });
+        // Punctuation alone (`---`) is nothing to search for, and Graphify refuses it.
+        if (!/[\p{L}\p{N}]/u.test(question)) {
+            throw Object.assign(new Error('question must contain a letter or digit'), { status: 400, code: 'invalid_question' });
+        }
         projectId = validateProjectId(req.body?.projectId);
         projectPath = resolveProjectPath(projectId);
     } catch (err) {
-        return jsonError(res, err.status || 400, err.message, 'invalid_request');
+        return jsonError(res, err.status || 400, err.message, err.code || 'invalid_request');
     }
 
     if (projectId) {
@@ -534,11 +520,21 @@ router.post('/ask', async (req, res) => {
                 queryInsights
             ].join('\n');
         }
-        const augmentedQuestion = buildGraphAugmentedQuestion(question, graphInsights);
+        // The search pipeline, like every search: Context Expert retrieves,
+        // Graphify ranks, OpenSpec tags. The same hits back the fallback answer.
+        const hits = projectPath
+            ? await searchPipeline.search({ query: question, project: projectPath, top: 5, requestId: req.id })
+                .then((out) => out.results.slice(0, 5))
+                .catch((err) => {
+                    logger.warn('ask_search_failed', { requestId: req.id, projectPath, error: err.message });
+                    return [];
+                })
+            : [];
         let answer;
         try {
             const timeoutMs = Number(process.env.YODAMAN_CTX_ASK_TIMEOUT_MS || 12000);
-            const { output } = await contextEngine.execute(['ask', '--', augmentedQuestion], { timeoutMs });
+            // ContextEngine.ask scopes ctx to the workspace (-p) and bounds the prompt, as for the agent.
+            const { output } = await contextEngine.ask(buildAskPrompt(question, graphInsights, hits), { project: projectPath, timeoutMs });
             answer = contextEngine.stripCliNoise(output);
         } catch (ctxErr) {
             logger.warn('ask_ctx_fallback_started', {
@@ -549,9 +545,9 @@ router.post('/ask', async (req, res) => {
                 userAction: 'chat_ask',
                 severity: 'medium'
             });
-            answer = await buildLocalAskFallbackAnswer({
+            answer = buildLocalAskFallbackAnswer({
                 question,
-                projectPath,
+                hits,
                 graphInsights,
                 cause: ctxErr
             });
@@ -585,7 +581,7 @@ router.post('/ask', async (req, res) => {
             userAction: 'chat_ask',
             severity: 'high'
         });
-        res.status(500).json({ error: err.message, requestId: req.id });
+        res.status(500).json({ error: err.message, code: 'ask_failed', requestId: req.id });
     }
 });
 
@@ -601,18 +597,20 @@ router.post('/agent/task', async (req, res) => {
     try {
         task = validateString(req.body?.task, 'task', { max: 20000 });
         projectId = validateProjectId(req.body?.projectId);
+        // The agent's tools read and write inside this folder, so it must be one the user registered.
+        resolveProjectPath(projectId);
         fileIds = Array.isArray(req.body?.fileIds)
             ? req.body.fileIds.filter(fileId => typeof fileId === 'string' && fileId.trim()).slice(0, 20)
             : [];
     } catch (err) {
-        return jsonError(res, err.status || 400, err.message, 'invalid_request');
+        return jsonError(res, err.status || 400, err.message, err.code || 'invalid_request');
     }
 
     if (projectId) {
         sessionStore.saveMessage(projectId, { role: 'user', content: task, timestamp: new Date() });
     }
 
-    const taskId = Math.random().toString(36).substring(7);
+    const taskId = crypto.randomUUID();
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -700,16 +698,18 @@ const plugins = Array.from(toolBox.plugins.values()).map(p => ({
         description: p.description,
         parameters: p.parameters,
         permissions: p.permissions,
-        restricted: !p.permissions.includes('unrestricted')
+        restricted: !p.permissions.includes('unrestricted'),
+        // The Plugins page offers Delete only where it can succeed.
+        isDefault: DEFAULT_PLUGINS.has(p.name)
     }));
     res.json(plugins);
 });
 
-router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (req, res) => {
+router.post('/plugins', requirePluginUploadsEnabled, receivePluginUpload, (req, res) => {
     logger.info('plugin_upload_received', { filename: req.file?.originalname, size: req.file?.size, mime: req.file?.mimetype, tempPath: req.file?.path });
     if (!req.file) {
         logger.error('plugin_upload_no_file', new Error('No file in request'), { userAction: 'plugin_upload', severity: 'high' });
-        return res.status(400).send('No file uploaded');
+        return jsonError(res, 400, 'No file uploaded', 'no_file');
     }
     const startTime = Date.now();
     // What this upload put in place, so a failure removes it rather than
@@ -737,7 +737,10 @@ router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (r
             const mainEntry = jsFiles.find(f => path.basename(f) === 'main.js') || jsFiles[0];
             if (!mainEntry) throw new Error('No .js plugin file found in the zip archive');
 
-            const safeName = newPluginFilename(path.basename(mainEntry));
+            // Installed under the archive's name: archives conventionally hold a
+            // main.js, and plugins/main.js is Holocron's, so naming it after the
+            // entry refused every such archive.
+            const safeName = newPluginFilename(`${path.basename(pluginFilename, '.zip')}.js`);
             const targetPath = path.join(PLUGINS_DIR, safeName);
             fs.copyFileSync(mainEntry, targetPath, fs.constants.COPYFILE_EXCL);
             installedPath = targetPath;
@@ -785,6 +788,10 @@ router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (r
         const plugin = require(pluginPath);
         logger.info('plugin_upload_validate', { name: plugin.name, file: pluginFilename });
         toolBox.validatePlugin(plugin, { requireExplicitPermissions: true });
+        // A new file must not take over an installed plugin's name either.
+        if (toolBox.plugins.has(plugin.name) || toolBox.disabledPlugins.has(plugin.name)) {
+            throw Object.assign(new Error(`A plugin named ${plugin.name} is already installed. Delete it first to replace it.`), { status: 409, code: 'plugin_exists' });
+        }
         logger.info('plugin_upload_loading', { name: pluginFilename });
         toolBox.loadPlugins();
         const elapsed = Date.now() - startTime;
@@ -797,7 +804,7 @@ router.post('/plugins', requirePluginUploadsEnabled, upload.single('plugin'), (r
         if (installedPath && fs.existsSync(installedPath)) fs.unlinkSync(installedPath);
         if (extractDir) fs.rmSync(extractDir, { recursive: true, force: true });
         logger.error('plugin_upload_failed', err, { filename: req.file?.originalname, step: 'extract/validate', userAction: 'plugin_upload', severity: 'high' });
-        res.status(400).json({ error: err.message });
+        jsonError(res, err.status || 400, err.message, err.code || 'invalid_plugin');
     }
 });
 
@@ -807,19 +814,22 @@ router.delete('/plugins/:name', (req, res) => {
         return jsonError(res, 403, `${name} is a default plugin and cannot be removed`, 'mandatory_plugin');
     }
 
-    const plugin = toolBox.plugins.get(name);
-    
-    if (plugin && plugin._filename) {
-        const pluginPath = path.join(PLUGINS_DIR, plugin._filename);
-        if (fs.existsSync(pluginPath)) {
-            fs.unlinkSync(pluginPath);
-        }
-        toolBox.plugins.delete(name);
-        res.json({ message: 'Plugin deleted' });
-    } else {
-        res.status(404).send('Plugin not found');
-    }
+    // A disabled plugin is not loaded, so its file is found the way ToolBox
+    // matches files to the disabled list: by the name in the source.
+    const filename = toolBox.plugins.get(name)?._filename
+        || (toolBox.disabledPlugins.has(name) && pluginFileNamed(name));
+    if (!filename) return jsonError(res, 404, 'Plugin not found', 'plugin_not_found');
+
+    fs.rmSync(path.join(PLUGINS_DIR, filename), { force: true });
+    toolBox.plugins.delete(name);
+    if (toolBox.disabledPlugins.delete(name)) toolBox.saveDisabledConfig();
+    res.json({ message: 'Plugin deleted' });
 });
+
+function pluginFileNamed(name) {
+    return fs.readdirSync(PLUGINS_DIR).find((file) => file.endsWith('.js') && !file.endsWith('.test.js')
+        && fs.readFileSync(path.join(PLUGINS_DIR, file), 'utf8').match(/name:\s*['"]([^'"]+)['"]/)?.[1] === name);
+}
 
 // --- Plugin Enable/Disable ---
 
@@ -968,9 +978,11 @@ router.get('/logs', (req, res) => {
 });
 
 // The log is the trail of what a paired device did, so only this computer may erase it.
-function logsLocalOnly(req, res, next) {
-    return isLocalRequest(req) ? next() : jsonError(res, 403, 'Logs can only be cleared from this computer', 'logs_local_only');
+function clearLocalOnly(what, code) {
+    return (req, res, next) => (isLocalRequest(req) ? next() : jsonError(res, 403, `${what} can only be cleared from this computer`, code));
 }
+const logsLocalOnly = clearLocalOnly('Logs', 'logs_local_only');
+const auditLocalOnly = clearLocalOnly('The audit log', 'audit_local_only');
 
 router.delete('/logs', logsLocalOnly, (req, res) => {
     try {
@@ -1098,7 +1110,7 @@ router.get('/check', async (req, res) => {
             if (fs.existsSync(dirPath)) {
                 return res.json({ status: 'healthy', name: dirPath.split('/').pop(), path: dirPath, ctxManaged: false });
             }
-            return res.status(404).json({ error: 'Path not found', status: 'missing' });
+            return res.status(404).json({ error: 'Path not found', code: 'path_missing', status: 'missing' });
         }
 
         const data = await contextEngine.executeJson(['check', project.name]);
@@ -1109,21 +1121,14 @@ router.get('/check', async (req, res) => {
         if (fs.existsSync(dirPath)) {
             return res.json({ status: 'healthy', path: dirPath, ctxManaged: true, note: err.message });
         }
-        res.status(500).json({ status: 'error', error: err.message });
+        res.status(500).json({ status: 'error', error: err.message, code: 'check_failed' });
     }
 });
 
 router.post('/reindex', (req, res) => {
     let dirPath;
     try {
-        dirPath = resolveUserPath(req.body?.path);
-        loadConfig();
-        if (!config.watchedDirectories.includes(dirPath)) {
-            const err = new Error(`Workspace is not registered: ${dirPath}`);
-            err.status = 404;
-            err.code = 'workspace_not_registered';
-            throw err;
-        }
+        dirPath = resolveRegisteredProjectPath(req.body?.path);
         validateIndexableDirectory(dirPath);
     } catch (err) {
         logger.warn('reindex_rejected', { requestId: req.id, path: dirPath, error: err.message, code: err.code || 'invalid_path' });
@@ -1139,7 +1144,8 @@ router.delete('/agent/tasks', (req, res) => {
     res.json({ message: 'Task history cleared' });
 });
 
-router.delete('/audit', (req, res) => {
+// The audit trail records what a paired device did, so it is cleared from this computer only, like the logs.
+router.delete('/audit', auditLocalOnly, (req, res) => {
     auditLog.clear();
     res.json({ message: 'Audit logs cleared' });
 });
@@ -1189,7 +1195,12 @@ router.put('/settings', configLocalOnly, (req, res) => {
         updates.editorCommand = req.body.editorCommand === 'system' ? '' : String(req.body.editorCommand || '').trim();
     }
     if (Object.keys(updates).length === 0) return jsonError(res, 400, 'No valid settings provided', 'invalid_settings');
-    settings.save(updates);
+    try {
+        settings.save(updates);
+    } catch (err) {
+        // Say so: answering 200 here told the user a change was kept that was not.
+        return jsonError(res, 500, `Settings could not be saved: ${err.message}`, 'settings_save_failed');
+    }
     // Reload ToolBox to pick up permission changes
     const toolBox = require('../infrastructure/ToolBox');
     toolBox.loadPluginPermissions();
@@ -1278,7 +1289,7 @@ router.get('/ctx/config', async (req, res) => {
 router.post('/ctx/config', configLocalOnly, async (req, res) => {
     const { key, value } = req.body || {};
     if (!key || value === undefined) {
-        return res.status(400).json({ ok: false, error: 'key and value are required' });
+        return res.status(400).json({ ok: false, error: 'key and value are required', code: 'invalid_request' });
     }
     try {
         await contextEngine.execute(['config', 'set', key, String(value)]);
@@ -1464,7 +1475,7 @@ router.get('/health', async (req, res) => {
         projects: { total: checks.projects, indexed: checks.indexed, synced: checks.syncComplete },
         // One trust verdict per workspace, so a client never has to reconcile
         // index staleness against graph build state itself.
-        readiness: workspaceReadiness.forWorkspaces(config.watchedDirectories || []),
+        readiness: workspaceReadiness.forWorkspaces(loadConfig().watchedDirectories),
         memory: process.memoryUsage(),
         platform: { hostname: os.hostname(), release: os.release(), arch: os.arch() },
         tasks: {
@@ -1484,14 +1495,20 @@ router.get('/health', async (req, res) => {
  * verdict, so a client does not have to reconcile them itself.
  */
 router.get('/readiness', (req, res) => {
+    let projectPath;
     try {
-        const projectId = req.query.projectId;
-        if (projectId) {
+        projectPath = resolveProjectPath(validateProjectId(req.query.projectId));
+    } catch (err) {
+        return jsonError(res, err.status || 400, err.message, err.code || 'invalid_project_id');
+    }
+    try {
+        if (projectPath) {
             // A single named workspace is the dashboard's selected one, so it
             // is worth the ~160ms the coverage finding costs.
-            return res.json(workspaceReadiness.forWorkspace(projectId, { withCoverage: true }));
+            return res.json(workspaceReadiness.forWorkspace(projectPath, { withCoverage: true }));
         }
-        return res.json(workspaceReadiness.forWorkspaces(config.watchedDirectories || []));
+        // Read now: a workspace added or removed since the last request counts.
+        return res.json(workspaceReadiness.forWorkspaces(loadConfig().watchedDirectories));
     } catch (err) {
         logger.error('readiness_check_failed', err, { requestId: req.id });
         return jsonError(res, 500, err.message, 'readiness_failed');
@@ -1501,9 +1518,13 @@ router.get('/readiness', (req, res) => {
 // Stardust routes — see routes/stardustRoutes.js
 router.use(require('./routes/stardustRoutes'));
 
+// Last: an unknown /api path is a JSON 404, not the web app's index.html.
+router.use((req, res) => jsonError(res, 404, `No API route for ${req.method} ${req.baseUrl}${req.path}`, 'not_found'));
+
 // Test-facing handles. These belong on the top-level router, not on any
 // sub-router: tests/interfaces/RestController.test.js reaches for them.
 router.isPairingRequiredByDefault = isPairingRequiredByDefault;
+router.pairingTokenGate = pairingTokenGate;
 router.pairingLocalOnly = pairingLocalOnly;
 router.configLocalOnly = configLocalOnly;
 router.logsLocalOnly = logsLocalOnly;

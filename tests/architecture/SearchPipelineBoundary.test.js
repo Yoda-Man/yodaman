@@ -66,9 +66,9 @@ describe('the search pipeline boundary', () => {
     });
 
     test('`ctx search` is spawned only inside ToolBox.contextExpertSearch', () => {
-        // An argument list starting 'search' followed by a variable: a spawn,
-        // not a word in a table of labels.
-        const spawn = /\[\s*['"]search['"]\s*,\s*[A-Za-z_$]/;
+        // An argument list starting 'search' followed by a variable, or alone
+        // (flags and `-- query` pushed after): a spawn, not a word in a table of labels.
+        const spawn = /\[\s*['"]search['"]\s*(?:,\s*[A-Za-z_$]|\])/;
         expect(offenders(spawn, ['backend/infrastructure/ToolBox.js'])).toEqual([]);
 
         const toolBox = code('backend/infrastructure/ToolBox.js');

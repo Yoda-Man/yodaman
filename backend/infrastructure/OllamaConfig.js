@@ -24,6 +24,27 @@ const logger = require('./Logger');
 const PLIST_PATH = path.join(os.homedir(), 'Library', 'LaunchAgents', 'homebrew.mxcl.ollama.plist');
 const ALLOWED_VALUES = [8192, 16384, 32768, 65536, 131072];
 const RECOMMENDED = 32768;
+const DEFAULT_URL = 'http://127.0.0.1:11434';
+
+/**
+ * The Ollama server every local call goes to: OLLAMA_HOST, read the way the
+ * ollama CLI reads it (scheme optional, default port 11434, 0.0.0.0 means this
+ * machine), else Ollama's default address. The one place that address lives.
+ */
+function ollamaUrl() {
+    const host = (process.env.OLLAMA_HOST || '').trim();
+    if (!host) return DEFAULT_URL;
+    const hasScheme = /^https?:\/\//i.test(host);
+    try {
+        const url = new URL(hasScheme ? host : `http://${host.startsWith(':') ? `127.0.0.1${host}` : host}`);
+        if (url.hostname === '0.0.0.0') url.hostname = '127.0.0.1';
+        if (!hasScheme && !url.port) url.port = '11434';
+        return url.origin;
+    } catch (_err) {
+        // An unparseable value is a typo, not a remote server: stay on the default.
+        return DEFAULT_URL;
+    }
+}
 
 function run(file, args, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
@@ -37,9 +58,11 @@ function run(file, args, timeoutMs = 30000) {
 /** How Ollama is managed here, and what it is currently configured to serve. */
 function inspect() {
     const managed = fs.existsSync(PLIST_PATH);
-    let configured = Number(process.env.OLLAMA_CONTEXT_LENGTH) || null;
+    let configured = null;
 
-    if (managed && !configured) {
+    // The plist is what a Homebrew-run Ollama actually reads, and what
+    // setContextLength writes; this runtime's own environment is only a fallback.
+    if (managed) {
         try {
             const plist = fs.readFileSync(PLIST_PATH, 'utf8');
             const match = /<key>OLLAMA_CONTEXT_LENGTH<\/key>\s*<string>(\d+)<\/string>/.exec(plist);
@@ -48,6 +71,7 @@ function inspect() {
             logger.warn('ollama_plist_unreadable', { path: PLIST_PATH, reason: err.message });
         }
     }
+    configured ??= Number(process.env.OLLAMA_CONTEXT_LENGTH) || null;
 
     return { managed, manager: managed ? 'brew' : 'unknown', plistPath: managed ? PLIST_PATH : null, configured, recommended: RECOMMENDED, allowed: ALLOWED_VALUES };
 }
@@ -127,4 +151,4 @@ async function setContextLength(tokens) {
     return { applied: requested, restarted: true, backupPath };
 }
 
-module.exports = { inspect, setContextLength, withContextLength, ALLOWED_VALUES, RECOMMENDED, PLIST_PATH };
+module.exports = { ollamaUrl, inspect, setContextLength, withContextLength, ALLOWED_VALUES, RECOMMENDED, PLIST_PATH };

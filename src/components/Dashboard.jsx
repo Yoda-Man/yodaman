@@ -10,7 +10,7 @@ function CtxConfigPanel() {
     const [editValue, setEditValue] = useState('')
     const [saving, setSaving] = useState(false)
 
-    useEffect(() => { fetch('/api/ctx/config').then(r => r.json()).then(d => { if (d.ok) setCfg(d.config) }).catch(() => {}) }, [])
+    useEffect(() => { api.getCtxConfig().then(d => { if (d.ok) setCfg(d.config) }).catch(() => {}) }, [])
 
     const startEdit = (key, val) => {
         setEditing(key)
@@ -21,12 +21,7 @@ function CtxConfigPanel() {
         if (!editing || saving) return
         setSaving(true)
         try {
-            const r = await fetch('/api/ctx/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: editing, value: editValue })
-            })
-            const d = await r.json()
+            const d = await api.setCtxConfig(editing, editValue)
             if (d.ok) {
                 setCfg(prev => ({ ...prev, [editing]: editValue }))
                 setEditing(null)
@@ -191,15 +186,9 @@ export default function Dashboard() {
         setApplyingContext(true)
         setContextNotice('')
         try {
-            const res = await fetch('/api/ollama/context', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tokens })
-            })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error || 'Could not apply the change')
+            await api.setOllamaContext(tokens)
             setContextNotice(`Applied ${tokens.toLocaleString()} and restarted Ollama.`)
-            const health = await fetch('/api/health').then(r => r.json()).catch(() => null)
+            const health = await api.health().catch(() => null)
             if (health) setContextWindow(health.contextWindow || null)
         } catch (err) {
             setContextNotice(err.message)
@@ -211,7 +200,7 @@ export default function Dashboard() {
     async function runDiagnostics() {
         setRunningDiagnostics(true)
         try {
-            const data = await fetch('/api/diagnostics/run').then(r => r.json())
+            const data = await api.runDiagnostics()
             setDiagnosticsText(data.text || 'No output returned.')
         } catch (err) {
             setDiagnosticsText(`Diagnostics failed: ${err.message}`)
@@ -222,8 +211,7 @@ export default function Dashboard() {
 
     useEffect(() => {
         let cancelled = false
-        fetch('/api/health')
-            .then(res => res.json())
+        api.health()
             .then(data => { if (!cancelled) setContextWindow(data.contextWindow || null) })
             .catch(() => { if (!cancelled) setContextWindow(null) })
         return () => { cancelled = true }
@@ -252,8 +240,7 @@ export default function Dashboard() {
             // Status endpoint may fail if ctx is unresponsive;
             // health endpoint is the reliable fallback.
             try {
-                const healthRes = await fetch('/api/health')
-                const healthData = await healthRes.json()
+                const healthData = await api.health()
                 setStatus({
                     version: healthData.checks?.ctx?.ok ? 'ctx-active' : 'ctx-unavailable',
                     ctxInstalled: healthData.checks?.ctx?.ok === true,
@@ -283,8 +270,7 @@ export default function Dashboard() {
         }
 
         try {
-            const projRes = await fetch('/api/projects')
-            const projData = await projRes.json()
+            const projData = await api.getProjects()
             if (Array.isArray(projData)) setProjects(projData)
         } catch (_) {
             // Non-critical
@@ -429,7 +415,12 @@ export default function Dashboard() {
                                             Prompts are trimmed to fit, which costs answer quality.
                                         </span>
                                     ) : null}
-                                    {contextWindow.small ? (
+                                    {contextWindow.small && !contextWindow.managed ? (
+                                        <span className="block text-[9px] text-slate-400 mt-1 leading-snug">
+                                            Set OLLAMA_CONTEXT_LENGTH=32768 where Ollama runs, then restart it.
+                                        </span>
+                                    ) : null}
+                                    {contextWindow.small && contextWindow.managed ? (
                                         <button
                                             type="button"
                                             disabled={applyingContext}

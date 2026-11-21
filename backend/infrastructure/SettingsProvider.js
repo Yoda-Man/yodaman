@@ -53,11 +53,14 @@ function load() {
   return cache;
 }
 
+/**
+ * Writes the settings, then caches them.
+ * @throws when config.json cannot be read or written. The change is then not
+ *   applied either, so nothing reports a setting that was never kept.
+ */
 function save(updates) {
   const currentPath = configPath();
   const settings = { ...load(), ...updates };
-  cache = settings;
-  loadedPath = currentPath;
 
   try {
     prepareDataDir();
@@ -66,8 +69,11 @@ function save(updates) {
     cfg.settings = settings;
     fs.writeFileSync(currentPath, JSON.stringify(cfg, null, 2));
   } catch (error) {
-    logger.error('settings_save_failed', error);
+    logger.error('settings_save_failed', error, { path: currentPath });
+    throw error;
   }
+  cache = settings;
+  loadedPath = currentPath;
 }
 
 /**

@@ -15,6 +15,23 @@ Restart the runtime afterwards so the new version is the one serving requests.
 Anything connected over MCP picks up the new server the next time it spawns it;
 no client configuration changes across 0.5.x and 0.6.x.
 
+### Coming from 0.6.6 to 0.6.7
+
+Nothing needs doing by hand. What changes:
+
+- **The list of disabled plugins moves to the data folder**, as `plugins.json`
+  beside `config.json`. The first start copies it once from the old
+  `config.json` in the install's `plugins` folder, so a plugin you disabled stays
+  disabled through this and every later upgrade.
+- **Scripts that call the API directly** may see different answers. Git
+  commit, push, pull and new branch, every Stardust route, `/api/ask`,
+  `/api/reindex` and `/api/readiness` refuse a folder you have not added
+  (`404 workspace_not_registered`). Every error is JSON with a `code`, including
+  ones that used to be plain text. `POST /api/agent/approve` approves only on
+  the JSON value `true`. `DELETE /api/audit` works only from this computer.
+- **A plugin that calls `api.fetch`** must declare the `network` permission
+  (or `unrestricted`).
+
 ### Coming from 0.5.x to 0.6.x
 
 Two things need doing once:
@@ -70,7 +87,8 @@ directories and re-indexing:
 rm -rf .yodaman-doc-chunks graphify-out
 ```
 
-Both are regenerated. Neither contains anything you wrote — see the table below
+`graphify-out` is regenerated; `.yodaman-doc-chunks` is not, since 0.5.8
+no longer writes it. Neither contains anything you wrote — see the table below
 for what is generated versus what is yours.
 
 ## Uninstalling
@@ -103,8 +121,9 @@ For the desktop app, delete `YodaMan.app` (macOS) or the `.AppImage` (Linux),
 or uninstall it from Windows Settings.
 
 This also removes any state an older version left inside the install
-directory: `config.json` and `yodaman.db` from before 0.5.9, and
-`sessions.json` from before 0.6.4. From 0.6.4 every state file, chat sessions
+directory: `config.json` and `yodaman.db` from before 0.5.9,
+`sessions.json` from before 0.6.4, and the disabled-plugins `config.json` in
+its `plugins` folder from before 0.6.7. From 0.6.4 every state file, chat sessions
 included, lives in the data folder below; the first start copies an older
 install's `sessions.json` across.
 
@@ -112,9 +131,9 @@ install's `sessions.json` across.
 
 | Location | What it is |
 | --- | --- |
-| Your data folder (see [above](#where-your-settings-and-history-live-059-and-later)): `config.json` and `yodaman.db` | Your settings, workspace list, task history and audit log. `yodaman uninstall` lists both. |
+| Your data folder (see [above](#where-your-settings-and-history-live-059-and-later)): `config.json`, `yodaman.db`, `sessions.json` and `plugins.json`, plus `audit-log.json`, `audit-log.jsonl`, `task-history.json` and `task-history.jsonl` if SQLite was ever unavailable | Your settings, workspace list, task history, audit log, chat history and disabled plugins. `yodaman uninstall` lists each one that exists. |
 | `~/.yodaman/logs` | Runtime logs. The whole `~/.yodaman` directory can go. |
-| `<workspace>/.yodaman-doc-chunks/` | Generated document chunks, one directory per indexed workspace. |
+| `<workspace>/.yodaman-doc-chunks/` | Generated document chunks, left by versions before 0.5.8. |
 | `<workspace>/graphify-out/` | Graphify's knowledge graph and AST cache, one per indexed workspace. |
 
 ```bash

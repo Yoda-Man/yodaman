@@ -8,6 +8,8 @@ const { workspaceFileExists } = require('../../shared/workspaceFiles');
 const dependencyChecker = require('./DependencyChecker');
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.YODAMAN_GRAPHIFY_TIMEOUT_MS || 300000);
+// Graphify's own range for traversal depth (`graphify query --depth`).
+const MAX_AFFECTED_DEPTH = 6;
 const DEFAULT_OLLAMA_MODEL = process.env.YODAMAN_GRAPHIFY_OLLAMA_MODEL || 'qwen3:5b';
 const DEFAULT_VIZ_NODE_LIMIT = process.env.YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT || '25000';
 // How long a `running` status on disk is believed before it is treated as the
@@ -80,6 +82,22 @@ function getGraphifyBin() {
     // 4. Last resort — rely on system PATH (may fail in Electron)
     resolvedGraphifyBin = 'graphify';
     return resolvedGraphifyBin;
+}
+
+function invalidArgument(message) {
+    return Object.assign(new Error(message), { status: 400, code: 'graphify_invalid_argument' });
+}
+
+/**
+ * User text bound for a Graphify argv slot. Graphify reads these by position,
+ * so `--` would itself become the text; instead a value that could be read as
+ * a flag is refused (`affected -h` prints help instead of answering).
+ */
+function argument(value, name) {
+    const text = String(value ?? '').trim();
+    if (!text) throw invalidArgument(`${name} must be a non-empty string`);
+    if (text.startsWith('-')) throw invalidArgument(`${name} must not start with "-"`);
+    return text;
 }
 
 function runGraphify(args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
@@ -839,9 +857,11 @@ module.exports = {
             artifactMetadata(projectPath, type, build)
         ]));
 
+        const binary = getGraphifyBin();
         return {
-            available: Boolean(getGraphifyBin()),
-            binary: getGraphifyBin(),
+            // The lookup ends with a bare `graphify`, so a name alone proves nothing.
+            available: dependencyChecker.isRunnable(path.isAbsolute(binary) ? binary : dependencyChecker.which(binary) || ''),
+            binary,
             graphPath: currentGraphPath,
             reportPath: currentReportPath,
             graphExists,
@@ -970,8 +990,10 @@ module.exports = {
     },
 
     async query(question, projectPath) {
+        // A question is prose, so leading dashes are dropped rather than refused.
+        const text = argument(String(question ?? '').replace(/^[\s-]+/, ''), 'query');
         await this.ensureGraph(projectPath);
-        const result = await runGraphify(['query', question, '--graph', graphPath(projectPath)]);
+        const result = await runGraphify(['query', text, '--graph', graphPath(projectPath)]);
         const insights = truncate(result.stdout || result.stderr);
         logger.info('graphify_query_completed', {
             path: projectPath,
@@ -982,23 +1004,30 @@ module.exports = {
     },
 
     async explain(node, projectPath) {
+        const label = argument(node, 'node');
         await this.ensureGraph(projectPath);
-        const result = await runGraphify(['explain', node, '--graph', graphPath(projectPath)]);
+        const result = await runGraphify(['explain', label, '--graph', graphPath(projectPath)]);
         return truncate(result.stdout || result.stderr);
     },
 
     async pathBetween(source, target, projectPath) {
+        const from = argument(source, 'source');
+        const to = argument(target, 'target');
         await this.ensureGraph(projectPath);
-        const result = await runGraphify(['path', source, target, '--graph', graphPath(projectPath)]);
+        const result = await runGraphify(['path', from, to, '--graph', graphPath(projectPath)]);
         return truncate(result.stdout || result.stderr);
     },
 
     async affected(node, projectPath, { depth = 2, relations = [] } = {}) {
-        await this.ensureGraph(projectPath);
-        const args = ['affected', node, '--depth', String(depth), '--graph', graphPath(projectPath)];
-        for (const relation of relations || []) {
-            if (relation) args.push('--relation', relation);
+        const hops = Number(depth);
+        if (!Number.isInteger(hops) || hops < 1 || hops > MAX_AFFECTED_DEPTH) {
+            throw invalidArgument(`depth must be a whole number from 1 to ${MAX_AFFECTED_DEPTH}`);
         }
+        const args = ['affected', argument(node, 'node'), '--depth', String(hops), '--graph', graphPath(projectPath)];
+        for (const relation of relations || []) {
+            if (relation) args.push('--relation', argument(relation, 'relation'));
+        }
+        await this.ensureGraph(projectPath);
         const result = await runGraphify(args);
         return truncate(result.stdout || result.stderr);
     },
@@ -1033,18 +1062,16 @@ module.exports = {
     async saveResult(projectPath, { question, answer, type = 'query', nodes = [] }) {
         await this.ensureGraph(projectPath);
         const memoryDir = path.join(projectPath, 'graphify-out', 'memory');
+        // save-result uses argparse: `--opt=value` binds a value starting with "-"
+        // (an answer that opens with a bullet list) instead of reading it as a flag.
         const args = [
             'save-result',
-            '--question',
-            question,
-            '--answer',
-            answer,
-            '--type',
-            type,
-            '--memory-dir',
-            memoryDir
+            `--question=${question}`,
+            `--answer=${answer}`,
+            `--type=${type}`,
+            `--memory-dir=${memoryDir}`
         ];
-        if (nodes.length > 0) args.push('--nodes', ...nodes);
+        if (nodes.length > 0) args.push('--nodes', ...nodes.map(node => argument(node, 'node')));
         const result = await runGraphify(args);
         return { memoryDir, output: result.stdout || result.stderr };
     },

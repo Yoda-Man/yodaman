@@ -273,6 +273,35 @@ export const api = {
         return request(`${API_BASE}/git/context?path=${encodeURIComponent(path)}`);
     },
 
+    /** commit, push, pull or branch. Push and pull may take the server's full 10-minute network timeout. */
+    async gitAction(action, path, body = {}) {
+        return request(`${API_BASE}/git/${encodeURIComponent(action)}`, {
+            ...jsonOptions('POST', { path, ...body }),
+            timeoutMs: 11 * 60 * 1000
+        });
+    },
+
+    async getCtxConfig() {
+        return request(`${API_BASE}/ctx/config`);
+    },
+
+    async setCtxConfig(key, value) {
+        return request(`${API_BASE}/ctx/config`, jsonOptions('POST', { key, value }));
+    },
+
+    /** Restarts Ollama, which can take a minute. */
+    async setOllamaContext(tokens) {
+        return request(`${API_BASE}/ollama/context`, { ...jsonOptions('POST', { tokens }), timeoutMs: 3 * 60 * 1000 });
+    },
+
+    async runDiagnostics() {
+        return request(`${API_BASE}/diagnostics/run`, { timeoutMs: 3 * 60 * 1000 });
+    },
+
+    async getMcpClients() {
+        return request(`${API_BASE}/mcp/clients`);
+    },
+
     async uploadTempFile(file) {
         const formData = new FormData();
         formData.append('file', file);
@@ -396,8 +425,8 @@ export const api = {
         return request(url);
     },
 
-    async stardustSetValidation(changeName, status) {
-        return request(`${API_BASE}/stardust/validation/${encodeURIComponent(changeName)}`, jsonOptions('PUT', { status }));
+    async stardustSetValidation(changeName, status, projectRoot) {
+        return request(`${API_BASE}/stardust/validation/${encodeURIComponent(changeName)}`, jsonOptions('PUT', { status, projectRoot }));
     },
 
     // ── Stardust cross-tool views ──
@@ -409,11 +438,21 @@ export const api = {
         return request(url);
     },
 
-    async stardustCompose(projectRoot, file) {
+    async stardustCompose(projectRoot, file, { depth, limit } = {}) {
         const url = new URL(`${API_BASE}/stardust/compose`, window.location.origin);
         if (projectRoot) url.searchParams.append('projectRoot', projectRoot);
         url.searchParams.append('file', file);
+        if (depth) url.searchParams.append('depth', String(depth));
+        if (limit) url.searchParams.append('limit', String(limit));
         return request(url);
+    },
+
+    /** WebSocket URL for live board updates, on the same base as every other call. */
+    stardustLiveUrl(projectRoot) {
+        const url = new URL(`${API_BASE}/stardust/live`, window.location.href);
+        url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+        url.searchParams.append('projectRoot', projectRoot || '');
+        return url.toString();
     },
 
     async stardustSpec(projectRoot, specId) {

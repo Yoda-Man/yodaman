@@ -29,6 +29,7 @@ function validateUploadFile(file) {
     if (!file) {
         const err = new Error('file is required');
         err.status = 400;
+        err.code = 'file_required';
         throw err;
     }
 
@@ -37,12 +38,14 @@ function validateUploadFile(file) {
     if (!ALLOWED_EXTENSIONS.has(ext)) {
         const err = new Error('Unsupported file type');
         err.status = 400;
+        err.code = 'unsupported_file_type';
         throw err;
     }
 
     if (Number(file.size || 0) > MAX_FILE_SIZE_BYTES) {
         const err = new Error('File is too large');
         err.status = 413;
+        err.code = 'file_too_large';
         throw err;
     }
 
@@ -85,6 +88,7 @@ function attachTempFileToTask(taskId, fileId) {
     if (!taskId || typeof taskId !== 'string') {
         const err = new Error('taskId is required');
         err.status = 400;
+        err.code = 'invalid_task_id';
         throw err;
     }
 
@@ -92,6 +96,7 @@ function attachTempFileToTask(taskId, fileId) {
     if (!file || !fs.existsSync(file.path)) {
         const err = new Error('Temp file not found');
         err.status = 404;
+        err.code = 'temp_file_not_found';
         throw err;
     }
 
@@ -147,7 +152,7 @@ router.post('/temp', upload.single('file'), (req, res) => {
         const saved = saveTempFile(req.file);
         res.status(201).json(publicFile(saved));
     } catch (err) {
-        res.status(err.status || 400).json({ error: err.message });
+        res.status(err.status || 400).json({ error: err.message, code: err.code || 'upload_failed' });
     }
 });
 
@@ -156,7 +161,7 @@ router.post('/attach', (req, res) => {
         const attached = attachTempFileToTask(req.body?.taskId, req.body?.fileId);
         res.json(publicFile(attached));
     } catch (err) {
-        res.status(err.status || 400).json({ error: err.message });
+        res.status(err.status || 400).json({ error: err.message, code: err.code || 'upload_failed' });
     }
 });
 
@@ -171,7 +176,7 @@ router.get('/task/:taskId/files', (req, res) => {
 
 router.use((err, req, res, next) => {
     if (err?.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({ error: 'File is too large' });
+        return res.status(413).json({ error: 'File is too large', code: 'file_too_large' });
     }
     return next(err);
 });

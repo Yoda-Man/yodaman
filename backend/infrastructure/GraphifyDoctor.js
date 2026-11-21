@@ -30,7 +30,8 @@ function sourceFileForNode(node) {
 }
 
 function analyzeProject(project) {
-    const status = graphifyService.status(project.path);
+    // freshness() adds the source scan: a graph older than any source file is stale.
+    const status = graphifyService.freshness(project.path);
     const graph = status.graphExists ? readGraph(project.path) : null;
     const nodes = graph?.nodes || [];
     const links = graph?.links || graph?.edges || [];
@@ -64,7 +65,7 @@ function analyzeProject(project) {
         ...project,
         status,
         graphExists: Boolean(status.graphExists),
-        stale: status.build?.state === 'failed' || status.build?.state === 'running',
+        stale: Boolean(status.stale) || status.build?.state === 'failed' || status.build?.state === 'running',
         graphUpdatedAt: status.graphUpdatedAt,
         build: status.build || {},
         nodeCount: nodes.length,

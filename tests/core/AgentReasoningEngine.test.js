@@ -167,6 +167,18 @@ describe('AgentReasoningEngine', () => {
         });
     });
 
+    test.each(['false', 'true', 1, undefined])('only a real true approves: %p rejects', (decision) => {
+        const resolver = jest.fn();
+        agentEngine.tasks.set('task-strict', { status: 'awaiting_approval', pendingApproval: {} });
+        agentEngine.pendingApprovals.set('task-strict', resolver);
+
+        agentEngine.signalApproval('task-strict', decision);
+
+        expect(resolver).toHaveBeenCalledWith(false);
+        expect(agentEngine.tasks.get('task-strict').status).toBe('rejected');
+        agentEngine.tasks.delete('task-strict');
+    });
+
     test('should report malformed tool calls as task errors', async () => {
         const events = [];
         contextEngine.ask
@@ -382,5 +394,72 @@ describe('AgentReasoningEngine', () => {
         expect(last).toMatch(/readFile → ok/);
         // And the original task survives every round of compaction.
         expect(last).toContain('User Task: Keep reading');
+    });
+});
+
+describe('approval gate details', () => {
+    const specDrift = require('../../backend/stardust/SpecDrift');
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+        agentEngine.pendingApprovals.clear();
+        agentEngine.tasks.clear();
+    });
+
+    test('a spec citing Logger.js does not describe AuditLogger.js: references match on path boundaries', async () => {
+        jest.spyOn(specDrift, 'readSpecs').mockReturnValue([
+            { id: 'logger', text: '' },
+            { id: 'audit', text: '' },
+            { id: 'bare', text: '' }
+        ]);
+        jest.spyOn(specDrift, 'extractReferences')
+            .mockReturnValueOnce(['Logger.js', 'src/Logger.js'])
+            .mockReturnValueOnce(['src/AuditLogger.js'])
+            .mockReturnValueOnce(['AuditLogger.js']);
+
+        const pending = agentEngine.awaitApproval(
+            { name: 'writeFile', parameters: { filePath: `${PROJECT}/src/AuditLogger.js`, content: 'x' } },
+            { taskId: 'task-spec-boundary', metadata: { projectId: PROJECT } }
+        );
+        await waitFor(() => agentEngine.pendingApprovals.has('task-spec-boundary'));
+
+        expect(agentEngine.tasks.get('task-spec-boundary').pendingApproval.specImpact.mentionedIn).toEqual(['audit', 'bare']);
+        agentEngine.signalApproval('task-spec-boundary', false);
+        await pending;
+    });
+
+    test('executeCommand without cwd runs in the active workspace, shown to the reviewer first', async () => {
+        contextEngine.ask
+            .mockResolvedValueOnce({ output: '<tool_call>{"name":"executeCommand","parameters":{"command":"npm test"}}</tool_call>' })
+            .mockResolvedValueOnce({ output: 'Done.' });
+        toolBox.callTool.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 });
+
+        const run = agentEngine.executeTask('run tests', 'task-cwd', undefined, { projectId: PROJECT });
+        await waitFor(() => agentEngine.pendingApprovals.has('task-cwd'));
+        expect(agentEngine.tasks.get('task-cwd').pendingApproval.params.arguments).toMatchObject({ cwd: PROJECT });
+        agentEngine.signalApproval('task-cwd', true);
+        await run;
+
+        expect(toolBox.callTool).toHaveBeenCalledWith('executeCommand', { command: 'npm test', cwd: PROJECT });
+    });
+});
+
+describe('tasks reloaded after a restart', () => {
+    test('a task stored mid-flight is closed, and its approval no longer listed as pending', () => {
+        const stored = [
+            { taskId: 'waiting', status: 'awaiting_approval', pendingApproval: { tool: 'writeFile' } },
+            { taskId: 'looping', status: 'running', pendingApproval: null },
+            { taskId: 'done', status: 'completed', pendingApproval: null, finalAnswer: 'ok' }
+        ];
+        let engine;
+        jest.isolateModules(() => {
+            jest.doMock('../../backend/infrastructure/TaskStore', () => ({ list: () => stored, upsert: jest.fn(), clear: jest.fn() }));
+            engine = require('../../backend/core/AgentReasoningEngine');
+        });
+
+        expect(engine.getPendingApprovals()).toEqual([]);
+        expect(engine.tasks.get('waiting')).toMatchObject({ status: 'cancelled', pendingApproval: null, error: 'Interrupted by a runtime restart.' });
+        expect(engine.tasks.get('looping')).toMatchObject({ status: 'cancelled' });
+        expect(engine.tasks.get('done')).toEqual(stored[2]);
     });
 });

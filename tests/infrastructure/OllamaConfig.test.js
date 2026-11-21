@@ -84,6 +84,56 @@ describe('OllamaConfig', () => {
         });
     });
 
+    describe('ollamaUrl', () => {
+        const saved = process.env.OLLAMA_HOST;
+        afterEach(() => {
+            if (saved === undefined) delete process.env.OLLAMA_HOST; else process.env.OLLAMA_HOST = saved;
+        });
+
+        test.each([
+            [undefined, 'http://127.0.0.1:11434'],
+            ['', 'http://127.0.0.1:11434'],
+            ['0.0.0.0', 'http://127.0.0.1:11434'],
+            ['0.0.0.0:11500', 'http://127.0.0.1:11500'],
+            [':11501', 'http://127.0.0.1:11501'],
+            ['localhost', 'http://localhost:11434'],
+            ['http://127.0.0.1:11502/', 'http://127.0.0.1:11502'],
+            ['http://[::1', 'http://127.0.0.1:11434']
+        ])('OLLAMA_HOST=%p gives %p', (host, expected) => {
+            if (host === undefined) delete process.env.OLLAMA_HOST; else process.env.OLLAMA_HOST = host;
+            expect(ollamaConfig.ollamaUrl()).toBe(expected);
+        });
+    });
+
+    describe('inspect reads what a Homebrew Ollama reads', () => {
+        const fs = require('fs');
+        const os = require('os');
+        const path = require('path');
+
+        test('the plist value wins over this runtime\'s own OLLAMA_CONTEXT_LENGTH', () => {
+            // After POST /api/ollama/context the plist says 32768 while the
+            // runtime's environment still says 4096 from when it started.
+            const home = fs.mkdtempSync(path.join(os.tmpdir(), 'yodaman-ollama-home-'));
+            const saved = process.env.OLLAMA_CONTEXT_LENGTH;
+            try {
+                fs.mkdirSync(path.join(home, 'Library', 'LaunchAgents'), { recursive: true });
+                fs.writeFileSync(path.join(home, 'Library', 'LaunchAgents', 'homebrew.mxcl.ollama.plist'),
+                    ollamaConfig.withContextLength(PLIST, 32768));
+                process.env.OLLAMA_CONTEXT_LENGTH = '4096';
+                let state;
+                jest.isolateModules(() => {
+                    jest.doMock('os', () => ({ ...jest.requireActual('os'), homedir: () => home }));
+                    state = require('../../backend/infrastructure/OllamaConfig').inspect();
+                });
+                expect(state).toMatchObject({ managed: true, configured: 32768 });
+            } finally {
+                jest.dontMock('os');
+                if (saved === undefined) delete process.env.OLLAMA_CONTEXT_LENGTH; else process.env.OLLAMA_CONTEXT_LENGTH = saved;
+                fs.rmSync(home, { recursive: true, force: true });
+            }
+        });
+    });
+
     describe('inspect', () => {
         test('reports the allowlist and recommendation for the UI to render', () => {
             const state = ollamaConfig.inspect();

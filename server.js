@@ -95,6 +95,7 @@ app.use((err, req, res, _next) => {
 });
 
 // --- SPA Catch-all ---
+// Unknown /api paths never get here: RestController ends with a JSON 404.
 // Express 5 removed the bare '*' path. '/*splat' is the v5 spelling for
 // "match everything", with `splat` naming the captured segments.
 app.get('/*splat', (req, res) => {
@@ -159,64 +160,53 @@ async function initialize() {
         }
     }
 
-    // 3. Config file
+    // 3. Config file, read once for the checks and the sync below.
+    let config = { watchedDirectories: [], removedDirectories: [] };
+    let configReadable = true;
     try {
-        const cfg = fs.existsSync(CONFIG_PATH)
-            ? JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
-            : { watchedDirectories: [], removedDirectories: [] };
-        healthState.config = { ok: true, message: `loaded (${cfg.watchedDirectories?.length || 0} dirs)` };
+        if (fs.existsSync(CONFIG_PATH)) config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+        healthState.config = { ok: true, message: `loaded (${config.watchedDirectories?.length || 0} dirs)` };
     } catch (err) {
+        // Continuing with an empty config is survivable; doing it in silence is
+        // not. Every watched directory disappears, so the user opens YodaMan to
+        // find their projects gone and nothing anywhere saying why.
+        configReadable = false;
         healthState.config = { ok: false, message: `config load failed: ${err.message}` };
-        logger.error('startup_config_load_failed', err, { configPath: CONFIG_PATH });
+        logger.error('config_unreadable_at_startup', err, {
+            path: CONFIG_PATH,
+            userAction: 'startup_sync',
+            severity: 'high',
+            hint: 'config.json could not be parsed, so no watched directories were loaded. '
+                + 'Fix the JSON and restart, or copy config.example.json over it.'
+        });
     }
+    config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
+    config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];
 
-    // 4. Project sync (ctx index) — non-fatal
+    // 4. Watch every registered workspace. This needs only config.json, so it
+    //    runs before, and regardless of, the ctx sync: when ctx was missing at
+    //    startup no workspace used to be watched at all.
+    const watchedDirectories = config.watchedDirectories.filter(p => !apiRoutes.isGeneratedTempWorkspace(p));
+    watchedDirectories.forEach(p => watcherService.setupWatcher(p));
+    healthState.projects = watchedDirectories.length;
+
+    // 5. Project sync (ctx index) — non-fatal
     try {
         const cliData = await contextEngine.executeJson(['list']);
         const cliPaths = cliData.projects.map(p => p.path);
 
-        let config = { watchedDirectories: [], removedDirectories: [] };
-        if (fs.existsSync(CONFIG_PATH)) {
-            try {
-                config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-            } catch (err) {
-                // Continuing with an empty config is survivable; doing it in
-                // silence is not. Every watched directory disappears from the
-                // startup sync, so the user opens YodaMan to find their projects
-                // gone and nothing anywhere saying why.
-                logger.error('config_unreadable_at_startup', err, {
-                    path: CONFIG_PATH,
-                    userAction: 'startup_sync',
-                    severity: 'high',
-                    hint: 'config.json could not be parsed, so no watched directories were loaded. '
-                        + 'Fix the JSON and restart, or copy config.example.json over it.'
-                });
-                config = { watchedDirectories: [], removedDirectories: [] };
-            }
-        }
-        config.watchedDirectories = Array.isArray(config.watchedDirectories) ? config.watchedDirectories : [];
-        config.removedDirectories = Array.isArray(config.removedDirectories) ? config.removedDirectories : [];
-
         // Merge ctx projects into watched directories — ctx is the source of truth.
-        // New ctx projects are auto-added and queued for indexing.
-        let changed = false;
-        const newProjects = [];
-        for (const ctxPath of cliPaths) {
-            if (config.removedDirectories.includes(ctxPath)) continue;
-            if (!config.watchedDirectories.includes(ctxPath)) {
-                config.watchedDirectories.push(ctxPath);
-                newProjects.push(ctxPath);
-                changed = true;
-            }
-        }
+        // New ctx projects are auto-added, watched and queued for indexing. Not
+        // over an unreadable config.json: saving would replace the user's
+        // workspaces with ctx's list.
+        const newProjects = configReadable
+            ? cliPaths.filter(p => !config.removedDirectories.includes(p) && !watchedDirectories.includes(p))
+            : [];
+        watchedDirectories.push(...newProjects);
+        newProjects.forEach(p => watcherService.setupWatcher(p));
 
-        const activeCliPaths = new Set(cliPaths.filter(p => !config.removedDirectories.includes(p)));
-        const watchedDirectories = config.watchedDirectories.filter(p => !apiRoutes.isGeneratedTempWorkspace(p));
-        watchedDirectories.forEach(p => watcherService.setupWatcher(p));
-
-        if (changed || watchedDirectories.length !== config.watchedDirectories.length) {
-            config.watchedDirectories = watchedDirectories;
-            fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+        if (newProjects.length || watchedDirectories.length !== config.watchedDirectories.length) {
+            fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...config, watchedDirectories }, null, 2));
             logger.info('config_synced_from_ctx', { projects: watchedDirectories.length, new: newProjects.length });
         }
 
@@ -227,6 +217,7 @@ async function initialize() {
                 logger.error('startup_graphify_build_failed', err, { path: p }));
         }
 
+        const activeCliPaths = new Set(cliPaths.filter(p => !config.removedDirectories.includes(p)));
         healthState.projects = watchedDirectories.length;
         healthState.indexed = watchedDirectories.filter(p => activeCliPaths.has(p)).length;
         healthState.syncComplete = true;

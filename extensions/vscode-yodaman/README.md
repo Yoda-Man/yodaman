@@ -53,6 +53,8 @@ Task state and event history now come from the persisted runtime task history, s
   and test coverage for the active file. Also on the editor and explorer context
   menus.
 - `YodaMan: Stardust Change Board` — active OpenSpec changes and graph freshness.
+  A folder YodaMan does not know yet says "Add this folder to YodaMan first"
+  instead of showing an empty board.
 - `YodaMan: Check Spec Drift` — publishes drift into the Problems panel as
   diagnostics. Stale spec references land on the spec; undocumented load-bearing
   modules land on the module.

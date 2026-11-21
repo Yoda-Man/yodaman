@@ -33,7 +33,6 @@ let activeTaskId = null;
 let runtimeTerminal = null;
 let runtimeAvailable = false;
 let lastStatus = null;
-let extensionContext = null;
 
 function getRuntimeUrl() {
     return vscode.workspace.getConfiguration('yodaman').get('runtimeUrl').replace(/\/$/, '');
@@ -133,7 +132,7 @@ async function askWorkspace() {
     output.appendLine(`> ${question}`);
 
     try {
-        const result = await getClient().ask(question, getWorkspaceProjectId(), mode);
+        const result = await getClient().ask(question, getWorkspaceProjectId());
         output.appendLine(result.answer || JSON.stringify(result, null, 2));
     } catch (error) {
         output.appendLine(`[error] ${error.message}`);
@@ -233,19 +232,7 @@ async function searchWorkspace() {
         // The score breakdown rides along as the description so the ranking
         // stays inspectable — the same four signals the Trace tab shows.
         const picked = await vscode.window.showQuickPick(
-            hits.map((hit) => {
-                const file = hit.file || hit.path || '';
-                return {
-                    label: file ? file.split('/').filter(Boolean).pop() : 'result',
-                    description: [
-                        hit.blended !== undefined ? `score ${Number(hit.blended).toFixed(3)}` : null,
-                        hit.specFlag && hit.specFlag.covered ? 'spec' : null,
-                        hit._source || null
-                    ].filter(Boolean).join(' · '),
-                    detail: file,
-                    file
-                };
-            }),
+            hits.map(coreSurface.searchPickItem),
             { title: `YodaMan search — ${hits.length} result(s)`, placeHolder: query, matchOnDetail: true }
         );
 
@@ -395,7 +382,7 @@ async function getOriginalUri(filePath, fallbackContent, fileName) {
         try {
             await vscode.workspace.fs.stat(candidate);
             return candidate;
-        } catch (error) {
+        } catch {
             output.appendLine(`[approval] target file is not on disk yet: ${filePath}`);
         }
     }
@@ -683,7 +670,6 @@ class SidebarItem extends vscode.TreeItem {
 }
 
 function activate(context) {
-    extensionContext = context;
     output = vscode.window.createOutputChannel('YodaMan');
     sidebarProvider = new YodaManSidebarProvider();
     statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);

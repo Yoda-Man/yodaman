@@ -2,6 +2,68 @@
 
 All notable changes to **YodaMan** will be documented in this file.
 
+## [0.6.7] - 2026-11-21
+
+The first OpenSpec baseline of YodaMan (17 capabilities in `openspec/specs/`) and a full documentation audit found the defects below. Each fix has a regression test that fails without it, and each class of defect has a guard test in `tests/architecture/`, so the next one fails the release gate. From this release on, all work is driven from OpenSpec changes.
+
+### Security
+- **The live OpenSpec board socket checks who is asking.** `/api/stardust/live` accepted any WebSocket, so any web page could read a workspace's change names and file activity. It now passes the same gates as the REST routes: a cross-site page is refused, and another device needs its pairing token.
+- **Only registered workspaces can be changed.** Git commit, push, pull and new branch, every Stardust route, `/api/agent/task`, `/api/ask`, `/api/reindex` and `/api/readiness` refuse a folder you haven't added to YodaMan (`404 workspace_not_registered`). `/api/agent/task` does the same before the agent starts. Before, a request could run git, the agent or Graphify, or write an OpenSpec change, in any folder.
+- **Request text can no longer become a command-line flag.** File and branch names starting with `-` are not read as git options, agent searches starting with `-` are not read as ctx flags, and Graphify names starting with `-` are refused.
+- **A paired device can no longer clear the audit log.** `DELETE /api/audit` now works only from this computer, like `DELETE /api/logs` (`403 audit_local_only`).
+- **Only a real `true` approves a write.** `POST /api/agent/approve` treated any truthy value, even the string `"false"`, as approval.
+- **Paths stay where they belong.** A Stardust change name such as `..%2Fother` and a `yodaman create-plugin ../x` name can no longer reach outside their folders.
+- **Lightsaber no longer runs commands through a shell.** A crafted workspace path could run commands; git now gets an argument list.
+- **Plugins need the `network` permission to reach other hosts.** `api.fetch` to a full URL works only for plugins with `network` or `unrestricted`. A path such as `/api/graphify/status` reaches the local runtime, which also makes Holocron VR's Graphify check work: a path always failed before.
+
+### Fixed
+- **Ask uses the full search pipeline.** `/api/ask` ran `ctx ask` directly, unscoped and unranked. It now goes through Context Expert, Graphify ranking and OpenSpec tagging, scoped to the workspace.
+- **Disabled plugins stay disabled after an upgrade.** The list lived inside the app bundle. It is now `plugins.json` in the data folder, copied once from the old file.
+- **Chat history survives a restart.** Server history is now loaded and cleared under the same workspace key the agent saves it with.
+- **Approvals show what you approve.** Commands, spec init and plugin calls show their arguments, edits that can't be predicted say so instead of showing every line as deleted, and "described by spec" appears again.
+- **Approvals cannot hang after a restart.** Tasks interrupted by a restart are marked cancelled.
+- **No more empty commits.** Committing with nothing changed reports "nothing to commit" instead of making an empty commit.
+- **Slow pushes and pulls finish.** They no longer stop after 5 seconds; a remote that needs a password fails at once.
+- **Ahead and behind counts are real.** `/api/git/branch` counted 0 every time.
+- **Each editor is listed once.** Settings showed an editor such as Zed twice.
+- **The change board shows real status.** Changes read `applied` or `validated`, validation results no longer leak between workspaces with the same change name, and the `archive` folder no longer appears as a change.
+- **The current spec is found in OpenSpec's own layout.** The spec diff now reads `specs/<id>/spec.md`.
+- **The live board stops watching when a client drops**, and stops reconnecting after you switch workspace or leave the tab.
+- **Graph status tells the truth when Graphify is missing.** `available` is false unless Graphify can actually start.
+- **Graph questions refuse bad input.** A bad impact-analysis depth gets a 400 instead of reaching Graphify as `NaN`, and saved answers that start with a bullet list no longer fail.
+- **`yodaman doctor --graph` counts out-of-date graphs as stale.**
+- **The AI summary and health checks follow `OLLAMA_HOST`.**
+- **The context window updates right after you change it.** Health showed the old value for up to five minutes.
+- **The Dashboard offers to restart Ollama only when it can.** The button shows only for a Homebrew-run Ollama; otherwise the Dashboard says to set `OLLAMA_CONTEXT_LENGTH` where Ollama runs.
+- **Graphify health after Repair reads "installed at …"**, not "vinstalled".
+- **Errors say what went wrong.** Every API error now has a `code`; unknown `/api` paths answer JSON 404; plugin uploads answer 409 for a taken name and 400 for a bad one; a missing request body gets the route's own 400, not a 500; a settings save that fails answers 500 and is not applied.
+- **Disabled plugins can be deleted**, and default plugins no longer offer Delete.
+- **Workspaces are watched without Context Expert.** File watching starts even when ctx is unavailable at startup.
+- **Task history stops growing.** Only the newest 100 tasks stay in the database.
+- **Agent commands run in your workspace by default.**
+- **`--help` works after any command.** `yodaman setup --help` printed nothing useful and ran setup.
+- **Uninstall lists all your data**, including sessions, the disabled-plugin list and the JSON fallbacks.
+- **Lightsaber finds hotspots.** Its complexity check threw on every file, so it never reported a hotspot. Its time window, change coupling and exclude patterns now work, and test coverage ignores `node_modules`.
+- **Droid-Sweep's fallback counts imports.** Imported files were reported unused.
+- **Desktop diagnostics no longer claim the runtime is running when it failed.**
+- **setup.sh checks versions.** It stops if Node is older than 24 and reinstalls a Context Expert older than 1.3.4.
+- **The watchdog follows `YODAMAN_PORT`.**
+- **Search Trace shows the whole formula**, including the spec-coverage term (× 0.15).
+- **Every UI call honours `VITE_YODAMAN_API_BASE`.**
+- **Removed a toggle that did nothing.** The sidebar's "Include in context" control is gone; scope is always the selected workspace.
+- **Mobile: the drift list shows drift and approvals show real test coverage.** Both read fields the runtime never sends.
+- **VS Code: Ask About Workspace works again** (`mode is not defined`), search results open and show their score, and drift warnings land on the spec file.
+- **Unregistered workspaces say what to do.** Stardust in the editor and on the phone shows "Add this folder to YodaMan first".
+- **The Docker image runs Node 24 and yodaman-ctx.**
+- **The version bump covers every page.** The in-app manual stayed at 0.6.4 while the check passed.
+- **Release gates leave your data alone.** Smoke runs use a throwaway data folder.
+- **The vendored-audit gate fails on an unknown level** instead of passing silently.
+
+### Changed
+- **All work is driven from OpenSpec.** `openspec/` holds the baseline specs and the project rules, and `.claude/skills/` ships the OpenSpec workflows as skills (`openspec-propose`, `openspec-apply-change`, `openspec-verify-change`, `openspec-archive-change` and the rest).
+- **ESLint covers the VS Code extension and every `.mjs` file.** An undefined variable shipped in 0.6.6 because no lint rules reached it.
+- **Documentation corrected** across the README, manuals, API, architecture, guides, runbooks, UPGRADING and SECURITY.
+
 ## [0.6.6] - 2026-11-10
 
 ### Added

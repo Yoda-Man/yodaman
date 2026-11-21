@@ -275,6 +275,31 @@ function DiffPanel({ filePath, oldContent, newContent }) {
   )
 }
 
+/**
+ * What the user is consenting to. A tool that names no file has only its
+ * arguments to show, and an edit whose result the engine could not predict
+ * (newContent null) must not render as "every line deleted".
+ */
+export function ApprovalPreview({ params }) {
+  const { filePath, oldContent, newContent, arguments: args } = params || {}
+  return (
+    <>
+      {args !== undefined && args !== null ? (
+        <pre className="custom-scrollbar max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-[11px] text-slate-300">
+          {JSON.stringify(args, null, 2)}
+        </pre>
+      ) : null}
+      {filePath && newContent == null ? (
+        <div className="rounded-lg border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+          <span className="font-mono">{filePath}</span>: the result cannot be predicted, so no diff is shown.
+        </div>
+      ) : filePath ? (
+        <DiffPanel filePath={filePath} oldContent={oldContent} newContent={newContent} />
+      ) : null}
+    </>
+  )
+}
+
 const READINESS_STYLES = {
   ready: { label: 'Graph current', className: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' },
   stale: { label: 'Graph stale', className: 'border-amber-400/25 bg-amber-400/10 text-amber-200' },
@@ -484,11 +509,7 @@ function MessageBubble({ message, onOpenFile, onViewInVr, onApprove, isApprovabl
                 Approval required — {message.approval.tool}
               </div>
               <ImpactPanel impact={message.approval.impact} specImpact={message.approval.specImpact} filePath={message.approval.params?.filePath} onExpandCompose={onOpenFile} />
-              <DiffPanel
-                filePath={message.approval.params?.filePath}
-                oldContent={message.approval.params?.oldContent}
-                newContent={message.approval.params?.newContent}
-              />
+              <ApprovalPreview params={message.approval.params} />
               {isApprovable ? (
                 <div className="flex gap-2">
                   <button
@@ -693,7 +714,8 @@ export default function AgentChatTab({ selectedProject }) {
 
   async function loadHistory() {
     try {
-      const history = await api.getSessions(selectedProject.id)
+      // The server keys history by the projectId agentTask sends: the path.
+      const history = await api.getSessions(selectedProject.path)
       const restored = normalizeMessages(history)
       if (restored.length > 0) setMessages(restored)
     } catch (err) {
@@ -976,7 +998,7 @@ export default function AgentChatTab({ selectedProject }) {
             clearSlowTimer()
             setPendingApproval({ taskId: step.taskId, messageId: assistantId, tool: step.tool })
             patchMessage(assistantId, {
-              approval: { tool: step.tool, params: step.params, impact: step.impact, resolved: undefined }
+              approval: { tool: step.tool, params: step.params, impact: step.impact, specImpact: step.specImpact, resolved: undefined }
             })
             return
 
@@ -1068,7 +1090,7 @@ export default function AgentChatTab({ selectedProject }) {
     try {
       localStorage.removeItem(`yodaman:messages:${selectedProject.id}`)
     } catch (_) { /* ignore */ }
-    api.clearSessions(selectedProject.id).catch(() => { })
+    api.clearSessions(selectedProject.path).catch(() => { })
   }
 
   async function retryLastPrompt() {

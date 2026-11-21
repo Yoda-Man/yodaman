@@ -36,7 +36,7 @@ function parseIsoDate(value) {
 }
 
 async function countFilesChanged(git, hash) {
-    const output = await git.raw(['show', '--name-only', '--format=', '--no-renames', hash]);
+    const output = await git.raw(['show', '--name-only', '--format=', '--no-renames', '--end-of-options', hash]);
     return output.split('\n').map(line => line.trim()).filter(Boolean).length;
 }
 
@@ -122,11 +122,12 @@ async function getChangeFrequency(workspacePath, filePath, days = 30) {
     return output.split('\n').filter(Boolean).length;
 }
 
-async function getHeatmapData(workspacePath) {
+async function getHeatmapData(workspacePath, days = 30) {
+    const window = Math.max(1, Math.min(Math.trunc(Number(days)) || 30, 3650));
     const git = gitFor(workspacePath);
     const output = await git.raw([
         'log',
-        '--since=30 days ago',
+        `--since=${window} days ago`,
         '--date=iso-strict',
         '--pretty=format:commit%x09%H%x09%an%x09%ad',
         '--name-only'
@@ -223,8 +224,8 @@ async function getCommitDiff(workspacePath, commitHash) {
 
     const git = gitFor(workspacePath);
     const [summary, meta] = await Promise.all([
-        git.raw(['show', '--numstat', '--format=', '--no-renames', commitHash]),
-        git.raw(['show', '-s', '--date=iso-strict', '--pretty=format:%H%x09%an%x09%ad%x09%s', commitHash])
+        git.raw(['show', '--numstat', '--format=', '--no-renames', '--end-of-options', commitHash]),
+        git.raw(['show', '-s', '--date=iso-strict', '--pretty=format:%H%x09%an%x09%ad%x09%s', '--end-of-options', commitHash])
     ]);
     const [hash, author, date, ...messageParts] = meta.trim().split('\t');
     const files = summary.split('\n')
@@ -249,19 +250,21 @@ async function getCommitDiff(workspacePath, commitHash) {
 
 async function getBranchInfo(workspacePath) {
     const git = gitFor(workspacePath);
-    const [branchSummary, latest] = await Promise.all([
+    const [branchSummary, latest, counts] = await Promise.all([
         git.branchLocal(),
-        git.raw(['log', '-1', '--date=iso-strict', '--pretty=format:%H%x09%an%x09%ad%x09%s']).catch(() => '')
+        git.raw(['log', '-1', '--date=iso-strict', '--pretty=format:%H%x09%an%x09%ad%x09%s']).catch(() => ''),
+        // branchLocal() has no ahead/behind; count against the upstream. No
+        // upstream (or no commits) is a normal state and means 0 and 0.
+        git.raw(['rev-list', '--left-right', '--count', 'HEAD...@{upstream}']).catch(() => '')
     ]);
-    const currentBranch = branchSummary.current;
-    const current = branchSummary.branches[currentBranch] || {};
+    const [ahead = 0, behind = 0] = counts.trim().split(/\s+/).map(Number);
     const [hash, author, date, ...messageParts] = latest.trim().split('\t');
 
     return {
-        currentBranch,
+        currentBranch: branchSummary.current,
         branches: branchSummary.all,
-        ahead: Number(current.ahead || 0),
-        behind: Number(current.behind || 0),
+        ahead: ahead || 0,
+        behind: behind || 0,
         latestCommit: hash ? {
             hash,
             author,

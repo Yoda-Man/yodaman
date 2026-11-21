@@ -27,7 +27,7 @@ const PERMISSIONS = [
     ['read', 'Read files inside the workspace.', 'safe'],
     ['write', 'Create or modify files.', 'care'],
     ['command', 'Run shell commands (still subject to the blocked-command policy).', 'care'],
-    ['network', 'Make outbound HTTP requests.', 'care'],
+    ['network', 'Make outbound HTTP requests with api.fetch; without it (or unrestricted) api.fetch to another host throws. A path like /api/graphify/status calls the local runtime and needs no permission.', 'care'],
     ['search', 'Query the retrieval index.', 'safe'],
     ['graphify:read', 'Read the knowledge graph — use this instead of scanning the filesystem.', 'safe'],
     ['git:read', 'Read git history and status.', 'safe'],
@@ -172,7 +172,8 @@ module.exports = {
 };
 
 // api surface: api.log.{info,warn,error} · api.ui.{registerPluginCard,openModal,
-// registerShortcut,unregisterShortcut} · api.fetch(url, opts) · api.worker.run
+// registerShortcut,unregisterShortcut} · api.fetch(url, opts) (needs the network or unrestricted
+// permission) · api.worker.run
 // · api.config.get`;
 
 export default function PluginAuthoringGuide({ onBack }) {
@@ -333,10 +334,10 @@ export default function PluginAuthoringGuide({ onBack }) {
                 <Section n="7" title="Install, reload, disable" icon={Upload}>
                     <Steps items={[
                         [<>Drop the <Code>.js</Code> file into <Code>core/plugins/</Code>, or use <strong>Install Plugin</strong> to upload a <Code>.js</Code> or <Code>.zip</Code>. In a zip, <Code>main.js</Code> wins, otherwise the first <Code>.js</Code> found; a bundled <Code>plugin.json</Code> contributes its <Code>permissions</Code>.</>],
-                        [<>Press the <strong>⚡ refresh</strong> button on the Plugins page. The loader clears the require cache per file, so an edited plugin is picked up without restarting the runtime.</>],
+                        [<>An uploaded plugin loads at once; uploading an edited copy replaces the old one, since the loader clears the require cache per file. A file dropped into <Code>core/plugins/</Code> by hand loads when the runtime next starts. The <strong>⚡ refresh</strong> button on the Plugins page re-reads the list of loaded plugins; it does not load new files.</>],
                         [<>Check the card. If it did not appear, the runtime logs the reason — open <strong>Logs</strong> and look for <Code>Failed to load plugin</Code> or <Code>plugin_upload_failed</Code>.</>],
                         [<>Ask for it in Chat using a phrase from your description. Every call is written to the audit log with its duration and a summarized result.</>],
-                        [<>Disabling writes the name to <Code>core/plugins/config.json</Code> and calls <Code>onDisable</Code> if present. Deleting removes the file; the shipped defaults cannot be deleted.</>],
+                        [<>Disabling writes the name to <Code>plugins.json</Code> in YodaMan's data folder (<Code>~/Library/Application Support/YodaMan</Code> on macOS, or <Code>YODAMAN_DATA_DIR</Code>) and calls <Code>onDisable</Code> if present. Deleting removes the file; the shipped defaults cannot be deleted.</>],
                     ]} />
                 </Section>
 

@@ -2,7 +2,7 @@
 
 **Local-first code intelligence that understands your workspace the way you do: what the code says, how it fits together, and what it was meant to do.**
 
-![Version](https://img.shields.io/badge/Version-0.6.6-gold) ![License](https://img.shields.io/badge/License-MIT-green) ![Node](https://img.shields.io/badge/Node-24%2B-339933) ![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
+![Version](https://img.shields.io/badge/Version-0.6.7-gold) ![License](https://img.shields.io/badge/License-MIT-green) ![Node](https://img.shields.io/badge/Node-24%2B-339933) ![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational)
 
 YodaMan combines three tools into one search and one agent:
 
@@ -98,7 +98,7 @@ step was skipped and how to enable it; a partial search never looks like a full
 one. The pipeline lives in one module, and an architecture test fails the build
 if any code searches around it.
 
-In the Search view, results appear as soon as the pipeline returns them, and
+In Search mode on the Chat tab, results appear as soon as the pipeline returns them, and
 an **AI summary** follows. Your local model (the one Context Expert uses, via
 Ollama) answers the query from those same results only, citing them as [1],
 [2]. It never searches on its own, and nothing leaves your machine. If the
@@ -149,17 +149,18 @@ where a missing component offers a one-click install.
 ```bash
 git clone https://github.com/Yoda-Man/yodaman.git
 cd yodaman
-sh setup.sh
-npm run desktop          # or: npm start, then open http://localhost:3090
+bash setup.sh
+npm run desktop          # or: npm start, then open http://localhost:5190
 ```
 
 Prerequisites: Node.js 24+, Python 3.10+, and Ollama. `yodaman setup` (or
-`setup.sh`) installs the rest.
+`setup.sh`) installs the rest. `setup.sh` stops if Node is older than 24 and
+reinstalls a Context Expert older than 1.3.4.
 
 ## Using YodaMan
 
-**Search or ask.** The Search view returns ranked results with an **Open**
-button. In Chat, a plain search such as "find where login is handled" is
+**Search or ask.** The Chat tab has two modes. Search returns ranked results
+with an **Open** button. In Chat, a plain search such as "find where login is handled" is
 answered directly from the search pipeline in seconds; anything that needs
 reasoning ("explain", "fix", "compare") goes to the agent.
 
@@ -191,7 +192,9 @@ shows where specs and code have drifted apart.
 extension and mobile companion all talk to the same local runtime.
 
 **Extend it.** Plugins are plain JavaScript. YodaMan ships with CodeTrooper,
-Droid-Sweep, Grand Inquisitor, Lightsaber and Graphify.
+Droid-Sweep, Grand Inquisitor, Lightsaber, Graphify and Holocron VR. A plugin
+runs inside the runtime with full Node.js access, and its permissions are
+declarations, not a sandbox, so install only plugins you trust.
 
 ### The Stardust tabs
 
@@ -224,9 +227,10 @@ served through a 4096-token window behaves like a 9B one.
 | `codestral:22b` | `32768` | ~40,000 chars | Holds context across multi-step tasks. **Recommended.** |
 | 32B-class, `deepseek-coder-v2` | `65536` to `131072` | ~80,000 to 120,000 chars | Whole files kept verbatim instead of clipped. |
 
-When the window is too small, the Dashboard says so and offers to set it for you
-(YodaMan writes the setting, restarts Ollama, and rolls back if the restart
-fails). Or set it by hand:
+When the window is too small, the Dashboard says so. When Ollama runs as a
+Homebrew service it offers to set it for you (YodaMan writes the setting,
+restarts Ollama, and rolls back if the restart fails). Otherwise it tells you to
+set it by hand:
 
 ```bash
 export OLLAMA_CONTEXT_LENGTH=32768
@@ -294,7 +298,7 @@ Any setting can be overridden by an environment variable named after it with a
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `YODAMAN_PORT` | `3090` | HTTP and WebSocket port. |
+| `YODAMAN_PORT` | `3090` | HTTP and WebSocket port. `yodaman-mcp` and `npm run health:watch` follow it too. |
 | `YODAMAN_HOST` | `127.0.0.1` | Bind address. **Loopback by default.** Set `0.0.0.0` only to pair a phone on your LAN; the API then reaches every device on that network. |
 | `YODAMAN_DATA_DIR` | your data folder | Where `config.json`, `yodaman.db` and `sessions.json` live: `~/Library/Application Support/YodaMan` on macOS, `%APPDATA%\YodaMan` on Windows, `~/.config/YodaMan` on Linux. Outside the install, so upgrades keep them. |
 | `YODAMAN_CONFIG_PATH` | `<data folder>/config.json` | Config file location. |
@@ -313,6 +317,7 @@ Any setting can be overridden by an environment variable named after it with a
 | `YODAMAN_GRAPHIFY_FULL_EXTRACT` | | Set `true` to force a full re-extract instead of an incremental one. |
 | `YODAMAN_GRAPHIFY_VIZ_NODE_LIMIT` | `25000` | Largest graph rendered as an HTML visualisation. |
 | `YODAMAN_GRAPHIFY_RUNNING_STALE_MS` | twice the timeout plus 60 s | When a running Graphify job is treated as abandoned. |
+| `OLLAMA_HOST` | `127.0.0.1:11434` | Ollama's own variable. The search summary and the Ollama health checks use the server it names. |
 
 Frontend build-time variables (Vite): `VITE_YODAMAN_API_BASE`,
 `VITE_YODAMAN_FETCH_TIMEOUT_MS`.
@@ -388,7 +393,10 @@ commitments (every search goes through the three-tool pipeline, the MCP server
 is read-only, nothing leaves the machine, the approval gate defaults to deny)
 that are easier to agree on before code is written than after.
 [CONTRIBUTING.md](CONTRIBUTING.md) sets them out, along with the testing
-standard. By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+standard. All work is driven from OpenSpec: `openspec/specs/` describes what
+the code does today, and every change starts as a proposal under
+`openspec/changes/` (the `openspec-*` skills in `.claude/skills/` drive it in Claude
+Code). By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Security
 
@@ -397,8 +405,8 @@ Please report vulnerabilities privately rather than in a public issue. See
 
 ## Upgrading and uninstalling
 
-[UPGRADING.md](UPGRADING.md) covers upgrades between 0.5.x versions (no
-migration is needed) and how to remove YodaMan and everything it generates.
+[UPGRADING.md](UPGRADING.md) covers upgrades, including the two one-time steps
+from 0.5.x to 0.6.x, and how to remove YodaMan and everything it generates.
 
 ## License
 

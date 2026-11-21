@@ -256,9 +256,12 @@ function detectEditors() {
             try { entries = fs.readdirSync(root); } catch (_err) { continue; }
             for (const entry of entries.filter((name) => name.endsWith('.app')).sort()) {
                 const app = path.join(root, entry);
-                if (BUNDLED_CLIS.some((known) => known.find(app)) && !seen.has(entry)) {
-                    seen.add(entry);
-                    found.push({ name: appName(app), setting: app, atLine: true });
+                // Keyed by display name, like the PATH editors below, so Zed.app
+                // and the `zed` command are listed once.
+                const name = appName(app);
+                if (BUNDLED_CLIS.some((known) => known.find(app)) && !seen.has(name)) {
+                    seen.add(name);
+                    found.push({ name, setting: app, atLine: true });
                 }
             }
         }

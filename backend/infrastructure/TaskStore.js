@@ -130,8 +130,9 @@ class TaskStore {
         });
 
         this.tasks.set(taskId, task);
-        this.prune();
+        // Saved before pruning, so a row that falls out of the newest 100 is deleted, not re-inserted.
         this.saveTask(task);
+        this.prune();
         return task;
     }
 
@@ -152,6 +153,15 @@ class TaskStore {
     prune() {
         const ordered = this.list();
         this.tasks = new Map(ordered.slice(0, MAX_TASKS).map((task) => [task.taskId, task]));
+        // The table too, or it grows forever while only the newest are ever read.
+        if (useSqlite && db && ordered.length > MAX_TASKS) {
+            try {
+                const remove = db.prepare('DELETE FROM tasks WHERE taskId = ?');
+                for (const task of ordered.slice(MAX_TASKS)) remove.run(task.taskId);
+            } catch (err) {
+                logger.error('taskstore_sqlite_prune_failed', err);
+            }
+        }
     }
 
     trimTask(task) {

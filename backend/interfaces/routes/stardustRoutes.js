@@ -20,6 +20,19 @@ const { jsonError, isLocalRequest } = require('../support/http');
 const router = express.Router();
 
 /**
+ * The workspace a Stardust request names, from the query or the body. An
+ * unregistered folder is refused here and null returned, the response sent.
+ */
+function workspaceOf(req, res) {
+    try {
+        return stardustLive.resolveProjectRoot(req.query.projectRoot ?? req.body?.projectRoot);
+    } catch (err) {
+        jsonError(res, err.status || 400, err.message, err.code);
+        return null;
+    }
+}
+
+/**
  * Create an OpenSpec change proposal.
  * Mirrors ToolBox.specPropose so the UI and agent use the same logic.
  */
@@ -85,7 +98,8 @@ async function proposeChange(projectRoot, changeName, description) {
  */
 router.get('/stardust/drift', (req, res) => {
     try {
-        const projectRoot = req.query.projectRoot || process.cwd();
+        const projectRoot = workspaceOf(req, res);
+        if (!projectRoot) return;
         const report = specDrift.detectDrift(projectRoot, {
             minDependents: Number(req.query.minDependents) || 2
         });
@@ -107,7 +121,8 @@ router.get('/stardust/drift', (req, res) => {
  */
 router.get('/stardust/context', (req, res) => {
     try {
-        const projectRoot = req.query.projectRoot || process.cwd();
+        const projectRoot = workspaceOf(req, res);
+        if (!projectRoot) return;
         const files = String(req.query.files || '')
             .split(',')
             .map(file => file.trim())
@@ -150,24 +165,27 @@ router.get('/stardust/context', (req, res) => {
 
 router.get('/stardust/diagnose', async (req, res) => {
     try {
-        const projectRoot = req.query.projectRoot || process.cwd();
+        const projectRoot = workspaceOf(req, res);
+        if (!projectRoot) return;
         const result = await stardustWrapper.diagnose(projectRoot);
         res.json(result);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return jsonError(res, 500, err.message, 'stardust_diagnose_failed');
     }
 });
 
 router.post('/stardust/run', async (req, res) => {
     try {
-        const { action, changeId, _title, description, _specPath, projectRoot, _dryRun, _strict } = req.body || {};
+        const { action, changeId, description } = req.body || {};
 
         if (!action) {
-            return res.status(400).json({ error: 'Missing required field: action' });
+            return jsonError(res, 400, 'Missing required field: action', 'action_required');
         }
 
+        const cwd = workspaceOf(req, res);
+        if (!cwd) return;
         let result;
-        const opts = { cwd: projectRoot || process.cwd() };
+        const opts = { cwd };
 
         switch (action) {
             case 'diagnose':
@@ -175,13 +193,15 @@ router.post('/stardust/run', async (req, res) => {
                 break;
             case 'validate':
                 if (!changeId) {
-                    return res.status(400).json({ error: 'validate requires changeId' });
+                    return jsonError(res, 400, 'validate requires changeId', 'change_id_required');
                 }
                 result = await stardustWrapper.validate(changeId, opts);
+                // Stored here, where the workspace is known, so the board shows it.
+                stardustLive.setValidationStatus(cwd, changeId, result.success ? 'ok' : 'error');
                 break;
             case 'archive':
                 if (!changeId) {
-                    return res.status(400).json({ error: 'archive requires changeId' });
+                    return jsonError(res, 400, 'archive requires changeId', 'change_id_required');
                 }
                 result = await stardustWrapper.archive(changeId, opts);
                 break;
@@ -189,10 +209,10 @@ router.post('/stardust/run', async (req, res) => {
                 result = await stardustWrapper.list({ specs: req.body.specs, cwd: opts.cwd });
                 break;
             case 'init':
-                if (!projectRoot) {
-                    return res.status(400).json({ error: 'init requires projectRoot' });
+                if (!req.body.projectRoot) {
+                    return jsonError(res, 400, 'init requires projectRoot', 'project_root_required');
                 }
-                result = await stardustWrapper.init(projectRoot, { tools: req.body.tools || 'all' });
+                result = await stardustWrapper.init(cwd, { tools: req.body.tools || 'all' });
                 break;
             case 'install':
                 // Installing software is Repair's job and carries Repair's gate.
@@ -204,12 +224,12 @@ router.post('/stardust/run', async (req, res) => {
                 break;
             case 'propose':
                 if (!changeId) {
-                    return res.status(400).json({ error: 'propose requires changeId' });
+                    return jsonError(res, 400, 'propose requires changeId', 'change_id_required');
                 }
                 result = await proposeChange(opts.cwd, changeId, description || '');
                 break;
             default:
-                return res.status(400).json({ error: `Unknown stardust action: ${action}` });
+                return jsonError(res, 400, `Unknown stardust action: ${action}`, 'unknown_action');
         }
 
         res.json({
@@ -222,7 +242,8 @@ router.post('/stardust/run', async (req, res) => {
             ...(action === 'diagnose' && !result._debug ? { diagnostics: result } : {}),
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        // proposeChange throws 400 invalid_change_name; anything else is ours.
+        return jsonError(res, err.status || 500, err.message, err.code || 'stardust_run_failed');
     }
 });
 
@@ -237,11 +258,12 @@ router.post('/stardust/run', async (req, res) => {
  */
 router.get('/stardust/board', (req, res) => {
     try {
-        const projectRoot = req.query.projectRoot || process.cwd();
+        const projectRoot = workspaceOf(req, res);
+        if (!projectRoot) return;
         const snapshot = stardustLive.getSnapshot(projectRoot);
         res.json(snapshot);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return jsonError(res, 500, err.message, 'stardust_board_failed');
     }
 });
 
@@ -251,11 +273,12 @@ router.get('/stardust/board', (req, res) => {
  */
 router.get('/stardust/deltas/:name', (req, res) => {
     try {
-        const projectRoot = req.query.projectRoot || process.cwd();
+        const projectRoot = workspaceOf(req, res);
+        if (!projectRoot) return;
         const deltas = stardustLive.getDeltas(projectRoot, req.params.name);
         res.json({ change: req.params.name, deltas });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return jsonError(res, 500, err.message, 'stardust_deltas_failed');
     }
 });
 
@@ -269,11 +292,12 @@ router.get('/stardust/deltas/:name', (req, res) => {
  */
 router.get('/stardust/spec', (req, res) => {
     try {
-        const projectRoot = req.query.projectRoot || process.cwd();
+        const projectRoot = workspaceOf(req, res);
+        if (!projectRoot) return;
         const specId = String(req.query.spec || '').trim();
 
         if (!specId) {
-            return res.status(400).json({ error: 'spec query parameter is required' });
+            return jsonError(res, 400, 'spec query parameter is required', 'spec_required');
         }
 
         const root = specDrift.findOpenSpecRoot(projectRoot);
@@ -282,14 +306,16 @@ router.get('/stardust/spec', (req, res) => {
         }
 
         const specsDir = path.join(root, 'specs');
-        const resolved = path.resolve(specsDir, `${specId}.md`);
+        // OpenSpec's own layout is specs/<id>/spec.md; a flat specs/<id>.md is kept too.
+        const candidates = [`${specId}.md`, path.join(specId, 'spec.md')].map(file => path.resolve(specsDir, file));
 
         // The spec id comes from the client, so confine it to the specs directory.
-        if (resolved !== specsDir && !resolved.startsWith(specsDir + path.sep)) {
-            return res.status(400).json({ error: 'spec id resolves outside the specs directory' });
+        if (candidates.some(file => !file.startsWith(specsDir + path.sep))) {
+            return jsonError(res, 400, 'spec id resolves outside the specs directory', 'spec_outside_specs');
         }
 
-        if (!fs.existsSync(resolved)) {
+        const resolved = candidates.find(file => fs.existsSync(file));
+        if (!resolved) {
             return res.json({
                 available: false,
                 id: specId,
@@ -323,7 +349,8 @@ router.get('/stardust/spec', (req, res) => {
  */
 router.get('/stardust/change-impact/:name', (req, res) => {
     try {
-        const projectRoot = req.query.projectRoot || process.cwd();
+        const projectRoot = workspaceOf(req, res);
+        if (!projectRoot) return;
         const changeName = req.params.name;
         const deltas = stardustLive.getDeltas(projectRoot, changeName);
 
@@ -429,14 +456,16 @@ router.get('/stardust/change-impact/:name', (req, res) => {
  */
 router.put('/stardust/validation/:name', (req, res) => {
     try {
-        const { status } = req.body;
+        const { status } = req.body || {};
         if (!['ok', 'warn', 'error'].includes(status)) {
-            return res.status(400).json({ error: 'status must be ok, warn, or error' });
+            return jsonError(res, 400, 'status must be ok, warn, or error', 'invalid_validation_status');
         }
-        stardustLive.setValidationStatus(req.params.name, status);
+        const projectRoot = workspaceOf(req, res);
+        if (!projectRoot) return;
+        stardustLive.setValidationStatus(projectRoot, req.params.name, status);
         res.json({ ok: true, change: req.params.name, validation: status });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return jsonError(res, 500, err.message, 'stardust_validation_failed');
     }
 });
 
@@ -492,11 +521,12 @@ function referenceMatchesFile(reference, relativeFile) {
  */
 router.get('/stardust/compose', async (req, res) => {
     try {
-        const projectRoot = req.query.projectRoot || process.cwd();
+        const projectRoot = workspaceOf(req, res);
+        if (!projectRoot) return;
         const targetFile = req.query.file;
 
         if (!targetFile) {
-            return res.status(400).json({ error: 'file query parameter is required' });
+            return jsonError(res, 400, 'file query parameter is required', 'file_required');
         }
 
         // Clamp rather than reject: a bad depth should not fail the whole view.
@@ -613,7 +643,7 @@ router.get('/stardust/compose', async (req, res) => {
         res.json(result);
     } catch (err) {
         logger.error('stardust_compose_failed', err, { requestId: req.id });
-        res.status(500).json({ error: err.message });
+        return jsonError(res, 500, err.message, 'stardust_compose_failed');
     }
 });
 

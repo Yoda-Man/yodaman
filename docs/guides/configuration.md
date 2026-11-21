@@ -65,6 +65,7 @@ Settings can be changed in the app, or through `PUT /api/settings`, only from th
 | `VITE_YODAMAN_FETCH_TIMEOUT_MS` | `30000` | Browser fetch timeout in milliseconds. |
 | `YODAMAN_URL` | `http://127.0.0.1:$YODAMAN_PORT` | Where the `yodaman-mcp` server looks for the runtime. Set it only if the runtime is not on the default port. |
 | `YODAMAN_MCP_TIMEOUT` | `120000` | Milliseconds before an MCP tool call gives up. Semantic search on a very large workspace can take tens of seconds. |
+| `OLLAMA_HOST` | `127.0.0.1:11434` | Ollama's own variable. The search summary and the Ollama health and context-window checks use the server it names, read as the `ollama` CLI reads it (scheme optional, port `11434` when none is given). |
 
 ### Ollama's context window — set this
 
@@ -85,7 +86,8 @@ yodaman doctor          # reports the served window against the model's capabili
 ```
 
 It is also on the Dashboard's AI Engine card, in amber when it is small, with a
-button that applies the recommended value and restarts Ollama for you.
+button that applies the recommended value and restarts Ollama for you. The
+button works when Ollama runs as a Homebrew service on macOS.
 
 To set it yourself, in the environment Ollama runs under:
 
