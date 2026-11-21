@@ -62,7 +62,7 @@ Saving `editorCommand` through `PUT /api/settings` SHALL be allowed only from th
 `POST /api/editor/open` with `{ workspace, path, line }` SHALL launch the configured editor on a file inside a registered workspace and answer once the process has started. It MUST be refused for non-local callers, and the program MUST come from settings or the OS, never the request.
 
 #### Scenario: Opened
-- **WHEN** a local caller opens `src/a.js` at line 10 in a registered workspace
+- **WHEN** a local caller opens `src/my-file.js` at line 10 in a registered workspace
 - **THEN** the answer is `{ opened: true, file, line, editor, atLine }` where `file` is the real path and `atLine` says whether the line was passed to the editor
 
 #### Scenario: Remote caller

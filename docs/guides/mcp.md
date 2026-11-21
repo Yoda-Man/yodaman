@@ -31,6 +31,9 @@ npm install -g yodaman
 MCP is a protocol, so **any client that speaks it works**. The only thing that
 differs is where the configuration lives. `yodaman-mcp` ships with the package,
 so there is nothing extra to install.
+`yodaman-mcp --help` lists its tools and the runtime it proxies, and
+`yodaman-mcp --version` prints its version; both exit without starting the
+server.
 
 ### Claude Code
 

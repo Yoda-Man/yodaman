@@ -27,7 +27,9 @@ describe('Documentation accuracy', () => {
     const version = require(path.join(root, 'package.json')).version;
 
     // Historical records, exempt by design — see the note above.
-    const HISTORICAL = [/^CHANGELOG\.md$/, /^extensions\/.*\/CHANGELOG\.md$/];
+    // Archived OpenSpec changes are history too; .agents/skills is OpenSpec's
+    // generated workflow text, whose example paths are not this repository's.
+    const HISTORICAL = [/^CHANGELOG\.md$/, /^extensions\/.*\/CHANGELOG\.md$/, /^openspec\/changes\/archive\//, /^\.agents\//];
 
     const currentDocs = execSync("git ls-files '*.md'", { cwd: root, encoding: 'utf8' })
         .split('\n')

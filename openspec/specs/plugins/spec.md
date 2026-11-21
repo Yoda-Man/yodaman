@@ -1,7 +1,7 @@
 # Plugins Specification
 
 ## Purpose
-Plugins are CommonJS files in `plugins/` that the runtime loads as agent tools. `backend/infrastructure/ToolBox.js` loads, validates and runs them and keeps the disabled list in `plugins.json` in the data folder (copied once from the old `plugins/config.json`); `backend/infrastructure/PluginAPI.js` backs lifecycle-style plugins. The routes under `/api/plugins` live in `backend/interfaces/RestController.js`. YodaMan bundles six plugins: `graphify`, `Grand-Inquisitor`, `CodeTrooper`, `Droid-Sweep`, `lightsaber` and `holocron-vr` (`plugins/main.js`, manifest `plugins/plugin.json`). `shared/pluginInvocation.js`, `scripts/plugin-smoke.js` and the Plugins page (`src/components/PluginsWindow.jsx`, `PluginAuthoringGuide.jsx`) build on them.
+Plugins are CommonJS files in `plugins/` that the runtime loads as agent tools. `backend/infrastructure/ToolBox.js` loads, validates and runs them and keeps the disabled list in `plugins.json` in the data folder (copied once from the old `config.json` in `plugins/`); `backend/infrastructure/PluginAPI.js` backs lifecycle-style plugins. The routes under `/api/plugins` live in `backend/interfaces/RestController.js`. YodaMan bundles six plugins: `graphify`, `Grand-Inquisitor`, `CodeTrooper`, `Droid-Sweep`, `lightsaber` and `holocron-vr` (`plugins/main.js`, manifest `plugins/plugin.json`). `shared/pluginInvocation.js`, `scripts/plugin-smoke.js` and the Plugins page (`src/components/PluginsWindow.jsx`, `PluginAuthoringGuide.jsx`) build on them.
 
 ## Requirements
 
@@ -9,7 +9,7 @@ Plugins are CommonJS files in `plugins/` that the runtime loads as agent tools. 
 At startup, and on every reload, the ToolBox SHALL `require()` each `.js` file directly inside `plugins/` (not subfolders), skipping files ending in `.test.js`, clearing each file's require cache first. A file that fails to load MUST be logged as `toolbox_plugin_load_failed` and skipped without stopping the others.
 
 #### Scenario: Scaffold test file ignored
-- **WHEN** `plugins/foo.test.js` sits beside `plugins/foo.js`
+- **WHEN** `plugins/my-plugin.test.js` sits beside `plugins/my-plugin.js`
 - **THEN** only `foo.js` is loaded as a plugin
 
 #### Scenario: Disabled plugin not loaded

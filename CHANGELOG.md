@@ -42,6 +42,7 @@ The first OpenSpec baseline of YodaMan (17 capabilities in `openspec/specs/`) an
 - **Task history stops growing.** Only the newest 100 tasks stay in the database.
 - **Agent commands run in your workspace by default.**
 - **`--help` works after any command.** `yodaman setup --help` printed nothing useful and ran setup.
+- **`yodaman-mcp --help` and `--version` answer and exit.** They started the MCP server and waited on stdin.
 - **Uninstall lists all your data**, including sessions, the disabled-plugin list and the JSON fallbacks.
 - **Lightsaber finds hotspots.** Its complexity check threw on every file, so it never reported a hotspot. Its time window, change coupling and exclude patterns now work, and test coverage ignores `node_modules`.
 - **Droid-Sweep's fallback counts imports.** Imported files were reported unused.

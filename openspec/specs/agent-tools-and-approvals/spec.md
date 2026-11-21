@@ -199,7 +199,7 @@ When a workspace is selected and the call names a file, the gate SHALL attach th
 - **THEN** `specImpact` is `{ available: true, specCount, mentionedIn }`, and without a workspace it is `{ available: false, reason: "no projectId" }`
 
 #### Scenario: Spec references match whole path segments
-- **WHEN** one spec cites `Logger.js` and another `src/AuditLogger.js`, and the gated call edits `<workspace>/src/AuditLogger.js`
+- **WHEN** one spec cites `logger.js` and another `src/my-app/auditlogger.js`, and the gated call edits `src/my-app/auditlogger.js` in the workspace
 - **THEN** `mentionedIn` lists only the second: a reference names a file when the two are equal or one ends with `/` followed by the other
 
 ### Requirement: Approval decision

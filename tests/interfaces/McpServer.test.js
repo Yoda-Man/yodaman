@@ -406,3 +406,27 @@ describe('MCP tools return real data', () => {
         expect(text).toMatch(/error|HTTP|not|\[\]/i);
     }, 120000);
 });
+
+describe('yodaman-mcp command line', () => {
+    const { execFileSync } = require('child_process');
+    const BIN = path.join(__dirname, '..', '..', 'bin', 'yodaman-mcp.mjs');
+    const run = (arg) => execFileSync(process.execPath, [BIN, arg], { encoding: 'utf8', timeout: 5000, input: '' });
+
+    test('--help prints usage and exits instead of starting the server', () => {
+        const out = run('--help');
+        expect(out).toContain('Usage: yodaman-mcp');
+        expect(out).not.toContain('"jsonrpc"');
+        expect(run('-h')).toBe(out);
+    });
+
+    test('--version prints the package version', () => {
+        expect(run('--version').trim()).toBe(require('../../package.json').version);
+    });
+
+    test('the help names exactly the tools the server registers', () => {
+        const source = require('fs').readFileSync(BIN, 'utf8');
+        const registered = [...source.matchAll(/registerTool\('([a-z_]+)'/g)].map((m) => m[1]).sort();
+        const listed = run('--help').match(/^Tools: (.*)$/m)[1].split(', ').sort();
+        expect(listed).toEqual(registered);
+    });
+});

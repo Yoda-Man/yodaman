@@ -121,7 +121,7 @@ Help and version MUST be answered before any backend module is loaded, so they p
 - **THEN** it prints `Install it with: python3 -m pip install --user graphifyy` and the `YODAMAN_GRAPHIFY_BIN` hint and exits 1
 
 ### Requirement: MCP server transport
-`yodaman-mcp` SHALL serve the Model Context Protocol over stdio as server `yodaman` with the package version. stdout MUST carry only protocol messages, and diagnostics SHALL go to stderr prefixed `[yodaman-mcp] `.
+`yodaman-mcp` SHALL serve the Model Context Protocol over stdio as server `yodaman` with the package version. stdout MUST carry only protocol messages, and diagnostics SHALL go to stderr prefixed `[yodaman-mcp] `. `--help`/`-h` and `--version`/`-v` MUST print and exit without starting the server.
 
 #### Scenario: Ready
 - **WHEN** the server connects its stdio transport
@@ -130,6 +130,14 @@ Help and version MUST be answered before any backend module is loaded, so they p
 #### Scenario: Runtime address
 - **WHEN** the server starts
 - **THEN** the runtime is `YODAMAN_URL`, else `http://127.0.0.1:<YODAMAN_PORT or 3090>`, and each request times out after `YODAMAN_MCP_TIMEOUT` ms (default 120000)
+
+#### Scenario: Help
+- **WHEN** the user runs `yodaman-mcp --help` or `yodaman-mcp -h`
+- **THEN** stdout shows the usage, the five tools and the runtime URL with the `YODAMAN_PORT`/`YODAMAN_URL` overrides, and the command exits 0 without starting the server
+
+#### Scenario: Version
+- **WHEN** the user runs `yodaman-mcp --version` or `yodaman-mcp -v`
+- **THEN** stdout is the package version and the command exits 0
 
 ### Requirement: MCP tools are read-only proxies
 The MCP server SHALL offer exactly five tools, each proxying one runtime route, and MUST NOT offer any tool that writes, patches or runs commands, nor call the runtime with PUT, PATCH or DELETE. Each result SHALL be one text content block holding pretty-printed JSON.

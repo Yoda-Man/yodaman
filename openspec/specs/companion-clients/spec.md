@@ -1,7 +1,7 @@
 # Companion Clients Specification
 
 ## Purpose
-Companion clients reach the local YodaMan runtime over its HTTP API from outside the desktop window. This capability covers the shared client and protocol in `shared/yodamanClient.js` and `shared/yodamanProtocol.js` (with their `.d.ts` files), the VS Code extension in `extensions/vscode-yodaman` (`package.json`, `src/extension.js`, `src/coreSurface.js`, `copy-shared.js`), the Expo mobile companion in `apps/mobile` (`App.js`, `components.js`, `app.json`, `src/api/yodamanClient.js`), and how these clients authenticate with a pairing token.
+Companion clients reach the local YodaMan runtime over its HTTP API from outside the desktop window. This capability covers the shared client and protocol in `shared/yodamanClient.js` and `shared/yodamanProtocol.js` (with their `.d.ts` files), the VS Code extension in `extensions/vscode-yodaman` (`package.json`, `extensions/vscode-yodaman/src/extension.js`, `extensions/vscode-yodaman/src/coreSurface.js`, `copy-shared.js`), the Expo mobile companion in `apps/mobile` (`App.js`, `components.js`, `app.json`, `apps/mobile/src/api/yodamanClient.js`), and how these clients authenticate with a pairing token.
 
 ## Requirements
 
@@ -132,7 +132,7 @@ The extension `vscode-yodaman` SHALL require VS Code `^1.90.0`, activate on star
 
 #### Scenario: Packaging
 - **WHEN** `vsce package` or `vsce publish` runs
-- **THEN** `vscode:prepublish` runs `node --check src/extension.js` and `copy-shared.js`, which copies `shared/yodamanClient.js` and `shared/yodamanProtocol.js` into `src/shared`
+- **THEN** `vscode:prepublish` runs `node --check extensions/vscode-yodaman/src/extension.js` and `copy-shared.js`, which copies `shared/yodamanClient.js` and `shared/yodamanProtocol.js` into `extensions/vscode-yodaman/src/shared`
 - **AND** at runtime the extension loads `./shared/yodamanClient` and falls back to `../../../shared/yodamanClient` only on `MODULE_NOT_FOUND`
 
 ### Requirement: Extension runtime status
@@ -188,7 +188,7 @@ The `Agent` sidebar SHALL show four expanded groups: `Status & Info`, `Actions`,
 - **THEN** it fetches `GET /api/logs?limit=300` and prints the queue and each entry as `[<timestamp>] <LEVEL> <message> <meta JSON>`
 
 ### Requirement: Extension pillar commands
-`src/coreSurface.js` SHALL provide blast radius for the active file, the Stardust board, spec drift as Problems-panel diagnostics, runtime diagnostics, pending approvals and the plugin list, using the same client and availability check as `extension.js`.
+`extensions/vscode-yodaman/src/coreSurface.js` SHALL provide blast radius for the active file, the Stardust board, spec drift as Problems-panel diagnostics, runtime diagnostics, pending approvals and the plugin list, using the same client and availability check as `extension.js`.
 
 #### Scenario: Blast radius
 - **WHEN** `YodaMan: Blast Radius For This File` runs on an open file in a workspace
@@ -225,7 +225,7 @@ The Expo app SHALL be named `YodaMan` with slug `yodaman-mobile`, scheme `yodama
 
 #### Scenario: Shared client in the bundle
 - **WHEN** Metro bundles the app
-- **THEN** `src/api/yodamanClient.js` wraps core's `shared/yodamanClient` as `createYodaManClient(runtimeUrl, pairingToken)`, and `metro.config.js` watches `../../shared`
+- **THEN** `apps/mobile/src/api/yodamanClient.js` wraps core's `shared/yodamanClient.js` as `createYodaManClient(runtimeUrl, pairingToken)`, and `metro.config.js` watches `../../shared`
 
 ### Requirement: Mobile connect and pairing
 The mobile app SHALL start with runtime URL `http://127.0.0.1:3090` and an empty pairing token, and SHALL accept a pasted `yodaman://pair` link to fill both. Connect SHALL load status, health, projects and readiness and select the first project.

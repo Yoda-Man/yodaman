@@ -230,7 +230,7 @@ This capability covers how YodaMan is checked, versioned, built and shipped. It 
 - **THEN** the Protocol test regenerates, restores the original and fails on the byte difference
 
 ### Requirement: npm package contents
-The npm package `yodaman` SHALL publish `bin`, `dist`, `backend`, `shared`, `plugins` (except `plugins/config.json`), `server.js`, `start.js`, `public`, `README.md`, `user_manual.md` and `config.example.json`, expose the `yodaman` and `yodaman-mcp` binaries, and require Node 24 or later.
+The npm package `yodaman` SHALL publish `bin`, `dist`, `backend`, `shared`, `plugins` (except a legacy `config.json` in `plugins/`), `server.js`, `start.js`, `public`, `README.md`, `user_manual.md` and `config.example.json`, expose the `yodaman` and `yodaman-mcp` binaries, and require Node 24 or later.
 
 #### Scenario: Binaries
 - **WHEN** the package is installed globally
@@ -239,7 +239,7 @@ The npm package `yodaman` SHALL publish `bin`, `dist`, `backend`, `shared`, `plu
 
 #### Scenario: Local config is never shipped
 - **WHEN** the package is packed
-- **THEN** `plugins/config.json` is excluded by the `!plugins/config.json` entry
+- **THEN** a legacy `config.json` in `plugins/` is excluded by the `!plugins/config.json` entry
 
 ### Requirement: Homebrew formula
 `packaging/homebrew/yodaman.rb` SHALL install the published npm tarball with Node. `scripts/brew-formula.js` SHALL set its `url` and `sha256` from `https://registry.npmjs.org/yodaman/-/yodaman-<version>.tgz`, hashing the registry tarball, not a local build. `--check` SHALL exit 1 when the formula is stale.
@@ -261,7 +261,7 @@ The npm package `yodaman` SHALL publish `bin`, `dist`, `backend`, `shared`, `plu
 #### Scenario: Formula behaviour
 - **WHEN** Homebrew installs and tests the formula
 - **THEN** it depends on `node`, runs `npm install` with `std_npm_args` and links `libexec/bin/*`
-- **AND** the caveats tell the user to run `yodaman setup`, and `brew test` checks `yodaman --version`, that `yodaman --help` mentions `yodaman setup`, and that `bin/yodaman-mcp` exists
+- **AND** the caveats tell the user to run `yodaman setup`, and `brew test` checks `yodaman --version`, that `yodaman --help` mentions `yodaman setup`, and that the `yodaman-mcp` executable exists
 
 ### Requirement: Docker image
 The `Dockerfile` SHALL build the web app in a build stage and run `node server.js` in a slim runtime stage with `NODE_ENV=production`, `YODAMAN_PORT=3090` and port 3090 exposed, installing the Context Expert, OpenSpec and Graphify tools into the image. Its Node major MUST equal the one `engines.node` requires, and ctx and OpenSpec MUST install with the commands `DependencyChecker.js` gives setup (`tests/architecture/DockerfileMatchesRuntime.test.js`).

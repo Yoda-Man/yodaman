@@ -217,7 +217,22 @@ server.registerTool('yodaman_spec_drift', {
     return asResult(await call(`/api/stardust/drift?${params}`));
 });
 
+const USAGE = `yodaman-mcp ${version}: YodaMan's read-only MCP server over stdio.
+
+Usage: yodaman-mcp            start the server (an MCP client launches this)
+       yodaman-mcp --help     show this help
+       yodaman-mcp --version  show the version
+
+Tools: yodaman_projects, yodaman_search, yodaman_graph_query, yodaman_impact, yodaman_spec_drift
+Proxies the YodaMan runtime at ${RUNTIME}. Change it with YODAMAN_PORT or YODAMAN_URL.
+`;
+
 async function main() {
+    // A person asking what this is must not get a server waiting silently on stdin.
+    const arg = process.argv[2];
+    if (arg === '--help' || arg === '-h') { process.stdout.write(USAGE); return; }
+    if (arg === '--version' || arg === '-v') { process.stdout.write(`${version}\n`); return; }
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
     note(`v${version} ready on stdio, proxying ${RUNTIME} (read-only)`);
